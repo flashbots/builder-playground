@@ -1,0 +1,29 @@
+# .github/workflows/release.yml
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: setup dependencies
+        uses: actions/setup-go@v2
+
+      - name: Log tag name
+        run: echo "Build for tag ${{ github.ref_name }}"
+
+      - name: Create release
+        run: make ci-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}

@@ -1,0 +1,76 @@
+env:
+  - CGO_ENABLED=1
+builds:
+  - id: builder-playground-darwin-amd64
+    binary: builder-playground
+    goarch:
+      - amd64
+    goos:
+      - darwin
+    env:
+      - CC=o64-clang
+      - CXX=o64-clang++
+    flags:
+      - -trimpath
+  - id: builder-playground-darwin-arm64
+    binary: builder-playground
+    goarch:
+      - arm64
+    goos:
+      - darwin
+    env:
+      - CC=oa64-clang
+      - CXX=oa64-clang++
+    flags:
+      - -trimpath
+  - id: builder-playground-linux-amd64
+    binary: builder-playground
+    env:
+      - CC=x86_64-linux-gnu-gcc
+      - CXX=x86_64-linux-gnu-g++
+    goarch:
+      - amd64
+    goos:
+      - linux
+    flags:
+      - -trimpath
+    ldflags:
+      - -extldflags "-Wl,-z,stack-size=0x800000 --static"
+    tags:
+      - netgo
+      - osusergo
+  - id: builder-playground-linux-arm64
+    binary: builder-playground
+    goarch:
+      - arm64
+    goos:
+      - linux
+    env:
+      - CC=aarch64-linux-gnu-gcc
+      - CXX=aarch64-linux-gnu-g++
+    flags:
+      - -trimpath
+    ldflags:
+      - -extldflags "-Wl,-z,stack-size=0x800000 --static"
+    tags:
+      - netgo
+      - osusergo
+
+archives:
+  - id: w/version
+    builds:
+      - builder-playground-darwin-amd64
+      - builder-playground-darwin-arm64
+      - builder-playground-linux-amd64
+      - builder-playground-linux-arm64
+    name_template: "builder-playground_v{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: false
+    format: zip
+    files:
+      - none*
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  draft: true
