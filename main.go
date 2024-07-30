@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -327,6 +328,8 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 		).
+		WithPort("http", 8545).
+		WithPort("authrpc", 8551).
 		Run()
 
 	// start the beacon node
@@ -358,6 +361,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 		).
+		WithPort("http", 3500).
 		Run()
 
 	// start validator client
@@ -391,6 +395,32 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			}
 		}()
 	}
+
+	services := []*service{}
+	for _, ss := range svcManager.handles {
+		services = append(services, ss.Service)
+	}
+	services = append(services, &service{
+		name: "mev-boost-relay",
+		ports: []*port{
+			{name: "http", port: 5555},
+		},
+	})
+
+	// print services info
+	fmt.Printf("Services started:\n==================\n")
+	for _, ss := range services {
+		sort.Slice(ss.ports, func(i, j int) bool {
+			return ss.ports[i].name < ss.ports[j].name
+		})
+
+		ports := []string{}
+		for _, p := range ss.ports {
+			ports = append(ports, fmt.Sprintf("%s: %d", p.name, p.port))
+		}
+		fmt.Printf("- %s (%s)\n", ss.name, strings.Join(ports, ", "))
+	}
+	fmt.Printf("\n")
 
 	fmt.Printf("All services started, press Ctrl+C to stop\n")
 	return nil
@@ -530,7 +560,7 @@ type sszObject interface {
 
 type serviceManager struct {
 	out     *output
-	handles []*exec.Cmd
+	handles []*handle
 
 	stopping atomic.Bool
 
@@ -541,7 +571,7 @@ type serviceManager struct {
 }
 
 func newServiceManager(out *output) *serviceManager {
-	return &serviceManager{out: out, handles: []*exec.Cmd{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5)}
+	return &serviceManager{out: out, handles: []*handle{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5)}
 }
 
 func (s *serviceManager) emitError() {
@@ -578,7 +608,15 @@ func (s *serviceManager) Run(ss *service) {
 		s.emitError()
 	}()
 
-	s.handles = append(s.handles, cmd)
+	s.handles = append(s.handles, &handle{
+		Process: cmd,
+		Service: ss,
+	})
+}
+
+type handle struct {
+	Process *exec.Cmd
+	Service *service
 }
 
 func (s *serviceManager) NotifyErrCh() <-chan struct{} {
@@ -590,22 +628,33 @@ func (s *serviceManager) StopAndWait() {
 
 	for _, h := range s.handles {
 		if h.Process != nil {
-			fmt.Printf("Stopping %s\n", h.Path)
-			h.Process.Kill()
+			fmt.Printf("Stopping %s\n", h.Service.name)
+			h.Process.Process.Kill()
 		}
 	}
 	s.wg.Wait()
+}
+
+type port struct {
+	name string
+	port int
 }
 
 type service struct {
 	name string
 	args []string
 
+	ports  []*port
 	srvMng *serviceManager
 }
 
 func (s *serviceManager) NewService(name string) *service {
 	return &service{name: name, args: []string{}, srvMng: s}
+}
+
+func (s *service) WithPort(name string, portNumber int) *service {
+	s.ports = append(s.ports, &port{name: name, port: portNumber})
+	return s
 }
 
 func (s *service) WithArgs(args ...string) *service {
