@@ -48,6 +48,7 @@ var outputFlag string
 var continueFlag bool
 var useBinPathFlag bool
 var validateFlag bool
+var genesisDelayFlag uint64
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -151,6 +152,8 @@ func main() {
 	rootCmd.Flags().StringVar(&outputFlag, "output", "local-testnet", "")
 	rootCmd.Flags().BoolVar(&continueFlag, "continue", false, "")
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
+	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
+
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
 
@@ -219,7 +222,7 @@ func setupArtifacts() error {
 		return err
 	}
 
-	genesisTime := uint64(time.Now().Unix())
+	genesisTime := uint64(time.Now().Add(time.Duration(genesisDelayFlag) * time.Second).Unix())
 	config := params.BeaconConfig()
 
 	gen := interop.GethTestnetGenesis(genesisTime, config)
