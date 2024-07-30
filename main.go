@@ -45,7 +45,7 @@ var clConfigContent []byte
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 
 var outputFlag string
-var resetFlag bool
+var continueFlag bool
 var useBinPathFlag bool
 var validateFlag bool
 
@@ -149,7 +149,7 @@ var validateCmd = &cobra.Command{
 
 func main() {
 	rootCmd.Flags().StringVar(&outputFlag, "output", "local-testnet", "")
-	rootCmd.Flags().BoolVar(&resetFlag, "reset", false, "")
+	rootCmd.Flags().BoolVar(&continueFlag, "continue", false, "")
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
@@ -166,17 +166,25 @@ func runIt() error {
 	out := &output{dst: outputFlag}
 
 	exists := out.Exists("data_reth")
-	if exists && resetFlag || !exists {
-		if resetFlag {
+	if exists {
+		if continueFlag {
+			fmt.Println("Artifacts already exist, continuing...")
+		} else {
+			fmt.Println("Artifacts already exist, resetting them...")
+
+			// Remove the current artifacts and create new ones
 			if err := out.Remove(""); err != nil {
 				return err
 			}
+			if err := setupArtifacts(); err != nil {
+				return err
+			}
 		}
+	} else {
+		// artifacts do not exist yet, create them
 		if err := setupArtifacts(); err != nil {
 			return err
 		}
-	} else {
-		fmt.Println("Artifacts already exist, skipping setup")
 	}
 
 	svcManager := newServiceManager(out)

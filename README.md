@@ -28,3 +28,11 @@ The playground performs the following steps:
    - `Mev-boost-relay`.
 
 To stop the playground, press `Ctrl+C`.
+
+Options:
+
+- `--output` (string): The directory where the chain data and artifacts are stored. It defaults to `local-testnet`.
+- `--continue` (bool): Whether to restart the chain from a previous run if the output folder is not empty. It defaults to `false`.
+- `--use-bin-path` (bool): Whether to use the binaries from the local path instead of downloading them. It defaults to `false`.
+
+Unless the `--continue` flag is set, the playground will delete the output directory and start a new chain from scratch on every run.
