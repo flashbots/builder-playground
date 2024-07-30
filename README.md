@@ -18,16 +18,13 @@ The playground performs the following steps:
 
 1. It attempts to download the `lighthouse` and `reth` binaries from the GitHub releases page if they are not found locally.
 2. It generates the genesis artifacts for the chain.
-
-- 100 validators with 32 ETH each.
-- 10 prefunded accounts with 100 ETH each, generated with the mnemonic `test test test test test test test test test test test junk`.
-- It enables the Deneb fork at startup.
-
+   - 100 validators with 32 ETH each.
+   - 10 prefunded accounts with 100 ETH each, generated with the mnemonic `test test test test test test test test test test test junk`.
+   - It enables the Deneb fork at startup.
 3. It deploys the chain services and the relay.
-
-- `Reth` node.
-- `Lighthouse` beacon node.
-- `Lighthouse` validator client.
-- `Mev-boost-relay`.
+   - `Reth` node.
+   - `Lighthouse` beacon node.
+   - `Lighthouse` validator client.
+   - `Mev-boost-relay`.
 
 To stop the playground, press `Ctrl+C`.
