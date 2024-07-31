@@ -94,58 +94,79 @@ var validateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Test that blocks are being produced
 		log := mevRCommon.LogSetup(false, "info")
-		clt := beaconclient.NewProdBeaconInstance(log, "http://localhost:3500", "http://localhost:3500")
+		clt := beaconclient.NewProdBeaconInstance(log, "https://ethereum-sepolia-beacon-api.publicnode.com", "https://ethereum-sepolia-beacon-api.publicnode.com")
 
-		{
-			// If the chain has not started yet, wait for it to start.
-			// Otherwise, the subscription will not return any data.
-			bClient := beaconclient.NewMultiBeaconClient(log, []beaconclient.IBeaconInstance{
-				clt,
-			})
+		/*
+			{
+				// If the chain has not started yet, wait for it to start.
+				// Otherwise, the subscription will not return any data.
+				bClient := beaconclient.NewMultiBeaconClient(log, []beaconclient.IBeaconInstance{
+					clt,
+				})
 
-			isReady := func() bool {
-				sync, err := bClient.BestSyncStatus()
-				if err != nil {
-					return false
-				}
-				return sync.HeadSlot > 1
-			}
-
-			if !isReady() {
-				syncTimeoutCh := time.After(30 * time.Second)
-				for {
-					if isReady() {
-						break
+				isReady := func() bool {
+					sync, err := bClient.BestSyncStatus()
+					if err != nil {
+						return false
 					}
-					select {
-					case <-syncTimeoutCh:
-						return fmt.Errorf("beacon client failed to start")
-					default:
-						time.Sleep(1 * time.Second)
+					return sync.HeadSlot > 1
+				}
+
+				if !isReady() {
+					syncTimeoutCh := time.After(30 * time.Second)
+					for {
+						if isReady() {
+							break
+						}
+						select {
+						case <-syncTimeoutCh:
+							return fmt.Errorf("beacon client failed to start")
+						default:
+							time.Sleep(1 * time.Second)
+						}
 					}
 				}
 			}
-		}
+		*/
 
 		log.Infof("Chain is alive. Subscribing to head events")
 
-		ch := make(chan beaconclient.HeadEventData)
-		go clt.SubscribeToHeadEvents(ch)
+		ch := make(chan beaconclient.PayloadAttributesEvent)
+		go clt.SubscribeToPayloadAttributesEvents(ch)
 
-		var lastSlot uint64
-		for i := uint64(0); i < numBlocksValidate; i++ {
+		for {
 			select {
 			case head := <-ch:
-				if lastSlot != 0 && lastSlot+1 != head.Slot {
-					return fmt.Errorf("slot mismatch, expected %d, got %d", lastSlot+1, head.Slot)
+				data, err := json.Marshal(head)
+				if err != nil {
+					panic(err)
 				}
 
-				log.Infof("Slot: %d Block: %s", head.Slot, head.Block)
-				lastSlot = head.Slot
-			case <-time.After(20 * time.Second):
+				fmt.Println(string(data))
+			case <-time.After(2000 * time.Second):
 				return fmt.Errorf("timeout waiting for block")
 			}
 		}
+
+		/*
+			ch := make(chan beaconclient.HeadEventData)
+			go clt.SubscribeToHeadEvents(ch)
+
+			// var lastSlot uint64
+			for i := uint64(0); i < numBlocksValidate; i++ {
+				select {
+				case head := <-ch:
+					data, err := json.Marshal(head)
+					if err != nil {
+						panic(err)
+					}
+
+					fmt.Println(string(data))
+				case <-time.After(2000 * time.Second):
+					return fmt.Errorf("timeout waiting for block")
+				}
+			}
+		*/
 
 		return nil
 	},
