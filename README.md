@@ -31,7 +31,7 @@ To stop the playground, press `Ctrl+C`.
 
 Options:
 
-- `--output` (string): The directory where the chain data and artifacts are stored. It defaults to `$HOME/.playground/testnet`.
+- `--output` (string): The directory where the chain data and artifacts are stored. It defaults to `$HOME/.playground/devnet`.
 - `--continue` (bool): Whether to restart the chain from a previous run if the output folder is not empty. It defaults to `false`.
 - `--use-bin-path` (bool): Whether to use the binaries from the local path instead of downloading them. It defaults to `false`.
 - `--genesis-delay` (int): The delay in seconds before the genesis block is created. It is used to account for the delay between the creation of the artifacts and the running of the services. It defaults to `5` seconds.

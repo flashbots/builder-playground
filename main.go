@@ -167,12 +167,12 @@ func main() {
 
 func runIt() error {
 	if outputFlag == "" {
-		// Use the $HOMEDIR/testnet as the default output
+		// Use the $HOMEDIR/devnet as the default output
 		homeDir, err := getHomeDir()
 		if err != nil {
 			return err
 		}
-		outputFlag = filepath.Join(homeDir, "testnet")
+		outputFlag = filepath.Join(homeDir, "devnet")
 	}
 
 	fmt.Printf("Output directory: %s\n", outputFlag)
