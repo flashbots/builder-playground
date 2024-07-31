@@ -149,7 +149,7 @@ var validateCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.Flags().StringVar(&outputFlag, "output", "local-testnet", "")
+	rootCmd.Flags().StringVar(&outputFlag, "output", "", "")
 	rootCmd.Flags().BoolVar(&continueFlag, "continue", false, "")
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
 	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
@@ -166,6 +166,16 @@ func main() {
 }
 
 func runIt() error {
+	if outputFlag == "" {
+		// Use the $HOMEDIR/testnet as the default output
+		homeDir, err := getHomeDir()
+		if err != nil {
+			return err
+		}
+		outputFlag = filepath.Join(homeDir, "testnet")
+	}
+
+	fmt.Printf("Output directory: %s\n", outputFlag)
 	out := &output{dst: outputFlag}
 
 	exists := out.Exists("data_reth")
@@ -753,4 +763,21 @@ var prefundedAccounts = []string{
 	"0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
 	"0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
 	"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+}
+
+func getHomeDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("error getting user home directory: %w", err)
+	}
+
+	// Define the path for our custom home directory
+	customHomeDir := filepath.Join(homeDir, ".playground")
+
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(customHomeDir, 0755); err != nil {
+		return "", fmt.Errorf("error creating output directory: %v", err)
+	}
+
+	return customHomeDir, nil
 }
