@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"math/big"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -49,6 +51,7 @@ var continueFlag bool
 var useBinPathFlag bool
 var validateFlag bool
 var genesisDelayFlag uint64
+var watchPayloadsFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -153,6 +156,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&continueFlag, "continue", false, "")
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
 	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
+	rootCmd.Flags().BoolVar(&watchPayloadsFlag, "watch-payloads", false, "")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
@@ -205,6 +209,10 @@ func runIt() error {
 		// close all services if there was an error
 		svcManager.StopAndWait()
 		return err
+	}
+
+	if watchPayloadsFlag {
+		go watchProposerPayloads()
 	}
 
 	sig := make(chan os.Signal, 1)
@@ -780,4 +788,49 @@ func getHomeDir() (string, error) {
 	}
 
 	return customHomeDir, nil
+}
+
+func watchProposerPayloads() {
+	// This is not the most efficient solution since we are querying the endpoint for the full list of payloads
+	// every 2 seconds. It should be fine for the kind of workloads expected to run.
+
+	lastSlot := uint64(0)
+
+	for {
+		time.Sleep(2 * time.Second)
+
+		vals, err := getProposerPayloadDelivered()
+		if err != nil {
+			fmt.Println("Error getting proposer payloads:", err)
+			continue
+		}
+
+		for _, val := range vals {
+			if val.Slot <= lastSlot {
+				continue
+			}
+
+			fmt.Printf("Block Proposed: Slot: %d, Builder: %s, Block: %d\n", val.Slot, val.BuilderPubkey, val.BlockNumber)
+			lastSlot = val.Slot
+		}
+	}
+}
+
+func getProposerPayloadDelivered() ([]*mevRCommon.BidTraceV2JSON, error) {
+	resp, err := http.Get("http://localhost:5555/relay/v1/data/bidtraces/proposer_payload_delivered")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var payloadDeliveredList []*mevRCommon.BidTraceV2JSON
+	if err := json.Unmarshal(data, &payloadDeliveredList); err != nil {
+		return nil, err
+	}
+	return payloadDeliveredList, nil
 }
