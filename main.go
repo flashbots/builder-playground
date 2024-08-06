@@ -352,6 +352,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"node",
 			"--chain", "{{.Dir}}/genesis.json",
 			"--datadir", "{{.Dir}}/data_reth",
+			"--color", "never",
 			"--http",
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
