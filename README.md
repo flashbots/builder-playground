@@ -36,5 +36,6 @@ Options:
 - `--use-bin-path` (bool): Whether to use the binaries from the local path instead of downloading them. It defaults to `false`.
 - `--genesis-delay` (int): The delay in seconds before the genesis block is created. It is used to account for the delay between the creation of the artifacts and the running of the services. It defaults to `5` seconds.
 - `--watch-payloads` (bool): If enabled, it logs whenever a builder builds a valid block through the relay. It defaults to `false`.
+- `--electra`: (bool): If enabled, it enables the Electra fork at startup. It defaults to `false`.
 
 Unless the `--continue` flag is set, the playground will delete the output directory and start a new chain from scratch on every run.

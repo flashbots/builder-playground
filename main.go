@@ -41,7 +41,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-//go:embed config.yaml
+//go:embed config.yaml.tmpl
 var clConfigContent []byte
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
@@ -52,6 +52,7 @@ var useBinPathFlag bool
 var validateFlag bool
 var genesisDelayFlag uint64
 var watchPayloadsFlag bool
+var latestForkFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -157,6 +158,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
 	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
 	rootCmd.Flags().BoolVar(&watchPayloadsFlag, "watch-payloads", false, "")
+	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
@@ -231,8 +233,17 @@ func runIt() error {
 func setupArtifacts() error {
 	out := &output{dst: outputFlag}
 
+	// enable the latest fork in config.yaml or not
+	var latestForkEpoch string
+	if latestForkFlag {
+		latestForkEpoch = "0"
+	} else {
+		latestForkEpoch = "18446744073709551615"
+	}
+	clConfigContentStr := strings.Replace(string(clConfigContent), "{{.LatestForkEpoch}}", latestForkEpoch, 1)
+
 	// load the config.yaml file
-	clConfig, err := params.UnmarshalConfig(clConfigContent, nil)
+	clConfig, err := params.UnmarshalConfig([]byte(clConfigContentStr), nil)
 	if err != nil {
 		return err
 	}
@@ -262,9 +273,11 @@ func setupArtifacts() error {
 
 	block := gen.ToBlock()
 
-	v, err := version.FromString("deneb") // TODO: Derive from config.toml
-	if err != nil {
-		return err
+	var v int
+	if latestForkFlag {
+		v = version.Electra
+	} else {
+		v = version.Deneb
 	}
 
 	priv, pub, err := interop.DeterministicallyGenerateKeys(0, 100)
