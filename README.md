@@ -21,6 +21,7 @@ The playground performs the following steps:
    - 100 validators with 32 ETH each.
    - 10 prefunded accounts with 100 ETH each, generated with the mnemonic `test test test test test test test test test test test junk`.
    - It enables the Deneb fork at startup.
+   - It creates a chain with ID `1337`
 3. It deploys the chain services and the relay.
    - `Reth` node.
    - `Lighthouse` beacon node.
