@@ -24,7 +24,7 @@ func DownloadArtifacts() (map[string]string, error) {
 		{
 			Name:    "reth",
 			Org:     "paradigmxyz",
-			Version: "v1.0.2",
+			Version: "v1.0.7",
 			Arch: func(goos, goarch string) string {
 				if goos == "linux" {
 					return "x86_64-unknown-linux-gnu"
@@ -39,12 +39,12 @@ func DownloadArtifacts() (map[string]string, error) {
 		{
 			Name:    "lighthouse",
 			Org:     "sigp",
-			Version: "v5.2.1",
+			Version: "v5.3.0",
 			Arch: func(goos, goarch string) string {
 				if goos == "linux" {
 					return "x86_64-unknown-linux-gnu"
 				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-					return "x86_64-apple-darwin-portable"
+					return "x86_64-apple-darwin"
 				} else if goos == "darwin" && goarch == "amd64" {
 					return "x86_64-apple-darwin"
 				}

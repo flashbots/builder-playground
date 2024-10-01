@@ -403,6 +403,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--builder-fallback-disable-checks",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
+			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 		).
 		WithPort("http", 3500).
 		Run()
