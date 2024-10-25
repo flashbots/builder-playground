@@ -427,7 +427,30 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		WithPort("authrpc", 8551).
 		Run()
 
+	lightHouseVersion := func() string {
+		cmd := exec.Command(lighthouseBin, "--version")
+		out, err := cmd.Output()
+		if err != nil {
+			return "unknown"
+		}
+		// find the line of the form:
+		// Lighthouse v5.2.1-9e12c21
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(line, "Lighthouse ") {
+				v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
+				if !strings.HasPrefix(v, "v") {
+					v = "v" + v
+				}
+				// Go semver considers - as a pre-release, so we need to remove it
+				v = strings.Split(v, "-")[0]
+				return semver.Canonical(v)
+			}
+		}
+		return "unknown"
+	}()
+
 	// start the beacon node
+	fmt.Println("Starting lighthouse version " + lightHouseVersion)
 	svcManager.
 		NewService("beacon_node").
 		WithArgs(
@@ -438,7 +461,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
-			"--http-allow-sync-stalled",
 			"--enr-address", "127.0.0.1",
 			"--enr-udp-port", "9000",
 			"--enr-tcp-port", "9000",
@@ -455,6 +477,21 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--builder-fallback-disable-checks",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
+		).
+		If(
+			semver.Compare(lightHouseVersion, "v5.3") < 0,
+			func(s *service) *service {
+				// For versions <= v5.2.1, we want to run with --http-allow-sync-stalled
+				// However this flag is not available in newer versions
+				return s.WithArgs("--http-allow-sync-stalled")
+			},
+		).
+		If(
+			semver.Compare(lightHouseVersion, "v5.3") >= 0,
+			func(s *service) *service {
+				// For versions >= v5.3.0, ----suggested-fee-recipient is apparently now required for non-validator nodes as well
+				return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
+			},
 		).
 		WithPort("http", 3500).
 		Run()
@@ -688,7 +725,7 @@ func (s *serviceManager) Run(ss *service) {
 	}
 
 	// first thing to output is the command itself
-	fmt.Fprint(logOutput, strings.Join(ss.args, " "))
+	fmt.Fprint(logOutput, strings.Join(ss.args, " ")+"\n\n")
 
 	cmd.Stdout = logOutput
 	cmd.Stderr = logOutput
