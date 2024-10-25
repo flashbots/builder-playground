@@ -370,6 +370,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"--engine.legacy",
 		).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
@@ -386,7 +387,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
-			"--http-allow-sync-stalled",
 			"--enr-address", "127.0.0.1",
 			"--enr-udp-port", "9000",
 			"--enr-tcp-port", "9000",
