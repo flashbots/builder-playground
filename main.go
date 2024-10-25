@@ -53,6 +53,7 @@ var validateFlag bool
 var genesisDelayFlag uint64
 var watchPayloadsFlag bool
 var latestForkFlag bool
+var useRethForValidation bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -159,6 +160,7 @@ func main() {
 	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
 	rootCmd.Flags().BoolVar(&watchPayloadsFlag, "watch-payloads", false, "")
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
+	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
@@ -372,6 +374,9 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 			"--engine.legacy",
 		).
+		If(useRethForValidation, func(s *service) *service {
+			return s.WithArgs("--http.api", "eth,web3,net,rpc,flashbots")
+		}).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
 		Run()
@@ -428,6 +433,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
 			return err
 		}
+		cfg.UseRethForValidation = useRethForValidation
 		relay, err := mevboostrelay.New(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to create relay: %w", err)
@@ -712,6 +718,13 @@ func (s *service) WithArgs(args ...string) *service {
 	}
 
 	s.args = append(s.args, args...)
+	return s
+}
+
+func (s *service) If(cond bool, fn func(*service) *service) *service {
+	if cond {
+		return fn(s)
+	}
 	return s
 }
 
