@@ -46,6 +46,11 @@ var clConfigContent []byte
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 
+var (
+	defaultRethDiscoveryPrivKey    = "a11ac89899cd86e36b6fb881ec1255b8a92a688790b7d950f8b7d8dd626671fb"
+	defaultRethDiscoveryPrivKeyLoc = "/tmp/tmp-reth-disc.txt"
+)
+
 var outputFlag string
 var continueFlag bool
 var useBinPathFlag bool
@@ -357,6 +362,10 @@ func setupServices(svcManager *serviceManager, out *output) error {
 	}
 	fmt.Println("")
 
+	if err := os.WriteFile(defaultRethDiscoveryPrivKeyLoc, []byte(defaultRethDiscoveryPrivKey), 0644); err != nil {
+		return err
+	}
+
 	// start the reth el client
 	svcManager.
 		NewService("reth").
@@ -366,11 +375,19 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--chain", "{{.Dir}}/genesis.json",
 			"--datadir", "{{.Dir}}/data_reth",
 			"--color", "never",
+			// p2p config. Use a default discovery key and disable public discovery and connections
+			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
+			"--addr", "127.0.0.1",
+			"--port", "30303",
+			"--disable-discovery",
+			// http config
 			"--http",
+			"--http.api", "admin,eth,net,web3",
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 		).
+		WithPort("rpc", 30303).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
 		Run()
