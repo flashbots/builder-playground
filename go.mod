@@ -10,7 +10,7 @@ require (
 	github.com/flashbots/go-boost-utils v1.8.0
 	github.com/flashbots/mev-boost-relay v0.29.2-0.20240705093628-4d4478a9c9dc
 	github.com/hashicorp/go-uuid v1.0.3
-	github.com/prysmaticlabs/prysm/v5 v5.1.1-0.20241001143536-6d499bc9fc99
+	github.com/prysmaticlabs/prysm/v5 v5.1.2
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.0
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
@@ -99,7 +99,7 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
-	github.com/prysmaticlabs/fastssz v0.0.0-20240620202422-a981b8ef89d3 // indirect
+	github.com/prysmaticlabs/fastssz v0.0.0-20241008181541-518c4ce73516 // indirect
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e // indirect
 	github.com/prysmaticlabs/gohashtree v0.0.4-beta.0.20240624100937-73632381301b // indirect
 	github.com/r3labs/sse/v2 v2.10.0 // indirect
