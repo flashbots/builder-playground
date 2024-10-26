@@ -24,6 +24,7 @@ import (
 
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
+	"golang.org/x/mod/semver"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
@@ -58,6 +59,7 @@ var validateFlag bool
 var genesisDelayFlag uint64
 var watchPayloadsFlag bool
 var latestForkFlag bool
+var useRethForValidation bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -164,6 +166,7 @@ func main() {
 	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
 	rootCmd.Flags().BoolVar(&watchPayloadsFlag, "watch-payloads", false, "")
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
+	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
@@ -361,12 +364,32 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		fmt.Printf("(%d) %s (%s)\n", indx, acc, ecrypto.PubkeyToAddress(priv.PublicKey).Hex())
 	}
 	fmt.Println("")
-
 	if err := os.WriteFile(defaultRethDiscoveryPrivKeyLoc, []byte(defaultRethDiscoveryPrivKey), 0644); err != nil {
 		return err
 	}
 
+	rethVersion := func() string {
+		cmd := exec.Command(rethBin, "--version")
+		out, err := cmd.Output()
+		if err != nil {
+			return "unknown"
+		}
+		// find the line of the form:
+		// reth Version: x.y.z
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(line, "reth Version: ") {
+				v := strings.TrimSpace(strings.TrimPrefix(line, "reth Version: "))
+				if !strings.HasPrefix(v, "v") {
+					v = "v" + v
+				}
+				return semver.Canonical(v)
+			}
+		}
+		return "unknown"
+	}()
+
 	// start the reth el client
+	fmt.Println("Starting reth version " + rethVersion)
 	svcManager.
 		NewService("reth").
 		WithArgs(
@@ -387,12 +410,45 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 		).
+		If(useRethForValidation, func(s *service) *service {
+			return s.WithArgs("--http.api", "eth,web3,net,rpc,flashbots")
+		}).
+		If(
+			semver.Compare(rethVersion, "v1.1.0") >= 0,
+			func(s *service) *service {
+				// For versions >= v1.1.0, we need to run with --engine.legacy, at least for now
+				return s.WithArgs("--engine.legacy")
+			},
+		).
 		WithPort("rpc", 30303).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
 		Run()
 
+	lightHouseVersion := func() string {
+		cmd := exec.Command(lighthouseBin, "--version")
+		out, err := cmd.Output()
+		if err != nil {
+			return "unknown"
+		}
+		// find the line of the form:
+		// Lighthouse v5.2.1-9e12c21
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(line, "Lighthouse ") {
+				v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
+				if !strings.HasPrefix(v, "v") {
+					v = "v" + v
+				}
+				// Go semver considers - as a pre-release, so we need to remove it
+				v = strings.Split(v, "-")[0]
+				return semver.Canonical(v)
+			}
+		}
+		return "unknown"
+	}()
+
 	// start the beacon node
+	fmt.Println("Starting lighthouse version " + lightHouseVersion)
 	svcManager.
 		NewService("beacon_node").
 		WithArgs(
@@ -403,7 +459,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
-			"--http-allow-sync-stalled",
 			"--enr-address", "127.0.0.1",
 			"--enr-udp-port", "9000",
 			"--enr-tcp-port", "9000",
@@ -420,6 +475,21 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--builder-fallback-disable-checks",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
+		).
+		If(
+			semver.Compare(lightHouseVersion, "v5.3") < 0,
+			func(s *service) *service {
+				// For versions <= v5.2.1, we want to run with --http-allow-sync-stalled
+				// However this flag is not available in newer versions
+				return s.WithArgs("--http-allow-sync-stalled")
+			},
+		).
+		If(
+			semver.Compare(lightHouseVersion, "v5.3") >= 0,
+			func(s *service) *service {
+				// For versions >= v5.3.0, ----suggested-fee-recipient is apparently now required for non-validator nodes as well
+				return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
+			},
 		).
 		WithPort("http", 3500).
 		Run()
@@ -444,6 +514,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
 			return err
 		}
+		cfg.UseRethForValidation = useRethForValidation
 		relay, err := mevboostrelay.New(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to create relay: %w", err)
@@ -652,7 +723,7 @@ func (s *serviceManager) Run(ss *service) {
 	}
 
 	// first thing to output is the command itself
-	fmt.Fprint(logOutput, strings.Join(ss.args, " "))
+	fmt.Fprint(logOutput, strings.Join(ss.args, " ")+"\n\n")
 
 	cmd.Stdout = logOutput
 	cmd.Stderr = logOutput
@@ -728,6 +799,13 @@ func (s *service) WithArgs(args ...string) *service {
 	}
 
 	s.args = append(s.args, args...)
+	return s
+}
+
+func (s *service) If(cond bool, fn func(*service) *service) *service {
+	if cond {
+		return fn(s)
+	}
 	return s
 }
 

@@ -33,15 +33,18 @@ type Config struct {
 	ApiSecretKey     string
 	BeaconClientAddr string
 	LogOutput        io.Writer
+
+	UseRethForValidation bool
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		ApiListenAddr:    "127.0.0.1",
-		ApiListenPort:    5555,
-		ApiSecretKey:     defaultSecretKey,
-		BeaconClientAddr: "http://localhost:3500",
-		LogOutput:        os.Stdout,
+		ApiListenAddr:        "127.0.0.1",
+		ApiListenPort:        5555,
+		ApiSecretKey:         defaultSecretKey,
+		BeaconClientAddr:     "http://localhost:3500",
+		LogOutput:            os.Stdout,
+		UseRethForValidation: false,
 	}
 }
 
@@ -119,13 +122,20 @@ func New(config *Config) (*MevBoostRelay, error) {
 
 	housekeeperSrv := housekeeper.NewHousekeeper(housekeeperOpts)
 
-	// start a mock block validation service that always
-	// returns the blocks as valids.
-	apiBlockSimURL, err := startMockBlockValidationServiceServer()
-	if err != nil {
-		return nil, fmt.Errorf("failed to start mock block validation service: %w", err)
+	var blockSimURL string
+	if config.UseRethForValidation {
+		log.Info("Using reth for block validation")
+		blockSimURL = "http://localhost:8545"
+	} else {
+		// start a mock block validation service that always
+		// returns the blocks as valids.
+		apiBlockSimURL, err := startMockBlockValidationServiceServer()
+		if err != nil {
+			return nil, fmt.Errorf("failed to start mock block validation service: %w", err)
+		}
+		log.Info("Started mock block validation service, addr: ", apiBlockSimURL)
+		blockSimURL = apiBlockSimURL
 	}
-	log.Info("Started mock block validation service, addr: ", apiBlockSimURL)
 
 	// decode the secret key
 	envSkBytes, err := hex.DecodeString(strings.TrimPrefix(config.ApiSecretKey, "0x"))
@@ -146,7 +156,7 @@ func New(config *Config) (*MevBoostRelay, error) {
 		DB:              pqDB,
 		SecretKey:       secretKey,
 		EthNetDetails:   *ethNetworkDetails,
-		BlockSimURL:     apiBlockSimURL,
+		BlockSimURL:     blockSimURL,
 		ProposerAPI:     true,
 		BlockBuilderAPI: true,
 		DataAPI:         true,
