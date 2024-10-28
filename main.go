@@ -24,6 +24,7 @@ import (
 
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
+	"golang.org/x/mod/semver"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
@@ -58,6 +59,7 @@ var validateFlag bool
 var genesisDelayFlag uint64
 var watchPayloadsFlag bool
 var latestForkFlag bool
+var useRethForValidation bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -164,6 +166,7 @@ func main() {
 	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
 	rootCmd.Flags().BoolVar(&watchPayloadsFlag, "watch-payloads", false, "")
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
+	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
@@ -361,12 +364,32 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		fmt.Printf("(%d) %s (%s)\n", indx, acc, ecrypto.PubkeyToAddress(priv.PublicKey).Hex())
 	}
 	fmt.Println("")
-
 	if err := os.WriteFile(defaultRethDiscoveryPrivKeyLoc, []byte(defaultRethDiscoveryPrivKey), 0644); err != nil {
 		return err
 	}
 
+	rethVersion := func() string {
+		cmd := exec.Command(rethBin, "--version")
+		out, err := cmd.Output()
+		if err != nil {
+			return "unknown"
+		}
+		// find the line of the form:
+		// reth Version: x.y.z
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(line, "reth Version: ") {
+				v := strings.TrimSpace(strings.TrimPrefix(line, "reth Version: "))
+				if !strings.HasPrefix(v, "v") {
+					v = "v" + v
+				}
+				return semver.Canonical(v)
+			}
+		}
+		return "unknown"
+	}()
+
 	// start the reth el client
+	fmt.Println("Starting reth version " + rethVersion)
 	svcManager.
 		NewService("reth").
 		WithArgs(
@@ -386,6 +409,16 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+		).
+		If(useRethForValidation, func(s *service) *service {
+			return s.WithArgs("--http.api", "eth,web3,net,rpc,flashbots")
+		}).
+		If(
+			semver.Compare(rethVersion, "v1.1.0") >= 0,
+			func(s *service) *service {
+				// For versions >= v1.1.0, we need to run with --engine.legacy, at least for now
+				return s.WithArgs("--engine.legacy")
+			},
 		).
 		WithPort("rpc", 30303).
 		WithPort("http", 8545).
@@ -444,6 +477,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
 			return err
 		}
+		cfg.UseRethForValidation = useRethForValidation
 		relay, err := mevboostrelay.New(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to create relay: %w", err)
@@ -728,6 +762,13 @@ func (s *service) WithArgs(args ...string) *service {
 	}
 
 	s.args = append(s.args, args...)
+	return s
+}
+
+func (s *service) If(cond bool, fn func(*service) *service) *service {
+	if cond {
+		return fn(s)
+	}
 	return s
 }
 
