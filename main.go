@@ -398,6 +398,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--chain", "{{.Dir}}/genesis.json",
 			"--datadir", "{{.Dir}}/data_reth",
 			"--color", "never",
+			"--ipcpath", "{{.Dir}}/reth.ipc",
 			// p2p config. Use a default discovery key and disable public discovery and connections
 			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
 			"--addr", "127.0.0.1",
