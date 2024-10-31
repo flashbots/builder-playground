@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -412,7 +413,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 		).
 		If(useRethForValidation, func(s *service) *service {
-			return s.WithArgs("--http.api", "eth,web3,net,rpc,flashbots")
+			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
 		}).
 		If(
 			semver.Compare(rethVersion, "v1.1.0") >= 0,
@@ -753,16 +754,44 @@ func (s *service) WithPort(name string, portNumber int) *service {
 }
 
 func (s *service) WithArgs(args ...string) *service {
-	tmplVars := map[string]interface{}{
-		"Dir": s.srvMng.out.dst,
-	}
-
 	// use template substitution to load constants
+	tmplVars := s.tmplVars()
 	for i, arg := range args {
 		args[i] = applyTemplate(arg, tmplVars)
 	}
 
 	s.args = append(s.args, args...)
+	return s
+}
+
+func (s *service) tmplVars() map[string]interface{} {
+	tmplVars := map[string]interface{}{
+		"Dir": s.srvMng.out.dst,
+	}
+	return tmplVars
+}
+
+// WithReplacementArgs finds the first occurrence of the first argument in the current arguments,
+// and replaces it and len(args) - 1 more arguments with the new arguments.
+//
+// For example:
+//
+// s.WithArgs("a", "b", "c").WithReplacementArgs("b", "d") will result in ["a", "b", "d"]
+func (s *service) WithReplacementArgs(args ...string) *service {
+	if len(args) == 0 {
+		return s
+	}
+	// use template substitution to load constants
+	tmplVars := s.tmplVars()
+	for i, arg := range args {
+		args[i] = applyTemplate(arg, tmplVars)
+	}
+
+	if i := slices.Index(s.args, args[0]); i != -1 {
+		s.args = slices.Replace(s.args, i, i+len(args), args...)
+	} else {
+		s.args = append(s.args, args...)
+	}
 	return s
 }
 
