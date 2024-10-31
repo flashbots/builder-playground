@@ -61,6 +61,7 @@ var genesisDelayFlag uint64
 var watchPayloadsFlag bool
 var latestForkFlag bool
 var useRethForValidation bool
+var useInProcessRBuilderConfig string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -168,6 +169,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&watchPayloadsFlag, "watch-payloads", false, "")
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
 	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
+	rootCmd.Flags().StringVar(&useInProcessRBuilderConfig, "use-in-process-rbuilder-config", "", "if passed, use the in-process reth-rbuilder running with this config")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
@@ -348,6 +350,10 @@ func setupServices(svcManager *serviceManager, out *output) error {
 
 		rethBin = "reth"
 		lighthouseBin = "lighthouse"
+
+		if useInProcessRBuilderConfig != "" {
+			rethBin = "reth-rbuilder"
+		}
 	} else {
 		binArtifacts, err := artifacts.DownloadArtifacts()
 		if err != nil {
@@ -420,6 +426,12 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			func(s *service) *service {
 				// For versions >= v1.1.0, we need to run with --engine.legacy, at least for now
 				return s.WithArgs("--engine.legacy")
+			},
+		).
+		If(
+			useInProcessRBuilderConfig != "",
+			func(s *service) *service {
+				return s.WithArgs("--rbuilder.config", useInProcessRBuilderConfig)
 			},
 		).
 		WithPort("rpc", 30303).
