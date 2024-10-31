@@ -31,6 +31,7 @@ import (
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/ferranbt/builder-playground/artifacts"
+	clproxy "github.com/ferranbt/builder-playground/cl-proxy"
 	mevboostrelay "github.com/ferranbt/builder-playground/mev-boost-relay"
 
 	"github.com/hashicorp/go-uuid"
@@ -369,6 +370,27 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		return err
 	}
 
+	// Start the cl proxy
+	{
+		cfg := clproxy.DefaultConfig()
+		cfg.Primary = "http://localhost:8551"
+
+		var err error
+		if cfg.LogOutput, err = out.LogOutput("cl-proxy"); err != nil {
+			return err
+		}
+		clproxy, err := clproxy.New(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to create cl proxy: %w", err)
+		}
+
+		go func() {
+			if err := clproxy.Run(); err != nil {
+				svcManager.emitError()
+			}
+		}()
+	}
+
 	rethVersion := func() string {
 		cmd := exec.Command(rethBin, "--version")
 		out, err := cmd.Output()
@@ -470,7 +492,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http-port", "3500",
 			"--disable-packet-filter",
 			"--target-peers", "0",
-			"--execution-endpoint", "http://localhost:8551",
+			"--execution-endpoint", "http://localhost:5656",
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--builder", "http://localhost:5555",
 			"--builder-fallback-epochs-since-finalization", "0",
@@ -537,6 +559,11 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		name: "mev-boost-relay",
 		ports: []*port{
 			{name: "http", port: 5555},
+		},
+	}, &service{
+		name: "cl-proxy",
+		ports: []*port{
+			{name: "jsonrpc", port: 5656},
 		},
 	})
 
