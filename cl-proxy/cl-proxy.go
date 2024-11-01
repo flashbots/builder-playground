@@ -103,8 +103,8 @@ func (s *ClProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Multiplex all the request to both primary and secondary except for the
-	// block building requests (this is, fcu with params and get payload).
+	// Multiplex all the request to both primary and secondary but omit the
+	// block building requests (this is, remove 'params' field from FCU and omit get payload).
 	// There are two reasons for this:
 	// - The secondary builder does not use the Engine API to build blocks but the relayer so these requests are not necessary.
 	// - The CL->EL setup is not configured anyway to handle two block builders throught the Engine API.
@@ -116,12 +116,7 @@ func (s *ClProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If a block is being built, the 'params' field has two parameters: the fcu and the input
-	// parameters to build the new block.
-	isBlockBuildingCall := strings.HasPrefix(jsonRPCRequest.Method, "engine_forkchoiceUpdated") && len(jsonRPCRequest.Params) == 2 ||
-		strings.HasPrefix(jsonRPCRequest.Method, "engine_getPayload")
-
-	s.log.Info(fmt.Sprintf("Received request: method=%s, isBlockBuildingCall=%v", jsonRPCRequest.Method, isBlockBuildingCall))
+	s.log.Info(fmt.Sprintf("Received request: method=%s", jsonRPCRequest.Method))
 
 	// proxy to primary and consider its response as the final response to send back to the CL
 	resp, err := s.proxy(s.config.Primary, r, data)
@@ -143,11 +138,36 @@ func (s *ClProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	w.Write(respData)
 
-	if !isBlockBuildingCall && s.config.Secondary != "" {
-		// proxy to secondary
-		if _, err := s.proxy(s.config.Secondary, r, data); err != nil {
-			s.log.Errorf("Error multiplexing to secondary: %v", err)
+	if s.config.Secondary == "" {
+		return
+	}
+
+	if strings.HasPrefix(jsonRPCRequest.Method, "engine_getPayload") {
+		// the only request we do not send since the secondary builder does not have the payload id
+		// and it will always fail
+		return
+	}
+
+	if strings.HasPrefix(jsonRPCRequest.Method, "engine_forkchoiceUpdated") {
+		// set to nil the second parameter of the forkchoiceUpdated call
+		if len(jsonRPCRequest.Params) == 1 {
+			// not expected
+			s.log.Warn("ForkchoiceUpdated call with only one parameter")
+		} else {
+			jsonRPCRequest.Params[1] = nil
+
+			data, err = json.Marshal(jsonRPCRequest)
+			if err != nil {
+				s.log.Errorf("Error marshalling forkchoiceUpdated request: %v", err)
+				return
+			}
 		}
+	}
+
+	// proxy to secondary
+	s.log.Info(fmt.Sprintf("Multiplexing request to secondary: method=%s", jsonRPCRequest.Method))
+	if _, err := s.proxy(s.config.Secondary, r, data); err != nil {
+		s.log.Errorf("Error multiplexing to secondary: %v", err)
 	}
 }
 
