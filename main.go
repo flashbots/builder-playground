@@ -31,6 +31,7 @@ import (
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/ferranbt/builder-playground/artifacts"
+	clproxy "github.com/ferranbt/builder-playground/cl-proxy"
 	mevboostrelay "github.com/ferranbt/builder-playground/mev-boost-relay"
 
 	"github.com/hashicorp/go-uuid"
@@ -61,6 +62,7 @@ var genesisDelayFlag uint64
 var watchPayloadsFlag bool
 var latestForkFlag bool
 var useRethForValidation bool
+var secondaryBuilderPort uint64
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -168,6 +170,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&watchPayloadsFlag, "watch-payloads", false, "")
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
 	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
+	rootCmd.Flags().Uint64Var(&secondaryBuilderPort, "secondary", 1234, "port to use for the secondary builder")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
@@ -369,6 +372,31 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		return err
 	}
 
+	// Start the cl proxy
+	{
+		cfg := clproxy.DefaultConfig()
+		cfg.Primary = "http://localhost:8551"
+
+		if secondaryBuilderPort != 0 {
+			cfg.Secondary = fmt.Sprintf("http://localhost:%d", secondaryBuilderPort)
+		}
+
+		var err error
+		if cfg.LogOutput, err = out.LogOutput("cl-proxy"); err != nil {
+			return err
+		}
+		clproxy, err := clproxy.New(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to create cl proxy: %w", err)
+		}
+
+		go func() {
+			if err := clproxy.Run(); err != nil {
+				svcManager.emitError()
+			}
+		}()
+	}
+
 	rethVersion := func() string {
 		cmd := exec.Command(rethBin, "--version")
 		out, err := cmd.Output()
@@ -404,13 +432,14 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
 			"--addr", "127.0.0.1",
 			"--port", "30303",
-			"--disable-discovery",
+			// "--disable-discovery",
 			// http config
 			"--http",
 			"--http.api", "admin,eth,net,web3",
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"-vvvv",
 		).
 		If(useRethForValidation, func(s *service) *service {
 			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
@@ -470,7 +499,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http-port", "3500",
 			"--disable-packet-filter",
 			"--target-peers", "0",
-			"--execution-endpoint", "http://localhost:8551",
+			"--execution-endpoint", "http://localhost:5656",
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--builder", "http://localhost:5555",
 			"--builder-fallback-epochs-since-finalization", "0",
@@ -537,6 +566,11 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		name: "mev-boost-relay",
 		ports: []*port{
 			{name: "http", port: 5555},
+		},
+	}, &service{
+		name: "cl-proxy",
+		ports: []*port{
+			{name: "jsonrpc", port: 5656},
 		},
 	})
 
