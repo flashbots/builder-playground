@@ -59,7 +59,6 @@ var continueFlag bool
 var useBinPathFlag bool
 var validateFlag bool
 var genesisDelayFlag uint64
-var watchPayloadsFlag bool
 var latestForkFlag bool
 var useRethForValidation bool
 var secondaryBuilderPort uint64
@@ -167,7 +166,6 @@ func main() {
 	rootCmd.Flags().BoolVar(&continueFlag, "continue", false, "")
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
 	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
-	rootCmd.Flags().BoolVar(&watchPayloadsFlag, "watch-payloads", false, "")
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
 	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
 	rootCmd.Flags().Uint64Var(&secondaryBuilderPort, "secondary", 1234, "port to use for the secondary builder")
@@ -225,9 +223,7 @@ func runIt() error {
 		return err
 	}
 
-	if watchPayloadsFlag {
-		go watchProposerPayloads()
-	}
+	go watchProposerPayloads()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
