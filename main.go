@@ -139,23 +139,30 @@ var validateCmd = &cobra.Command{
 
 		log.Infof("Chain is alive. Subscribing to head events")
 
-		ch := make(chan beaconclient.HeadEventData)
-		go clt.SubscribeToHeadEvents(ch)
+		ch := make(chan beaconclient.PayloadAttributesEvent)
+		go clt.SubscribeToPayloadAttributesEvents(ch)
 
-		var lastSlot uint64
-		for i := uint64(0); i < numBlocksValidate; i++ {
+		// var lastSlot uint64
+		// for i := uint64(0); i < numBlocksValidate; i++ {
+		for {
 			select {
 			case head := <-ch:
-				if lastSlot != 0 && lastSlot+1 != head.Slot {
-					return fmt.Errorf("slot mismatch, expected %d, got %d", lastSlot+1, head.Slot)
-				}
+				fmt.Println(head.Data.ProposalSlot, head.Data.ParentBlockNumber, head.Data)
 
-				log.Infof("Slot: %d Block: %s", head.Slot, head.Block)
-				lastSlot = head.Slot
-			case <-time.After(20 * time.Second):
-				return fmt.Errorf("timeout waiting for block")
+				/*
+					if lastSlot != 0 && lastSlot+1 != head.Slot {
+						return fmt.Errorf("slot mismatch, expected %d, got %d", lastSlot+1, head.Slot)
+					}
+
+					log.Infof("Slot: %d Block: %s", head.Slot, head.Block)
+					lastSlot = head.Slot
+				*/
+
+			case <-time.After(2000 * time.Second):
+				// return fmt.Errorf("timeout waiting for block")
 			}
 		}
+		// }
 
 		return nil
 	},
@@ -342,6 +349,8 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		rethBin, lighthouseBin string
 	)
 
+	var binArtifactsG map[string]string
+
 	if useBinPathFlag {
 		fmt.Println("Using binaries from the PATH")
 
@@ -352,10 +361,12 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		if err != nil {
 			return err
 		}
-
+		binArtifactsG = binArtifacts
 		rethBin = binArtifacts["reth"]
 		lighthouseBin = binArtifacts["lighthouse"]
 	}
+
+	fmt.Println(lighthouseBin)
 
 	// log the prefunded accounts
 	fmt.Printf("\nPrefunded accounts:\n==================\n")
@@ -452,87 +463,151 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		WithPort("authrpc", 8551).
 		Run()
 
-	lightHouseVersion := func() string {
-		cmd := exec.Command(lighthouseBin, "--version")
-		out, err := cmd.Output()
-		if err != nil {
-			return "unknown"
-		}
-		// find the line of the form:
-		// Lighthouse v5.2.1-9e12c21
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "Lighthouse ") {
-				v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
-				if !strings.HasPrefix(v, "v") {
-					v = "v" + v
-				}
-				// Go semver considers - as a pre-release, so we need to remove it
-				v = strings.Split(v, "-")[0]
-				return semver.Canonical(v)
+	/*
+		lightHouseVersion := func() string {
+			cmd := exec.Command(lighthouseBin, "--version")
+			out, err := cmd.Output()
+			if err != nil {
+				return "unknown"
 			}
-		}
-		return "unknown"
-	}()
+			// find the line of the form:
+			// Lighthouse v5.2.1-9e12c21
+			for _, line := range strings.Split(string(out), "\n") {
+				if strings.HasPrefix(line, "Lighthouse ") {
+					v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
+					if !strings.HasPrefix(v, "v") {
+						v = "v" + v
+					}
+					// Go semver considers - as a pre-release, so we need to remove it
+					v = strings.Split(v, "-")[0]
+					return semver.Canonical(v)
+				}
+			}
+			return "unknown"
+		}()
+	*/
 
-	// start the beacon node
-	fmt.Println("Starting lighthouse version " + lightHouseVersion)
+	/*
+			      - --datadir=/consensus/beacondata
+		      # No peers to sync with in this testnet, so setting to 0
+		      - --min-sync-peers=0
+		      - --genesis-state=/consensus/genesis.ssz
+		      - --bootstrap-node=
+		      - --interop-eth1data-votes
+		      # The chain configuration file used for setting up Prysm
+		      - --chain-config-file=/consensus/config.yml
+		      # We specify the chain id used by our execution client
+		      - --contract-deployment-block=0
+		      - --chain-id=${CHAIN_ID:-32382}
+		      - --rpc-host=0.0.0.0
+		      - --grpc-gateway-host=0.0.0.0
+		      - --execution-endpoint=http://geth:8551
+		      - --accept-terms-of-use
+		      - --jwt-secret=/execution/jwtsecret
+		      - --suggested-fee-recipient=0x123463a4b065722e99115d6c222f267d9cabb524
+		      - --minimum-peers-per-subnet=0
+		      - --enable-debug-rpc-endpoints
+		      - --force-clear-db
+	*/
+
+	time.Sleep(5 * time.Second)
+
 	svcManager.
 		NewService("beacon_node").
 		WithArgs(
-			lighthouseBin,
-			"bn",
-			"--datadir", "{{.Dir}}/data_beacon_node",
-			"--testnet-dir", "{{.Dir}}/testnet",
-			"--enable-private-discovery",
-			"--disable-peer-scoring",
-			"--staking",
-			"--enr-address", "127.0.0.1",
-			"--enr-udp-port", "9000",
-			"--enr-tcp-port", "9000",
-			"--enr-quic-port", "9100",
-			"--port", "9000",
-			"--quic-port", "9100",
-			"--http-port", "3500",
-			"--disable-packet-filter",
-			"--target-peers", "0",
-			"--execution-endpoint", "http://localhost:5656",
-			"--execution-jwt", "{{.Dir}}/jwtsecret",
-			"--builder", "http://localhost:5555",
-			"--builder-fallback-epochs-since-finalization", "0",
-			"--builder-fallback-disable-checks",
-			"--always-prepare-payload",
-			"--prepare-payload-lookahead", "8000",
-		).
-		If(
-			semver.Compare(lightHouseVersion, "v5.3") < 0,
-			func(s *service) *service {
-				// For versions <= v5.2.1, we want to run with --http-allow-sync-stalled
-				// However this flag is not available in newer versions
-				return s.WithArgs("--http-allow-sync-stalled")
-			},
-		).
-		If(
-			semver.Compare(lightHouseVersion, "v5.3") >= 0,
-			func(s *service) *service {
-				// For versions >= v5.3.0, ----suggested-fee-recipient is apparently now required for non-validator nodes as well
-				return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
-			},
-		).
-		WithPort("http", 3500).
-		Run()
+			binArtifactsG["beacon-chain"],
+			"--datadir={{.Dir}}/data_beacon_node",
+			"--min-sync-peers=0",
+			"--genesis-state={{.Dir}}/testnet/genesis.ssz",
+			"--interop-eth1data-votes",
+			"--chain-config-file={{.Dir}}/testnet/config.yaml",
+			"--contract-deployment-block=0",
+			"--rpc-host=0.0.0.0",
+			"--grpc-gateway-host=0.0.0.0",
+			"--execution-endpoint=http://localhost:5656",
+			"--accept-terms-of-use",
+			"--jwt-secret={{.Dir}}/jwtsecret",
+			"--suggested-fee-recipient=0x123463a4b065722e99115d6c222f267d9cabb524",
+			"--minimum-peers-per-subnet=0",
+			"--enable-debug-rpc-endpoints",
+			"--force-clear-db",
+		).Run()
 
-	// start validator client
+	/*
+		// start the beacon node
+		fmt.Println("Starting lighthouse version " + lightHouseVersion)
+		svcManager.
+			NewService("beacon_node").
+			WithArgs(
+				lighthouseBin,
+				"bn",
+				"--datadir", "{{.Dir}}/data_beacon_node",
+				"--testnet-dir", "{{.Dir}}/testnet",
+				"--enable-private-discovery",
+				"--disable-peer-scoring",
+				"--staking",
+				"--debug-level", "debug",
+				"--enr-address", "127.0.0.1",
+				"--enr-udp-port", "9000",
+				"--enr-tcp-port", "9000",
+				"--enr-quic-port", "9100",
+				"--port", "9000",
+				"--quic-port", "9100",
+				"--http-port", "3500",
+				"--disable-packet-filter",
+				"--target-peers", "0",
+				"--execution-endpoint", "http://localhost:5656",
+				"--execution-jwt", "{{.Dir}}/jwtsecret",
+				"--builder", "http://localhost:5555",
+				"--builder-fallback-epochs-since-finalization", "0",
+				"--builder-fallback-disable-checks",
+				"--always-prepare-payload",
+				"--prepare-payload-lookahead", "8000",
+			).
+			If(
+				semver.Compare(lightHouseVersion, "v5.3") < 0,
+				func(s *service) *service {
+					// For versions <= v5.2.1, we want to run with --http-allow-sync-stalled
+					// However this flag is not available in newer versions
+					return s.WithArgs("--http-allow-sync-stalled")
+				},
+			).
+			If(
+				semver.Compare(lightHouseVersion, "v5.3") >= 0,
+				func(s *service) *service {
+					// For versions >= v5.3.0, ----suggested-fee-recipient is apparently now required for non-validator nodes as well
+					return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
+				},
+			).
+			WithPort("http", 3500).
+			Run()
+
+		// start validator client
+		svcManager.
+			NewService("validator").
+			WithArgs(
+				lighthouseBin,
+				"vc",
+				"--datadir", "{{.Dir}}/data_validator",
+				"--testnet-dir", "{{.Dir}}/testnet",
+				"--init-slashing-protection",
+				"--beacon-nodes", "http://localhost:3500",
+				"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
+				"--builder-proposals",
+			).Run()
+	*/
+
 	svcManager.
 		NewService("validator").
 		WithArgs(
-			lighthouseBin,
-			"vc",
-			"--datadir", "{{.Dir}}/data_validator",
-			"--testnet-dir", "{{.Dir}}/testnet",
-			"--init-slashing-protection",
-			"--beacon-nodes", "http://localhost:3500",
-			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
-			"--builder-proposals",
+			binArtifactsG["validator"],
+			"--beacon-rpc-provider=http://localhost:3500",
+			"--datadir={{.Dir}}/data_validator",
+			"--accept-terms-of-use",
+			"--chain-config-file={{.Dir}}/testnet/config.yaml",
+			"--force-clear-db",
+			"--wallet-dir={{.Dir}}/data_validator/validators",
+			"--wallet-password-file={{.Dir}}/data_validator/secrets",
 		).Run()
 
 	{

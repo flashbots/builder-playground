@@ -13,10 +13,11 @@ import (
 )
 
 type release struct {
-	Name    string
-	Org     string
-	Version string
-	Arch    func(string, string) string
+	Name         string
+	Org          string
+	Version      string
+	ArtifactName string
+	Arch         func(string, string) string
 }
 
 func DownloadArtifacts() (map[string]string, error) {
@@ -51,6 +52,24 @@ func DownloadArtifacts() (map[string]string, error) {
 				return ""
 			},
 		},
+		{
+			Name:         "prysm",
+			Org:          "prysmaticlabs",
+			ArtifactName: "validator",
+			Version:      "v5.1.2",
+			Arch: func(goos, goarch string) string {
+				return "darwin-arm64"
+			},
+		},
+		{
+			Name:         "prysm",
+			Org:          "prysmaticlabs",
+			ArtifactName: "beacon-chain",
+			Version:      "v5.1.2",
+			Arch: func(goos, goarch string) string {
+				return "darwin-arm64"
+			},
+		},
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -77,7 +96,12 @@ func DownloadArtifacts() (map[string]string, error) {
 	// 3. If the architecture is not supported, check if the binary is found in PATH.
 	releases := make(map[string]string)
 	for _, artifact := range artifacts {
-		outPath := filepath.Join(customHomeDir, artifact.Name+"-"+artifact.Version)
+		artifactName := artifact.ArtifactName
+		if artifactName == "" {
+			artifactName = artifact.Name
+		}
+
+		outPath := filepath.Join(customHomeDir, artifactName+"-"+artifact.Version)
 		_, err := os.Stat(outPath)
 		if err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("error checking file existence: %v", err)
@@ -96,7 +120,7 @@ func DownloadArtifacts() (map[string]string, error) {
 				}
 			} else {
 				// Case 3. Download the binary from the release page
-				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, archVersion)
+				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s", artifact.Org, artifact.Name, artifact.Version, artifactName, artifact.Version, archVersion)
 				fmt.Printf("Downloading %s: %s\n", outPath, releasesURL)
 
 				if err := downloadArtifact(releasesURL, artifact.Name, outPath); err != nil {
@@ -108,7 +132,7 @@ func DownloadArtifacts() (map[string]string, error) {
 			fmt.Printf("%s already exists, skipping download\n", outPath)
 		}
 
-		releases[artifact.Name] = outPath
+		releases[artifactName] = outPath
 	}
 
 	return releases, nil
