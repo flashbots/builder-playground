@@ -6,9 +6,9 @@ toolchain go1.22.2
 
 require (
 	github.com/alicebob/miniredis/v2 v2.32.1
-	github.com/ethereum/go-ethereum v1.13.14
-	github.com/flashbots/go-boost-utils v1.8.0
-	github.com/flashbots/mev-boost-relay v0.29.2-0.20240705093628-4d4478a9c9dc
+	github.com/ethereum/go-ethereum v1.14.9
+	github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d
+	github.com/flashbots/mev-boost-relay v0.29.2-0.20241014220635-20d0a9560287
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/prysmaticlabs/prysm/v5 v5.1.2-mekong
 	github.com/sirupsen/logrus v1.9.3
@@ -26,8 +26,8 @@ require (
 	github.com/VictoriaMetrics/fastcache v1.12.2 // indirect
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/allegro/bigcache v1.2.1 // indirect
-	github.com/attestantio/go-builder-client v0.4.3-0.20240124194555-d44db06f45fa // indirect
-	github.com/attestantio/go-eth2-client v0.21.1 // indirect
+	github.com/attestantio/go-builder-client v0.5.1-0.20241014215920-ba44f1de4249 // indirect
+	github.com/attestantio/go-eth2-client v0.21.12-0.20241014214053-759b0ace2e43 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.13.0 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20230124162541-5f7a7d875746 // indirect
@@ -60,7 +60,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-redis/redis/v9 v9.0.0-rc.1 // indirect
-	github.com/goccy/go-yaml v1.11.2 // indirect
+	github.com/goccy/go-yaml v1.11.3 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
