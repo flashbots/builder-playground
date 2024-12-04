@@ -97,14 +97,21 @@ var downloadArtifactsCmd = &cobra.Command{
 }
 
 var numBlocksValidate uint64
+var validatePayloads bool
 
-var validateCmd = &cobra.Command{
-	Use:  "validate",
-	Long: `Validate the playground`,
+var watchCmd = &cobra.Command{
+	Use:  "watch-payloads",
+	Long: `Watch the payload attribute events`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Test that blocks are being produced
 		log := mevRCommon.LogSetup(false, "info")
 		clt := beaconclient.NewProdBeaconInstance(log, "http://localhost:3500", "http://localhost:3500")
+
+		// Subscribe to head events right away even if the connection has not been established yet
+		// That is handled internally in the function already.
+		// Otherwise, if we connect only when the first head slot happens we might miss some initial slots.
+		ch := make(chan beaconclient.PayloadAttributesEvent)
+		go clt.SubscribeToPayloadAttributesEvents(ch)
 
 		{
 			// If the chain has not started yet, wait for it to start.
@@ -118,7 +125,7 @@ var validateCmd = &cobra.Command{
 				if err != nil {
 					return false
 				}
-				return sync.HeadSlot > 1
+				return sync.HeadSlot >= 1
 			}
 
 			if !isReady() {
@@ -139,42 +146,62 @@ var validateCmd = &cobra.Command{
 
 		log.Infof("Chain is alive. Subscribing to head events")
 
-		ch := make(chan beaconclient.HeadEventData)
-		go clt.SubscribeToHeadEvents(ch)
-
 		var lastSlot uint64
-		for i := uint64(0); i < numBlocksValidate; i++ {
+		for {
 			select {
 			case head := <-ch:
-				if lastSlot != 0 && lastSlot+1 != head.Slot {
-					return fmt.Errorf("slot mismatch, expected %d, got %d", lastSlot+1, head.Slot)
+				log.Infof("Slot: %d Parent block number: %d", head.Data.ProposalSlot, head.Data.ParentBlockNumber)
+
+				if validatePayloads {
+					// If we are being notified of a new slot, validate that the slots are contiguous
+					// Note that lighthouse might send multiple updates for the same slot.
+					if lastSlot != 0 && lastSlot != head.Data.ProposalSlot && lastSlot+1 != head.Data.ProposalSlot {
+						return fmt.Errorf("slot mismatch, expected %d, got %d", lastSlot+1, head.Data.ProposalSlot)
+					}
+					// if the network did not miss any initial slots, lighthouse will send payload attribute updates
+					// of the form: (slot = slot, parent block number = slot - 2), (slot, slot - 1).
+					// The -2 is in case we want to handle reorgs in the chain.
+					// We need to validate that at least the difference between the parent block number and the slot is 2.
+					if head.Data.ProposalSlot-head.Data.ParentBlockNumber > 2 {
+						return fmt.Errorf("parent block too big %d", head.Data.ParentBlockNumber)
+					}
+
+					if lastSlot != head.Data.ProposalSlot {
+						numBlocksValidate--
+						if numBlocksValidate == 0 {
+							return nil
+						}
+					}
 				}
 
-				log.Infof("Slot: %d Block: %s", head.Slot, head.Block)
-				lastSlot = head.Slot
+				lastSlot = head.Data.ProposalSlot
 			case <-time.After(20 * time.Second):
 				return fmt.Errorf("timeout waiting for block")
 			}
 		}
-
-		return nil
 	},
 }
+
+// minimumGenesisDelay is the minimum delay for the genesis time. This is required
+// because lighthouse takes some time to start and we need to make sure it is ready
+// otherwise, some blocks are missed.
+var minimumGenesisDelay uint64 = 10
 
 func main() {
 	rootCmd.Flags().StringVar(&outputFlag, "output", "", "")
 	rootCmd.Flags().BoolVar(&continueFlag, "continue", false, "")
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
-	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", 5, "")
+	rootCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", minimumGenesisDelay, "")
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
 	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
 	rootCmd.Flags().Uint64Var(&secondaryBuilderPort, "secondary", 1234, "port to use for the secondary builder")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
-	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
+	watchCmd.Flags().Uint64Var(&numBlocksValidate, "validate-num-blocks", 5, "")
+	watchCmd.Flags().BoolVar(&validatePayloads, "validate-payloads", false, "")
 
 	rootCmd.AddCommand(downloadArtifactsCmd)
-	rootCmd.AddCommand(validateCmd)
+	rootCmd.AddCommand(watchCmd)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -182,6 +209,10 @@ func main() {
 }
 
 func runIt() error {
+	if genesisDelayFlag < minimumGenesisDelay {
+		return fmt.Errorf("genesis delay must be at least %d", minimumGenesisDelay)
+	}
+
 	if outputFlag == "" {
 		// Use the $HOMEDIR/devnet as the default output
 		homeDir, err := getHomeDir()

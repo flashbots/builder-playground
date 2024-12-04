@@ -24,7 +24,7 @@ jobs:
         run: go run main.go --output /tmp/playground & > /tmp/playground.log 2>&1
 
       - name: Validate that blocks are created
-        run: go run main.go validate
+        run: go run main.go watch-payloads --validate-payloads
 
       - name: Move playground logs
         if: ${{ failure() }}
