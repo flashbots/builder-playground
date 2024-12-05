@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -311,6 +312,8 @@ func setupArtifacts() error {
 	}
 
 	block := gen.ToBlock()
+	header, _ := json.MarshalIndent(block.Header(), "", "  ")
+	log.Printf("Genesis block hash: %s json: %s", block.Hash(), header)
 
 	var v int
 	if latestForkFlag {
