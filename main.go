@@ -760,7 +760,7 @@ type serviceManager struct {
 
 	wg sync.WaitGroup
 
-	// channel for the handles to nofify when they are shutting down
+	// channel for the handles to notify when they are shutting down
 	closeCh chan struct{}
 }
 

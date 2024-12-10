@@ -107,7 +107,7 @@ func (s *ClProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// block building requests (this is, remove 'params' field from FCU and omit get payload).
 	// There are two reasons for this:
 	// - The secondary builder does not use the Engine API to build blocks but the relayer so these requests are not necessary.
-	// - The CL->EL setup is not configured anyway to handle two block builders throught the Engine API.
+	// - The CL->EL setup is not configured anyway to handle two block builders through the Engine API.
 	// Note that we still have to relay this request to the primary EL node since we need
 	// to have a fallback node in the CL.
 	var jsonRPCRequest jsonrpcMessage
