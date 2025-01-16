@@ -8,7 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.32.1
 	github.com/ethereum/go-ethereum v1.14.9
 	github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d
-	github.com/flashbots/mev-boost-relay v0.29.2-0.20241014220635-20d0a9560287
+	github.com/flashbots/mev-boost-relay v0.29.2-0.20250115164917-46c6c69515a7
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/prysmaticlabs/prysm/v5 v5.2.1-0.20241227170505-ae4442964a9a
 	github.com/sirupsen/logrus v1.9.3
@@ -26,7 +26,7 @@ require (
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/attestantio/go-builder-client v0.5.1-0.20241014215920-ba44f1de4249 // indirect
-	github.com/attestantio/go-eth2-client v0.21.12-0.20241014214053-759b0ace2e43 // indirect
+	github.com/attestantio/go-eth2-client v0.22.1-0.20250106164842-07b6ce39bb43 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.17.0 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20230124162541-5f7a7d875746 // indirect
