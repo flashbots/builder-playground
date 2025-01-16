@@ -10,7 +10,7 @@ require (
 	github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d
 	github.com/flashbots/mev-boost-relay v0.29.2-0.20241014220635-20d0a9560287
 	github.com/hashicorp/go-uuid v1.0.3
-	github.com/prysmaticlabs/prysm/v5 v5.1.2-mekong
+	github.com/prysmaticlabs/prysm/v5 v5.2.1-0.20241227170505-ae4442964a9a
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3

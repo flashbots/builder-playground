@@ -315,8 +315,8 @@ github.com/prysmaticlabs/gohashtree v0.0.4-beta.0.20240624100937-73632381301b h1
 github.com/prysmaticlabs/gohashtree v0.0.4-beta.0.20240624100937-73632381301b/go.mod h1:HRuvtXLZ4WkaB1MItToVH2e8ZwKwZPY5/Rcby+CvvLY=
 github.com/prysmaticlabs/protoc-gen-go-cast v0.0.0-20230228205207-28762a7b9294 h1:q9wE0ZZRdTUAAeyFP/w0SwBEnCqlVy2+on6X2/e+eAU=
 github.com/prysmaticlabs/protoc-gen-go-cast v0.0.0-20230228205207-28762a7b9294/go.mod h1:ZVEbRdnMkGhp/pu35zq4SXxtvUwWK0J1MATtekZpH2Y=
-github.com/prysmaticlabs/prysm/v5 v5.1.2-mekong h1:Z3qajrDuG9TLdmp+SCzruz1fVGI4cMqttEG3m8KGCas=
-github.com/prysmaticlabs/prysm/v5 v5.1.2-mekong/go.mod h1:ykj3Bl9dHv35cC7fRw6Cd1aCd9l+eNvInHY6gsPbEig=
+github.com/prysmaticlabs/prysm/v5 v5.2.1-0.20241227170505-ae4442964a9a h1:PMkVRegituGXEPeKpJS53PxR3/cPFhrPn7Rw+lvEzXE=
+github.com/prysmaticlabs/prysm/v5 v5.2.1-0.20241227170505-ae4442964a9a/go.mod h1:cQc+NIMKaHjPvY566HsYcuni763nzuUWnDsDbk45bbs=
 github.com/r3labs/sse/v2 v2.10.0 h1:hFEkLLFY4LDifoHdiCN/LlGBAdVJYsANaLqNYa1l/v0=
 github.com/r3labs/sse/v2 v2.10.0/go.mod h1:Igau6Whc+F17QUgML1fYe1VPZzTV6EMCnYktEmkNJ7I=
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
