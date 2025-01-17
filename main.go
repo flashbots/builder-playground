@@ -944,6 +944,8 @@ func convert(config *params.BeaconChainConfig) ([]byte, error) {
 				resTyp = val.Field(i).String()
 			case reflect.Uint8, reflect.Uint64:
 				resTyp = fmt.Sprintf("%d", val.Field(i).Uint())
+			case reflect.Int:
+				resTyp = fmt.Sprintf("%d", val.Field(i).Int())
 			default:
 				panic(fmt.Sprintf("BUG: unsupported type, tag '%s', err: '%s'", tag, val.Field(i).Kind()))
 			}
