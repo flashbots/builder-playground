@@ -8,7 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.32.1
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d
-	github.com/flashbots/mev-boost-relay v0.29.2-0.20250115164917-46c6c69515a7
+	github.com/flashbots/mev-boost-relay v0.29.2-0.20250120221149-69845eef2f54
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/prysmaticlabs/prysm/v5 v5.2.1-0.20250116043826-0b16c79c353a
 	github.com/sirupsen/logrus v1.9.3
@@ -146,4 +146,8 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
+// this is needed until geth merges pectra work to main
 replace github.com/ethereum/go-ethereum => github.com/s1na/go-ethereum v1.8.4-0.20250109171004-f85cde7ed179
+
+// this is neeed until justin's PR is accepted by go-builder-client
+replace github.com/attestantio/go-builder-client => github.com/jtraglia/go-builder-client v0.4.6-0.20250120191512-f314deb5dcc8

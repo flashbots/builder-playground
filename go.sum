@@ -15,8 +15,6 @@ github.com/alicebob/miniredis/v2 v2.32.1/go.mod h1:AqkLNAfUm0K07J28hnAyyQKf/x0Yk
 github.com/allegro/bigcache v1.2.1-0.20190218064605-e24eb225f156/go.mod h1:Cb/ax3seSYIx7SuZdm2G2xzfwmv3TPSk2ucNfQESPXM=
 github.com/allegro/bigcache v1.2.1 h1:hg1sY1raCwic3Vnsvje6TT7/pnZba83LeFck5NrFKSc=
 github.com/allegro/bigcache v1.2.1/go.mod h1:Cb/ax3seSYIx7SuZdm2G2xzfwmv3TPSk2ucNfQESPXM=
-github.com/attestantio/go-builder-client v0.5.1-0.20241014215920-ba44f1de4249 h1:y01TZYnM3DDb3nkqA3VaoiqKuWWAgLIfrm63XOQJsFc=
-github.com/attestantio/go-builder-client v0.5.1-0.20241014215920-ba44f1de4249/go.mod h1:X31JAUL4q6cY/OGClpBQcwFN7FBixt6Wjrqy7RrlhEc=
 github.com/attestantio/go-eth2-client v0.22.1-0.20250106164842-07b6ce39bb43 h1:lORlCOleRXvVt3H7fan64UaYAK4FJDHdy19uYfe7FKQ=
 github.com/attestantio/go-eth2-client v0.22.1-0.20250106164842-07b6ce39bb43/go.mod h1:vy5jU/uDZ2+RcVzq5BfnG+bQ3/6uu9DGwCrGsPtjJ1A=
 github.com/bazelbuild/rules_go v0.23.2 h1:Wxu7JjqnF78cKZbsBsARLSXx/jlGaSLCnUV3mTlyHvM=
@@ -87,8 +85,8 @@ github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d h1:O4iD
 github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d/go.mod h1:kU1G5Xk2OBBnYag2RGRuaPuMuuhH2yZx+xHeX91E9Po=
 github.com/flashbots/go-utils v0.5.0 h1:ldjWta9B9//DJU2QcwRbErez3+1aKhSn6EoFc6d5kPY=
 github.com/flashbots/go-utils v0.5.0/go.mod h1:LauDwifaRdSK0mS5X34GR59pJtUu1T/lOFNdff1BqtI=
-github.com/flashbots/mev-boost-relay v0.29.2-0.20250115164917-46c6c69515a7 h1:6J0Kt6SwgC7ao+ebXSx0/tygmzl2i1BrvlEclM5KfOQ=
-github.com/flashbots/mev-boost-relay v0.29.2-0.20250115164917-46c6c69515a7/go.mod h1:ukMf0bton5rflP1iY4/AnPz6iCrAoc2Epi98D93HFj8=
+github.com/flashbots/mev-boost-relay v0.29.2-0.20250120221149-69845eef2f54 h1:u+q7CoPOtoO2oenFG+FlvzJ4S9tcR1otm5xcceUrF3E=
+github.com/flashbots/mev-boost-relay v0.29.2-0.20250120221149-69845eef2f54/go.mod h1:cFBQWklH4qFBxfXLPLGbsp3o6Lz1oXTZi2tvMsupRuE=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
 github.com/fsnotify/fsnotify v1.5.4/go.mod h1:OVB6XrOHzAwXMpEM7uPOzcehqUV2UqJxmVXmkdnm1bU=
@@ -207,6 +205,8 @@ github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8Hm
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
+github.com/jtraglia/go-builder-client v0.4.6-0.20250120191512-f314deb5dcc8 h1:krTTnJiH9ic/eUWP1Q9hXYiONKeUEUaljQeYtmRfrTA=
+github.com/jtraglia/go-builder-client v0.4.6-0.20250120191512-f314deb5dcc8/go.mod h1:X31JAUL4q6cY/OGClpBQcwFN7FBixt6Wjrqy7RrlhEc=
 github.com/karrick/godirwalk v1.16.1 h1:DynhcF+bztK8gooS0+NDJFrdNZjJ3gzVzC545UNA9iw=
 github.com/karrick/godirwalk v1.16.1/go.mod h1:j4mkqPuvaLI8mp1DroR3P6ad7cyYd4c1qeJ3RV7ULlk=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
