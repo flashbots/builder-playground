@@ -477,8 +477,10 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		If(
 			semver.Compare(rethVersion, "v1.1.0") >= 0,
 			func(s *service) *service {
-				// For versions >= v1.1.0, we need to run with --engine.legacy, at least for now
-				return s.WithArgs("--engine.legacy")
+				// For version v1.1.5, we need to run with --engine.legacy
+				// return s.WithArgs("--engine.legacy")
+				// However newer commits in main require the `--engine.persistence-threshold 0 --engine.memory-block-buffer-target 0`
+				return s.WithArgs("--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0")
 			},
 		).
 		WithPort("rpc", 30303).
