@@ -469,7 +469,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
-			"--metrics", "9090",
 			"-vvvv",
 		).
 		If(useRethForValidation, func(s *service) *service {
@@ -478,9 +477,8 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		If(
 			semver.Compare(rethVersion, "v1.1.0") >= 0,
 			func(s *service) *service {
-				// For version v1.1.5, we need to run with --engine.legacy
-				// return s.WithArgs("--engine.legacy")
-				// However newer commits in main require the `--engine.persistence-threshold 0 --engine.memory-block-buffer-target 0`
+				// For reth version 1.1.6+ the "legacy" engine was removed, so we now require
+				// theese `--engine.persistence-threshold 0 --engine.memory-block-buffer-target 0` arguments
 				return s.WithArgs("--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0")
 			},
 		).
