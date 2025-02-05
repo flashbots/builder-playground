@@ -63,6 +63,16 @@ func New(config *Config) (*MevBoostRelay, error) {
 		beaconclient.NewProdBeaconInstance(log, config.BeaconClientAddr, config.BeaconClientAddr),
 	})
 
+	// enable feature flags
+	featureFlags := []string{
+		"ENABLE_BUILDER_CANCELLATIONS",
+	}
+	for _, flag := range featureFlags {
+		if err := os.Setenv(flag, "1"); err != nil {
+			return nil, fmt.Errorf("failed to feature flag %s: %w", flag, err)
+		}
+	}
+
 	// wait until the beacon client is ready, otherwise, the api and housekeeper services
 	// will fail at startup
 	syncTimeoutCh := time.After(10 * time.Second)
