@@ -469,6 +469,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"--metrics", "9090",
 			"-vvvv",
 		).
 		If(useRethForValidation, func(s *service) *service {
