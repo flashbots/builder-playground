@@ -78,6 +78,8 @@ github.com/emicklei/go-restful/v3 v3.11.0 h1:rAQeMHw1c7zTmncogyy8VvRZwtkmkZ4FxER
 github.com/emicklei/go-restful/v3 v3.11.0/go.mod h1:6n3XBCmQQb25CM2LCACGz8ukIrRry+4bhvbpWn3mrbc=
 github.com/ethereum/c-kzg-4844 v1.0.0 h1:0X1LBXxaEtYD9xsyj9B9ctQEZIpnvVDeoBx8aHEwTNA=
 github.com/ethereum/c-kzg-4844 v1.0.0/go.mod h1:VewdlzQmpT5QSrVhbBuGoCdFJkpaJlO1aQputP83wc0=
+github.com/ethereum/go-ethereum v1.15.0 h1:LLb2jCPsbJZcB4INw+E/MgzUX5wlR6SdwXcv09/1ME4=
+github.com/ethereum/go-ethereum v1.15.0/go.mod h1:4q+4t48P2C03sjqGvTXix5lEOplf5dz4CTosbjt5tGs=
 github.com/ethereum/go-verkle v0.2.2 h1:I2W0WjnrFUIzzVPwm8ykY+7pL2d4VhlsePn4j7cnFk8=
 github.com/ethereum/go-verkle v0.2.2/go.mod h1:M3b90YRnzqKyyzBEWJGqj8Qff4IDeXnzFw0P9bFw3uk=
 github.com/fatih/color v1.16.0 h1:zmkK9Ngbjj+K0yRhTVONQh1p/HknKYSlNT+vZCzyokM=
@@ -89,8 +91,8 @@ github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d h1:O4iD
 github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d/go.mod h1:kU1G5Xk2OBBnYag2RGRuaPuMuuhH2yZx+xHeX91E9Po=
 github.com/flashbots/go-utils v0.5.0 h1:ldjWta9B9//DJU2QcwRbErez3+1aKhSn6EoFc6d5kPY=
 github.com/flashbots/go-utils v0.5.0/go.mod h1:LauDwifaRdSK0mS5X34GR59pJtUu1T/lOFNdff1BqtI=
-github.com/flashbots/mev-boost-relay v0.29.2-0.20250120230556-0743dc4906d4 h1:WHcg8NgQJH6Ot9qBJDRnkzZ68sX4TO0EbMqdgFwE1Jc=
-github.com/flashbots/mev-boost-relay v0.29.2-0.20250120230556-0743dc4906d4/go.mod h1:K8ESF5FHww8L6t+ORm1drkO+xSt56VgFrQKDbWubq50=
+github.com/flashbots/mev-boost-relay v0.29.2-0.20250206201012-fced1f3aac8c h1:CkVOqRm/Te9ajniq7dofoVblq4+5wy16EjbYviw6qXU=
+github.com/flashbots/mev-boost-relay v0.29.2-0.20250206201012-fced1f3aac8c/go.mod h1:H3+lnwQMuT7/RjZe2/aa/iRVc+k9oNrJcvD0oAMfwDk=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
 github.com/fsnotify/fsnotify v1.5.4/go.mod h1:OVB6XrOHzAwXMpEM7uPOzcehqUV2UqJxmVXmkdnm1bU=
@@ -327,8 +329,8 @@ github.com/prysmaticlabs/gohashtree v0.0.4-beta.0.20240624100937-73632381301b h1
 github.com/prysmaticlabs/gohashtree v0.0.4-beta.0.20240624100937-73632381301b/go.mod h1:HRuvtXLZ4WkaB1MItToVH2e8ZwKwZPY5/Rcby+CvvLY=
 github.com/prysmaticlabs/protoc-gen-go-cast v0.0.0-20230228205207-28762a7b9294 h1:q9wE0ZZRdTUAAeyFP/w0SwBEnCqlVy2+on6X2/e+eAU=
 github.com/prysmaticlabs/protoc-gen-go-cast v0.0.0-20230228205207-28762a7b9294/go.mod h1:ZVEbRdnMkGhp/pu35zq4SXxtvUwWK0J1MATtekZpH2Y=
-github.com/prysmaticlabs/prysm/v5 v5.2.1-0.20250131221727-910609a75f77 h1:M/uKsPIgRLu8NVNk4c13GWa1gem58KNdb2PVjeBvMXY=
-github.com/prysmaticlabs/prysm/v5 v5.2.1-0.20250131221727-910609a75f77/go.mod h1:X+MmDT3orzg6Zyfs7ipaXeQTfzAr6k6gV+iNktimxvQ=
+github.com/prysmaticlabs/prysm/v5 v5.3.0 h1:7Lr8ndapBTZg00YE+MgujN6+yvJR6Bdfn28ZDSJ00II=
+github.com/prysmaticlabs/prysm/v5 v5.3.0/go.mod h1:r1KhlduqDMIGZ1GhR5pjZ2Ko8Q89noTDYTRoPKwf1+c=
 github.com/r3labs/sse/v2 v2.10.0 h1:hFEkLLFY4LDifoHdiCN/LlGBAdVJYsANaLqNYa1l/v0=
 github.com/r3labs/sse/v2 v2.10.0/go.mod h1:Igau6Whc+F17QUgML1fYe1VPZzTV6EMCnYktEmkNJ7I=
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
@@ -342,8 +344,6 @@ github.com/rubenv/sql-migrate v1.5.2 h1:bMDqOnrJVV/6JQgQ/MxOpU+AdO8uzYYA/TxFUBzF
 github.com/rubenv/sql-migrate v1.5.2/go.mod h1:H38GW8Vqf8F0Su5XignRyaRcbXbJunSWxs+kmzlg0Is=
 github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/s1na/go-ethereum v1.8.4-0.20250204094247-7f0dd3947949 h1:E0TvV+2QH/fNgw+QU5i944VV1j1MPTQzfsoxQ3D7PW8=
-github.com/s1na/go-ethereum v1.8.4-0.20250204094247-7f0dd3947949/go.mod h1:4q+4t48P2C03sjqGvTXix5lEOplf5dz4CTosbjt5tGs=
 github.com/shirou/gopsutil v3.21.11+incompatible h1:+1+c1VGhc88SSonWP6foOcLhvnKlUeu/erjjvaPEYiI=
 github.com/shirou/gopsutil v3.21.11+incompatible/go.mod h1:5b4v6he4MtMOwMlS0TUMTu2PcXUg8+E1lC7eC3UO/RA=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=

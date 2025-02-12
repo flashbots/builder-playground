@@ -6,11 +6,11 @@ toolchain go1.23.6
 
 require (
 	github.com/alicebob/miniredis/v2 v2.32.1
-	github.com/ethereum/go-ethereum v1.14.12
+	github.com/ethereum/go-ethereum v1.15.0
 	github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d
-	github.com/flashbots/mev-boost-relay v0.29.2-0.20250120230556-0743dc4906d4
+	github.com/flashbots/mev-boost-relay v0.29.2-0.20250206201012-fced1f3aac8c
 	github.com/hashicorp/go-uuid v1.0.3
-	github.com/prysmaticlabs/prysm/v5 v5.2.1-0.20250131221727-910609a75f77
+	github.com/prysmaticlabs/prysm/v5 v5.3.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
@@ -146,7 +146,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
-
-// this is needed until geth merges pectra work to main
-
-replace github.com/ethereum/go-ethereum => github.com/s1na/go-ethereum v1.8.4-0.20250204094247-7f0dd3947949
