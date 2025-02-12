@@ -23,7 +23,8 @@ tests:
   name: "Fillup deposit queue"
   timeout: 1h
   config:
-    walletPrivkey: "2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
+    # 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+    walletPrivkey: "47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"
     depositCount: 1010
     depositMaxIndex: 100
     depositContract: "0x4242424242424242424242424242424242424242"
