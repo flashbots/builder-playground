@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -256,11 +255,7 @@ var emptyResponse = `{
 }`
 
 func startMockBlockValidationServiceServer() (string, error) {
-	// Generate a random port number between 10000 and 65535 (how likely is this?)
-	rand.Seed(time.Now().UnixNano())
-	port := rand.Intn(55536) + 10000
-
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return "", err
 	}
@@ -268,7 +263,9 @@ func startMockBlockValidationServiceServer() (string, error) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, emptyResponse)
+		// body, _ := io.ReadAll(r.Body)
+		// log.Printf("Received validation request request: %s", body)
+		_, _ = fmt.Fprint(w, emptyResponse)
 	})
 
 	go func() {
@@ -277,7 +274,7 @@ func startMockBlockValidationServiceServer() (string, error) {
 		}
 	}()
 
-	addr := fmt.Sprintf("http://localhost:%d", port)
+	addr := fmt.Sprintf("http://%s", listener.Addr().String())
 	return addr, nil
 }
 

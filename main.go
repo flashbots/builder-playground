@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -27,6 +28,7 @@ import (
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 	"golang.org/x/mod/semver"
 
+	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 
@@ -294,6 +296,8 @@ func setupArtifacts() error {
 	config := params.BeaconConfig()
 
 	gen := interop.GethTestnetGenesis(genesisTime, config)
+	// HACK: fix this in prysm?
+	gen.Config.DepositContractAddress = gethcommon.HexToAddress(config.DepositContractAddress)
 
 	// add pre-funded accounts
 	prefundedBalance, _ := new(big.Int).SetString("10000000000000000000000", 16)
@@ -311,6 +315,8 @@ func setupArtifacts() error {
 	}
 
 	block := gen.ToBlock()
+	header, _ := json.MarshalIndent(block.Header(), "", "  ")
+	log.Printf("Genesis block hash: %s json: %s", block.Hash(), header)
 
 	var v int
 	if latestForkFlag {
@@ -474,8 +480,9 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		If(
 			semver.Compare(rethVersion, "v1.1.0") >= 0,
 			func(s *service) *service {
-				// For versions >= v1.1.0, we need to run with --engine.legacy, at least for now
-				return s.WithArgs("--engine.legacy")
+				// For reth version 1.1.6+ the "legacy" engine was removed, so we now require
+				// theese `--engine.persistence-threshold 0 --engine.memory-block-buffer-target 0` arguments
+				return s.WithArgs("--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0")
 			},
 		).
 		WithPort("rpc", 30303).
@@ -523,7 +530,9 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--enr-quic-port", "9100",
 			"--port", "9000",
 			"--quic-port", "9100",
+			"--http",
 			"--http-port", "3500",
+			"--http-allow-origin", "*",
 			"--disable-packet-filter",
 			"--target-peers", "0",
 			"--execution-endpoint", "http://localhost:5656",
@@ -941,6 +950,8 @@ func convert(config *params.BeaconChainConfig) ([]byte, error) {
 				resTyp = val.Field(i).String()
 			case reflect.Uint8, reflect.Uint64:
 				resTyp = fmt.Sprintf("%d", val.Field(i).Uint())
+			case reflect.Int:
+				resTyp = fmt.Sprintf("%d", val.Field(i).Int())
 			default:
 				panic(fmt.Sprintf("BUG: unsupported type, tag '%s', err: '%s'", tag, val.Field(i).Kind()))
 			}
