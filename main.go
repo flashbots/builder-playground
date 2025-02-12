@@ -472,19 +472,13 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
+			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
 			"-vvvv",
 		).
 		If(useRethForValidation, func(s *service) *service {
 			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
 		}).
-		If(
-			semver.Compare(rethVersion, "v1.1.0") >= 0,
-			func(s *service) *service {
-				// For reth version 1.1.6+ the "legacy" engine was removed, so we now require
-				// theese `--engine.persistence-threshold 0 --engine.memory-block-buffer-target 0` arguments
-				return s.WithArgs("--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0")
-			},
-		).
 		WithPort("rpc", 30303).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
