@@ -28,6 +28,7 @@ import (
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 	"golang.org/x/mod/semver"
 
+	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 
@@ -295,6 +296,8 @@ func setupArtifacts() error {
 	config := params.BeaconConfig()
 
 	gen := interop.GethTestnetGenesis(genesisTime, config)
+	// HACK: fix this in prysm?
+	gen.Config.DepositContractAddress = gethcommon.HexToAddress(config.DepositContractAddress)
 
 	// add pre-funded accounts
 	prefundedBalance, _ := new(big.Int).SetString("10000000000000000000000", 16)
