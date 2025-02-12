@@ -567,6 +567,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--beacon-nodes", "http://localhost:3500",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 			"--builder-proposals",
+			"--prefer-builder-proposals",
 		).Run()
 
 	{
