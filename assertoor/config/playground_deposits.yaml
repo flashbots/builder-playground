@@ -1,0 +1,118 @@
+# To use this test:
+# cd into this directory
+# run:
+#   docker run -v $(pwd):/config -p 8080:8080 -it ethpandaops/assertoor:latest --config=/config/playground_deposits.yaml
+#
+# you can follow along either in the console output or open http://localhost:8080/ to see the
+# assertoor web UI.
+endpoints:
+  - name: "playground"
+    executionUrl: "http://host.docker.internal:8545/"
+    consensusUrl: "http://host.docker.internal:3500"
+
+web:
+  server:
+    host: "0.0.0.0"
+    port: 8080
+  frontend:
+    enabled: true
+    debug: true
+    pprof: true
+tests:
+- id: fillup-deposit-queue
+  name: "Fillup deposit queue"
+  timeout: 1h
+  config:
+    # 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+    walletPrivkey: "47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"
+    depositCount: 1010
+    depositMaxIndex: 100
+    depositContract: "0x4242424242424242424242424242424242424242"
+    throughputPerIndex: 20
+    maxPendingPerIndex: 40
+    walletSeed: ""
+  tasks:
+    - name: check_clients_are_healthy
+      title: "Check if at least one client is ready"
+      timeout: 5m
+      config:
+        minClientCount: 1
+
+    - name: run_shell
+      id: prepare
+      title: "Prepare workers"
+      config:
+        envVars:
+          depositCount: "depositCount"
+          depositMaxIndex: "depositMaxIndex"
+        command: |
+          depositCount=$(echo $depositCount | jq -r .)
+          depositMaxIndex=$(echo $depositMaxIndex | jq -r .)
+          
+          minDepositCount=$(expr $depositCount \/ $depositMaxIndex)
+          plusOneDepositCount=$(expr $depositCount - $minDepositCount \* $depositMaxIndex)
+          
+          workers="[]"
+          
+          while read index; do
+            depositCount=$minDepositCount
+            if [ "$index" -lt "$plusOneDepositCount" ]; then
+              depositCount=$(expr $depositCount + 1)
+            fi
+          
+            worker=$(echo "{\"index\": $index, \"depositCount\": $depositCount}" )
+            workers=$(echo $workers | jq -c ". += [$worker]")
+          done <<< $(seq 0 1 $(expr $depositMaxIndex - 1))
+          
+          echo "::set-out-json workers $workers"
+
+    - name: run_task_matrix
+      title: "Generate ${depositCount} topup deposits for first ${depositMaxIndex} keys"
+      configVars:
+        matrixValues: "tasks.prepare.outputs.workers"
+      config:
+        runConcurrent: true
+        matrixVar: "worker"
+        task:
+          name: run_tasks
+          title: "Generate ${{worker.depositCount}} topup deposits for key ${{worker.index}}"
+          config:
+            tasks:
+              - name: check_consensus_validator_status
+                title: "Get validator pubkey for key ${{worker.index}}"
+                id: "get_validator"
+                timeout: 1m
+                configVars:
+                  validatorIndex: "worker.index"
+
+              - name: generate_child_wallet
+                id: depositor_wallet
+                title: "Generate wallet for lifecycle test"
+                configVars:
+                  walletSeed: "| \"fillup-deposit-queue-\" + .walletSeed + (.worker.index | tostring)"
+                  prefundMinBalance: "| (.worker.depositCount + 1) * 1000000000000000000"
+                  privateKey: "walletPrivkey"
+
+              - name: sleep
+                title: "Sleep 10s to ensure propagation of last block with wallet fundings to all clients"
+                config:
+                  duration: 10s
+
+              - name: run_task_options
+                title: "Generate ${{worker.depositCount}} top up deposits with 1 ETH each"
+                config:
+                  task:
+                    name: generate_deposits
+                    title: "Generate top up deposits for key ${{worker.index}} (${{tasks.get_validator.outputs.pubkey}})"
+                    config:
+                      depositAmount: 1
+                      topUpDeposit: true
+                      awaitReceipt: true
+                      failOnReject: true
+                    configVars:
+                      limitTotal: "worker.depositCount"
+                      limitPerSlot: "throughputPerIndex"
+                      limitPending: "maxPendingPerIndex"
+                      walletPrivkey: "tasks.depositor_wallet.outputs.childWallet.privkey"
+                      publicKey: "tasks.get_validator.outputs.pubkey"
+                      depositContract: "depositContract"

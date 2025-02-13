@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -27,6 +29,7 @@ import (
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 	"golang.org/x/mod/semver"
 
+	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 
@@ -294,6 +297,8 @@ func setupArtifacts() error {
 	config := params.BeaconConfig()
 
 	gen := interop.GethTestnetGenesis(genesisTime, config)
+	// HACK: fix this in prysm?
+	gen.Config.DepositContractAddress = gethcommon.HexToAddress(config.DepositContractAddress)
 
 	// add pre-funded accounts
 	prefundedBalance, _ := new(big.Int).SetString("10000000000000000000000", 16)
@@ -311,6 +316,8 @@ func setupArtifacts() error {
 	}
 
 	block := gen.ToBlock()
+	header, _ := json.MarshalIndent(block.Header(), "", "  ")
+	log.Printf("Genesis block hash: %s json: %s", block.Hash(), header)
 
 	var v int
 	if latestForkFlag {
@@ -466,18 +473,13 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
+			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
 			"-vvvv",
 		).
 		If(useRethForValidation, func(s *service) *service {
 			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
 		}).
-		If(
-			semver.Compare(rethVersion, "v1.1.0") >= 0,
-			func(s *service) *service {
-				// For versions >= v1.1.0, we need to run with --engine.legacy, at least for now
-				return s.WithArgs("--engine.legacy")
-			},
-		).
 		WithPort("rpc", 30303).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
@@ -505,6 +507,14 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		return "unknown"
 	}()
 
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		cmd := exec.Command("file", lighthouseBin)
+		out, _ := cmd.Output()
+		if strings.Contains(string(out), "x86_64") {
+			fmt.Println("WARNING: ", lighthouseBin, "is an x86_64 binary, using a self-compiled verison with `--use-bin-path` is recommended.")
+		}
+	}
+
 	// start the beacon node
 	fmt.Println("Starting lighthouse version " + lightHouseVersion)
 	svcManager.
@@ -523,7 +533,9 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--enr-quic-port", "9100",
 			"--port", "9000",
 			"--quic-port", "9100",
+			"--http",
 			"--http-port", "3500",
+			"--http-allow-origin", "*",
 			"--disable-packet-filter",
 			"--target-peers", "0",
 			"--execution-endpoint", "http://localhost:5656",
@@ -564,6 +576,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--beacon-nodes", "http://localhost:3500",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 			"--builder-proposals",
+			"--prefer-builder-proposals",
 		).Run()
 
 	{
@@ -941,6 +954,8 @@ func convert(config *params.BeaconChainConfig) ([]byte, error) {
 				resTyp = val.Field(i).String()
 			case reflect.Uint8, reflect.Uint64:
 				resTyp = fmt.Sprintf("%d", val.Field(i).Uint())
+			case reflect.Int:
+				resTyp = fmt.Sprintf("%d", val.Field(i).Int())
 			default:
 				panic(fmt.Sprintf("BUG: unsupported type, tag '%s', err: '%s'", tag, val.Field(i).Kind()))
 			}
