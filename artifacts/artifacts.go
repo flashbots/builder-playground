@@ -39,12 +39,12 @@ func DownloadArtifacts() (map[string]string, error) {
 		{
 			Name:    "lighthouse",
 			Org:     "sigp",
-			Version: "v5.2.1",
+			Version: "v7.0.0-beta.0",
 			Arch: func(goos, goarch string) string {
 				if goos == "linux" {
 					return "x86_64-unknown-linux-gnu"
 				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-					return "x86_64-apple-darwin-portable"
+					return "x86_64-apple-darwin"
 				} else if goos == "darwin" && goarch == "amd64" {
 					return "x86_64-apple-darwin"
 				}

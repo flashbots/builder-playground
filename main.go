@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -505,6 +506,14 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		}
 		return "unknown"
 	}()
+
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		cmd := exec.Command("file", lighthouseBin)
+		out, _ := cmd.Output()
+		if strings.Contains(string(out), "x86_64") {
+			fmt.Println("WARNING: ", lighthouseBin, "is an x86_64 binary, using a self-compiled verison with `--use-bin-path` is recommended.")
+		}
+	}
 
 	// start the beacon node
 	fmt.Println("Starting lighthouse version " + lightHouseVersion)
