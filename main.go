@@ -469,7 +469,8 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			// "--disable-discovery",
 			// http config
 			"--http",
-			"--http.api", "admin,eth,net,web3",
+			// enable flashbots and mev for local testing
+			"--http.api", "admin,eth,net,web3,net,rpc,flashbots,mev",
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
@@ -477,9 +478,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
 			"-vvvv",
 		).
-		If(useRethForValidation, func(s *service) *service {
-			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
-		}).
 		WithPort("rpc", 30303).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).

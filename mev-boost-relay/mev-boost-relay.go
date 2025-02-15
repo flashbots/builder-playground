@@ -156,6 +156,11 @@ func New(config *Config) (*MevBoostRelay, error) {
 		return nil, fmt.Errorf("incorrect builder API secret key provided")
 	}
 
+	// rbuilder now requires the relay to support bundle cancellations
+	if err := os.Setenv("ENABLE_BUILDER_CANCELLATIONS", "1"); err != nil {
+		return nil, fmt.Errorf("failed to set ENABLE_BUILDER_CANCELLATIONS: %w", err)
+	}
+
 	apiOpts := api.RelayAPIOpts{
 		Log:             log.WithField("service", "api"),
 		ListenAddr:      fmt.Sprintf("%s:%d", config.ApiListenAddr, config.ApiListenPort),
