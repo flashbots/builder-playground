@@ -459,7 +459,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		&LighthouseBeaconNode{},
 		&LighthouseValidator{},
 		&RethNode{},
-		&MevBoostRelay{},
+		// &MevBoostRelay{},
 	}
 
 	/*
@@ -850,6 +850,7 @@ type NativeService interface {
 
 type Service interface {
 	Generate(svcManager *serviceManager) *service
+	Ready(ctx context.Context, service *service) error
 }
 
 type MevBoostRelay struct {
@@ -866,6 +867,10 @@ func (m *MevBoostRelay) Generate(svcManager *serviceManager) *service {
 	service.WithPort("http", m.Port)
 
 	return service
+}
+
+func (m *MevBoostRelay) Ready(ctx context.Context, service *service) error {
+	return nil
 }
 
 func (m *MevBoostRelay) Run(out *output) error {
@@ -890,6 +895,10 @@ func (m *MevBoostRelay) Run(out *output) error {
 }
 
 type RethNode struct {
+}
+
+func (r *RethNode) Ready(ctx context.Context, service *service) error {
+	return nil
 }
 
 func (r *RethNode) Generate(svcManager *serviceManager) *service {
@@ -926,6 +935,39 @@ func (r *RethNode) Generate(svcManager *serviceManager) *service {
 type LighthouseBeaconNode struct {
 }
 
+func (l *LighthouseBeaconNode) Ready(ctx context.Context, service *service) error {
+	fmt.Println("Waiting for beacon node to be ready")
+	defer func() {
+		fmt.Println("Beacon node is ready")
+	}()
+
+	// connect to the beacon client
+	url := fmt.Sprintf("http://localhost:%d", service.ports["http"].port)
+
+	syncTimeoutCh := time.After(20 * time.Second)
+	for {
+		select {
+		case <-syncTimeoutCh:
+			return fmt.Errorf("beacon client failed to start")
+		case <-ctx.Done():
+			return nil
+		case <-time.After(100 * time.Millisecond):
+			resp, err := http.Get(url + "/eth/v1/node/syncing")
+			if err != nil {
+				fmt.Println(err)
+				continue
+				// return fmt.Errorf("failed to get beacon node syncing status: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				return nil
+			}
+			fmt.Println(resp.Status)
+
+		}
+	}
+}
+
 func (l *LighthouseBeaconNode) Generate(svcManager *serviceManager) *service {
 	return svcManager.
 		NewService("beacon_node").
@@ -951,7 +993,7 @@ func (l *LighthouseBeaconNode) Generate(svcManager *serviceManager) *service {
 			"--target-peers", "0",
 			"--execution-endpoint", "http://{{Connect \"reth\" \"authrpc\"}}",
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
-			"--builder", "http://{{Connect \"mev-boost-relay\" \"http\"}}",
+			// "--builder", "http://{{Connect \"mev-boost-relay\" \"http\"}}",
 			"--builder-fallback-epochs-since-finalization", "0",
 			"--builder-fallback-disable-checks",
 			"--always-prepare-payload",
@@ -961,6 +1003,10 @@ func (l *LighthouseBeaconNode) Generate(svcManager *serviceManager) *service {
 }
 
 type LighthouseValidator struct {
+}
+
+func (l *LighthouseValidator) Ready(ctx context.Context, service *service) error {
+	return nil
 }
 
 func (l *LighthouseValidator) Generate(svcManager *serviceManager) *service {
@@ -1055,6 +1101,7 @@ func (s *serviceManager) Setup(services []Service) {
 	s.dag = dag
 }
 
+/*
 func (s *serviceManager) Start() {
 	// Now, we resolve the tree topologically to run the services in the correct order
 	fmt.Println(s.dag)
@@ -1070,6 +1117,7 @@ func (s *serviceManager) Start() {
 		}
 	})
 }
+*/
 
 func (s *serviceManager) findHandle(name string) (*handle, bool) {
 	for _, h := range s.handles {
@@ -1102,6 +1150,92 @@ func (s *serviceManager) ValidateGraph() {
 		}
 		indx++
 	}
+}
+
+func (s *serviceManager) Start() {
+	// Create channels to track service readiness
+	readyCh := make(chan string)
+	errorCh := make(chan error)
+
+	// Get all root vertices (those with no dependencies)
+	roots := s.dag.GetRoots()
+
+	// Start processing from root vertices
+	for _, root := range roots {
+		go s.startVertex(root, readyCh, errorCh)
+	}
+
+	// Track completed services
+	completed := make(map[string]bool)
+	remaining := len(s.handles)
+
+	// Process ready services and start their children
+	for remaining > 0 {
+		select {
+		case serviceName := <-readyCh:
+			completed[serviceName] = true
+			remaining--
+
+			// Find and start all children whose dependencies are satisfied
+			children := s.dag.GetOutbound(serviceName)
+			for _, child := range children {
+				childName := child.(string)
+				if s.canStart(childName, completed) {
+					go s.startVertex(childName, readyCh, errorCh)
+				}
+			}
+
+		case err := <-errorCh:
+			// Handle error (you might want to implement more sophisticated error handling)
+			fmt.Printf("Error starting service: %v\n", err)
+			s.StopAndWait()
+			return
+		}
+	}
+}
+
+func (s *serviceManager) canStart(serviceName string, completed map[string]bool) bool {
+	// Check if all dependencies (inbound edges) are completed
+	deps := s.dag.GetInbound(serviceName)
+	for _, dep := range deps {
+		if !completed[dep.(string)] {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *serviceManager) startVertex(v Vertex, readyCh chan string, errorCh chan error) {
+	serviceName := v.(string)
+
+	// Find the service handle
+	var serviceHandle *handle
+	for _, h := range s.handles {
+		if h.Service.name == serviceName {
+			serviceHandle = h
+			break
+		}
+	}
+
+	if serviceHandle == nil {
+		errorCh <- fmt.Errorf("service %s not found", serviceName)
+		return
+	}
+
+	// Start the service
+	s.Run2(serviceHandle.Service)
+
+	// Wait for service to be ready
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := serviceHandle.Service.serviceImpl.Ready(ctx, serviceHandle.Service); err != nil {
+		errorCh <- fmt.Errorf("service %s failed to become ready: %v", serviceName, err)
+		return
+	}
+
+	// Signal that the service is ready
+	readyCh <- serviceName
 }
 
 func (s *serviceManager) reservePortFor(name string, portName string, initialPort int) int {
@@ -1520,6 +1654,17 @@ type Vertex interface{}
 type Edge struct {
 	Src Vertex
 	Dst Vertex
+}
+
+// Add this method to Dag
+func (d *Dag) GetRoots() []Vertex {
+	roots := []Vertex{}
+	for v := range d.vertex {
+		if _, hasInbound := d.inbound[v]; !hasInbound {
+			roots = append(roots, v)
+		}
+	}
+	return roots
 }
 
 func (d *Dag) init() {

@@ -74,18 +74,20 @@ func New(config *Config) (*MevBoostRelay, error) {
 
 	// wait until the beacon client is ready, otherwise, the api and housekeeper services
 	// will fail at startup
-	syncTimeoutCh := time.After(10 * time.Second)
-	for {
-		if _, err := bClient.BestSyncStatus(); err == nil {
-			break
+	/*
+		syncTimeoutCh := time.After(10 * time.Second)
+		for {
+			if _, err := bClient.BestSyncStatus(); err == nil {
+				break
+			}
+			select {
+			case <-syncTimeoutCh:
+				return nil, fmt.Errorf("beacon client failed to start")
+			default:
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
-		select {
-		case <-syncTimeoutCh:
-			return nil, fmt.Errorf("beacon client failed to start")
-		default:
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
+	*/
 	log.Info("Beacon client synced")
 
 	// get the spec and genesis info to compute the eth network details
