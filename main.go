@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -465,13 +466,13 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			// p2p config. Use a default discovery key and disable public discovery and connections
 			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
 			"--addr", "127.0.0.1",
-			"--port", "30303",
+			"--port", "{{Port \"p2p\" 30303}}",
 			// "--disable-discovery",
 			// http config
 			"--http",
 			"--http.api", "admin,eth,net,web3",
-			"--http.port", "8545",
-			"--authrpc.port", "8551",
+			"--http.port", "{{Port \"http\" 8545}}",
+			"--authrpc.port", "{{Port \"authrpc\" 8551}}",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
@@ -480,9 +481,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		If(useRethForValidation, func(s *service) *service {
 			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
 		}).
-		WithPort("rpc", 30303).
-		WithPort("http", 8545).
-		WithPort("authrpc", 8551).
 		Run()
 
 	lightHouseVersion := func() string {
@@ -528,13 +526,13 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--disable-peer-scoring",
 			"--staking",
 			"--enr-address", "127.0.0.1",
-			"--enr-udp-port", "9000",
-			"--enr-tcp-port", "9000",
-			"--enr-quic-port", "9100",
-			"--port", "9000",
-			"--quic-port", "9100",
+			"--enr-udp-port", "{{Port \"p2p\" 9000}}",
+			"--enr-tcp-port", "{{Port \"p2p\" 9000}}",
+			"--enr-quic-port", "{{Port \"quic\" 9001}}",
+			"--port", "{{Port \"p2p\" 9000}}",
+			"--quic-port", "{{Port \"quic\" 9100}}",
 			"--http",
-			"--http-port", "3500",
+			"--http-port", "{{Port \"http\" 3500}}",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
 			"--target-peers", "0",
@@ -561,7 +559,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 				return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
 			},
 		).
-		WithPort("http", 3500).
 		Run()
 
 	// start validator client
@@ -773,12 +770,16 @@ type serviceManager struct {
 
 	wg sync.WaitGroup
 
+	// map of reserved ports, these ports might be reserved
+	// but not used yet by any service
+	reserved_ports map[int]bool
+
 	// channel for the handles to nofify when they are shutting down
 	closeCh chan struct{}
 }
 
 func newServiceManager(out *output) *serviceManager {
-	return &serviceManager{out: out, handles: []*handle{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5)}
+	return &serviceManager{out: out, handles: []*handle{}, stopping: atomic.Bool{}, reserved_ports: map[int]bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5)}
 }
 
 func (s *serviceManager) emitError() {
@@ -788,8 +789,74 @@ func (s *serviceManager) emitError() {
 	}
 }
 
+func (s *serviceManager) reserveAvailablePort(start_port int) (int, error) {
+	for port := start_port; port < 65535; port++ {
+		if _, ok := s.reserved_ports[port]; ok {
+			continue
+		}
+		addr := fmt.Sprintf("localhost:%d", port)
+		if _, err := net.Dial("tcp", addr); err != nil {
+			s.reserved_ports[port] = true
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("no available ports found")
+}
+
+func (s *serviceManager) resolveArgs(args []string) ([]string, map[string]*port, error) {
+	tmplVars := map[string]interface{}{
+		"Dir": s.out.dst,
+	}
+
+	// list of ports reserved for this service
+	service_reserved_ports := map[string]*port{}
+
+	funcs := template.FuncMap{
+		"Port": func(name string, num int) int {
+			if port, ok := service_reserved_ports[name]; ok {
+				// reuse the same port with the same name for the same service
+				// For example, it might be using the same port for tcp and udp.
+				return port.port
+			}
+			available_port, err := s.reserveAvailablePort(num)
+			if err != nil {
+				panic(err)
+			}
+			service_reserved_ports[name] = &port{name: name, port: available_port}
+			return available_port
+		},
+	}
+
+	new_args := []string{}
+	for _, arg := range args {
+		tpl, err := template.New("").Funcs(funcs).Parse(arg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("BUG: failed to parse template, err: %s", err)
+		}
+
+		var out strings.Builder
+		if err := tpl.Execute(&out, tmplVars); err != nil {
+			return nil, nil, fmt.Errorf("BUG: failed to execute template, err: %s", err)
+		}
+		new_args = append(new_args, out.String())
+	}
+
+	return new_args, service_reserved_ports, nil
+}
+
 func (s *serviceManager) Run(ss *service) {
-	cmd := exec.Command(ss.args[0], ss.args[1:]...)
+	// use template substitution to load constants
+	args, ports, err := s.resolveArgs(ss.args)
+	if err != nil {
+		panic(err)
+	}
+
+	// add the new ports resolved with the template
+	for _, port := range ports {
+		ss.ports = append(ss.ports, port)
+	}
+
+	cmd := exec.Command(args[0], args[1:]...)
 
 	logOutput, err := s.out.LogOutput(ss.name)
 	if err != nil {
@@ -865,12 +932,6 @@ func (s *service) WithPort(name string, portNumber int) *service {
 }
 
 func (s *service) WithArgs(args ...string) *service {
-	// use template substitution to load constants
-	tmplVars := s.tmplVars()
-	for i, arg := range args {
-		args[i] = applyTemplate(arg, tmplVars)
-	}
-
 	s.args = append(s.args, args...)
 	return s
 }
