@@ -18,9 +18,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,7 +26,6 @@ import (
 
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
-	"golang.org/x/mod/semver"
 
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -66,6 +63,7 @@ var genesisDelayFlag uint64
 var latestForkFlag bool
 var useRethForValidation bool
 var secondaryBuilderPort uint64
+var dotFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -199,6 +197,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
 	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
 	rootCmd.Flags().Uint64Var(&secondaryBuilderPort, "secondary", 1234, "port to use for the secondary builder")
+	rootCmd.Flags().BoolVar(&dotFlag, "dot", false, "generate a dot file")
 
 	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	watchCmd.Flags().Uint64Var(&numBlocksValidate, "validate-num-blocks", 5, "")
@@ -377,24 +376,26 @@ func getPrivKey(privStr string) (*ecdsa.PrivateKey, error) {
 }
 
 func setupServices(svcManager *serviceManager, out *output) error {
-	var (
-		rethBin, lighthouseBin string
-	)
+	/*
+		var (
+			rethBin, lighthouseBin string
+		)
 
-	if useBinPathFlag {
-		fmt.Println("Using binaries from the PATH")
+		if useBinPathFlag {
+			fmt.Println("Using binaries from the PATH")
 
-		rethBin = "reth"
-		lighthouseBin = "lighthouse"
-	} else {
-		binArtifacts, err := artifacts.DownloadArtifacts()
-		if err != nil {
-			return err
+			rethBin = "reth"
+			lighthouseBin = "lighthouse"
+		} else {
+			binArtifacts, err := artifacts.DownloadArtifacts()
+			if err != nil {
+				return err
+			}
+
+			rethBin = binArtifacts["reth"]
+			lighthouseBin = binArtifacts["lighthouse"]
 		}
-
-		rethBin = binArtifacts["reth"]
-		lighthouseBin = binArtifacts["lighthouse"]
-	}
+	*/
 
 	// log the prefunded accounts
 	fmt.Printf("\nPrefunded accounts:\n==================\n")
@@ -432,199 +433,234 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		}()
 	}
 
-	rethVersion := func() string {
-		cmd := exec.Command(rethBin, "--version")
-		out, err := cmd.Output()
-		if err != nil {
-			return "unknown"
-		}
-		// find the line of the form:
-		// reth Version: x.y.z
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "reth Version: ") {
-				v := strings.TrimSpace(strings.TrimPrefix(line, "reth Version: "))
-				if !strings.HasPrefix(v, "v") {
-					v = "v" + v
+	/*
+		rethVersion := func() string {
+			cmd := exec.Command(rethBin, "--version")
+			out, err := cmd.Output()
+			if err != nil {
+				return "unknown"
+			}
+			// find the line of the form:
+			// reth Version: x.y.z
+			for _, line := range strings.Split(string(out), "\n") {
+				if strings.HasPrefix(line, "reth Version: ") {
+					v := strings.TrimSpace(strings.TrimPrefix(line, "reth Version: "))
+					if !strings.HasPrefix(v, "v") {
+						v = "v" + v
+					}
+					return semver.Canonical(v)
 				}
-				return semver.Canonical(v)
 			}
-		}
-		return "unknown"
-	}()
-
-	// start the reth el client
-	fmt.Println("Starting reth version " + rethVersion)
-	svcManager.
-		NewService("reth").
-		WithArgs(
-			rethBin,
-			"node",
-			"--chain", "{{.Dir}}/genesis.json",
-			"--datadir", "{{.Dir}}/data_reth",
-			"--color", "never",
-			"--ipcpath", "{{.Dir}}/reth.ipc",
-			// p2p config. Use a default discovery key and disable public discovery and connections
-			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
-			"--addr", "127.0.0.1",
-			"--port", "{{Port \"p2p\" 30303}}",
-			// "--disable-discovery",
-			// http config
-			"--http",
-			"--http.api", "admin,eth,net,web3",
-			"--http.port", "{{Port \"http\" 8545}}",
-			"--authrpc.port", "{{Port \"authrpc\" 8551}}",
-			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
-			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
-			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
-			"-vvvv",
-		).
-		If(useRethForValidation, func(s *service) *service {
-			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
-		}).
-		Run()
-
-	lightHouseVersion := func() string {
-		cmd := exec.Command(lighthouseBin, "--version")
-		out, err := cmd.Output()
-		if err != nil {
 			return "unknown"
-		}
-		// find the line of the form:
-		// Lighthouse v5.2.1-9e12c21
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "Lighthouse ") {
-				v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
-				if !strings.HasPrefix(v, "v") {
-					v = "v" + v
-				}
-				// Go semver considers - as a pre-release, so we need to remove it
-				v = strings.Split(v, "-")[0]
-				return semver.Canonical(v)
-			}
-		}
-		return "unknown"
-	}()
-
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		cmd := exec.Command("file", lighthouseBin)
-		out, _ := cmd.Output()
-		if strings.Contains(string(out), "x86_64") {
-			fmt.Println("WARNING: ", lighthouseBin, "is an x86_64 binary, using a self-compiled verison with `--use-bin-path` is recommended.")
-		}
-	}
-
-	// start the beacon node
-	fmt.Println("Starting lighthouse version " + lightHouseVersion)
-	svcManager.
-		NewService("beacon_node").
-		WithArgs(
-			lighthouseBin,
-			"bn",
-			"--datadir", "{{.Dir}}/data_beacon_node",
-			"--testnet-dir", "{{.Dir}}/testnet",
-			"--enable-private-discovery",
-			"--disable-peer-scoring",
-			"--staking",
-			"--enr-address", "127.0.0.1",
-			"--enr-udp-port", "{{Port \"p2p\" 9000}}",
-			"--enr-tcp-port", "{{Port \"p2p\" 9000}}",
-			"--enr-quic-port", "{{Port \"quic\" 9001}}",
-			"--port", "{{Port \"p2p\" 9000}}",
-			"--quic-port", "{{Port \"quic\" 9100}}",
-			"--http",
-			"--http-port", "{{Port \"http\" 3500}}",
-			"--http-allow-origin", "*",
-			"--disable-packet-filter",
-			"--target-peers", "0",
-			"--execution-endpoint", "http://localhost:5656",
-			"--execution-jwt", "{{.Dir}}/jwtsecret",
-			"--builder", "http://localhost:5555",
-			"--builder-fallback-epochs-since-finalization", "0",
-			"--builder-fallback-disable-checks",
-			"--always-prepare-payload",
-			"--prepare-payload-lookahead", "8000",
-		).
-		If(
-			semver.Compare(lightHouseVersion, "v5.3") < 0,
-			func(s *service) *service {
-				// For versions <= v5.2.1, we want to run with --http-allow-sync-stalled
-				// However this flag is not available in newer versions
-				return s.WithArgs("--http-allow-sync-stalled")
-			},
-		).
-		If(
-			semver.Compare(lightHouseVersion, "v5.3") >= 0,
-			func(s *service) *service {
-				// For versions >= v5.3.0, ----suggested-fee-recipient is apparently now required for non-validator nodes as well
-				return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
-			},
-		).
-		Run()
-
-	// start validator client
-	svcManager.
-		NewService("validator").
-		WithArgs(
-			lighthouseBin,
-			"vc",
-			"--datadir", "{{.Dir}}/data_validator",
-			"--testnet-dir", "{{.Dir}}/testnet",
-			"--init-slashing-protection",
-			"--beacon-nodes", "http://localhost:3500",
-			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
-			"--builder-proposals",
-			"--prefer-builder-proposals",
-		).Run()
-
-	{
-		cfg := mevboostrelay.DefaultConfig()
-		var err error
-		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
-			return err
-		}
-		cfg.UseRethForValidation = useRethForValidation
-		relay, err := mevboostrelay.New(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to create relay: %w", err)
-		}
-
-		go func() {
-			if err := relay.Start(); err != nil {
-				svcManager.emitError()
-			}
 		}()
+	*/
+
+	services := []Service{
+		&LighthouseBeaconNode{},
+		&LighthouseValidator{},
+		&RethNode{},
+		&MevBoostRelay{},
 	}
 
-	services := []*service{}
-	for _, ss := range svcManager.handles {
-		services = append(services, ss.Service)
-	}
-	services = append(services, &service{
-		name: "mev-boost-relay",
-		ports: []*port{
-			{name: "http", port: 5555},
-		},
-	}, &service{
-		name: "cl-proxy",
-		ports: []*port{
-			{name: "jsonrpc", port: 5656},
-		},
-	})
+	/*
+		// start the reth el client
+		fmt.Println("Starting reth version " + rethVersion)
+		svcManager.
+			NewService("reth").
+			WithArgs(
+				rethBin,
+				"node",
+				"--chain", "{{.Dir}}/genesis.json",
+				"--datadir", "{{.Dir}}/data_reth",
+				"--color", "never",
+				"--ipcpath", "{{.Dir}}/reth.ipc",
+				// p2p config. Use a default discovery key and disable public discovery and connections
+				"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
+				"--addr", "127.0.0.1",
+				"--port", "{{Port \"p2p\" 30303}}",
+				// "--disable-discovery",
+				// http config
+				"--http",
+				"--http.api", "admin,eth,net,web3",
+				"--http.port", "{{Port \"http\" 8545}}",
+				"--authrpc.port", "{{Port \"authrpc\" 8551}}",
+				"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+				// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
+				"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
+				"-vvvv",
+			).
+			If(useRethForValidation, func(s *service) *service {
+				return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
+			}).
+			Run()
 
-	// print services info
-	fmt.Printf("Services started:\n==================\n")
-	for _, ss := range services {
-		sort.Slice(ss.ports, func(i, j int) bool {
-			return ss.ports[i].name < ss.ports[j].name
-		})
+		lightHouseVersion := func() string {
+			cmd := exec.Command(lighthouseBin, "--version")
+			out, err := cmd.Output()
+			if err != nil {
+				return "unknown"
+			}
+			// find the line of the form:
+			// Lighthouse v5.2.1-9e12c21
+			for _, line := range strings.Split(string(out), "\n") {
+				if strings.HasPrefix(line, "Lighthouse ") {
+					v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
+					if !strings.HasPrefix(v, "v") {
+						v = "v" + v
+					}
+					// Go semver considers - as a pre-release, so we need to remove it
+					v = strings.Split(v, "-")[0]
+					return semver.Canonical(v)
+				}
+			}
+			return "unknown"
+		}()
 
-		ports := []string{}
-		for _, p := range ss.ports {
-			ports = append(ports, fmt.Sprintf("%s: %d", p.name, p.port))
+		if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+			cmd := exec.Command("file", lighthouseBin)
+			out, _ := cmd.Output()
+			if strings.Contains(string(out), "x86_64") {
+				fmt.Println("WARNING: ", lighthouseBin, "is an x86_64 binary, using a self-compiled verison with `--use-bin-path` is recommended.")
+			}
 		}
-		fmt.Printf("- %s (%s)\n", ss.name, strings.Join(ports, ", "))
+
+		// start the beacon node
+		fmt.Println("Starting lighthouse version " + lightHouseVersion)
+		svcManager.
+			NewService("beacon_node").
+			WithArgs(
+				lighthouseBin,
+				"bn",
+				"--datadir", "{{.Dir}}/data_beacon_node",
+				"--testnet-dir", "{{.Dir}}/testnet",
+				"--enable-private-discovery",
+				"--disable-peer-scoring",
+				"--staking",
+				"--enr-address", "127.0.0.1",
+				"--enr-udp-port", "{{Port \"p2p\" 9000}}",
+				"--enr-tcp-port", "{{Port \"p2p\" 9000}}",
+				"--enr-quic-port", "{{Port \"quic\" 9001}}",
+				"--port", "{{Port \"p2p\" 9000}}",
+				"--quic-port", "{{Port \"quic\" 9100}}",
+				"--http",
+				"--http-port", "{{Port \"http\" 3500}}",
+				"--http-allow-origin", "*",
+				"--disable-packet-filter",
+				"--target-peers", "0",
+				"--execution-endpoint", "http://{{Connect \"reth\" \"authrpc\"}}",
+				"--execution-jwt", "{{.Dir}}/jwtsecret",
+				"--builder", "http://{{Connect \"mev-boost-relay\" \"http\"}}",
+				"--builder-fallback-epochs-since-finalization", "0",
+				"--builder-fallback-disable-checks",
+				"--always-prepare-payload",
+				"--prepare-payload-lookahead", "8000",
+			).
+			If(
+				semver.Compare(lightHouseVersion, "v5.3") < 0,
+				func(s *service) *service {
+					// For versions <= v5.2.1, we want to run with --http-allow-sync-stalled
+					// However this flag is not available in newer versions
+					return s.WithArgs("--http-allow-sync-stalled")
+				},
+			).
+			If(
+				semver.Compare(lightHouseVersion, "v5.3") >= 0,
+				func(s *service) *service {
+					// For versions >= v5.3.0, ----suggested-fee-recipient is apparently now required for non-validator nodes as well
+					return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
+				},
+			).
+			Run()
+
+		// start validator client
+		svcManager.
+			NewService("validator").
+			WithArgs(
+				lighthouseBin,
+				"vc",
+				"--datadir", "{{.Dir}}/data_validator",
+				"--testnet-dir", "{{.Dir}}/testnet",
+				"--init-slashing-protection",
+				"--beacon-nodes", "http://{{Connect \"beacon_node\" \"http\"}}",
+				"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
+				"--builder-proposals",
+				"--prefer-builder-proposals",
+			).Run()
+	*/
+
+	/*
+		{
+			cfg := mevboostrelay.DefaultConfig()
+			var err error
+			if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
+				return err
+			}
+			cfg.UseRethForValidation = useRethForValidation
+			relay, err := mevboostrelay.New(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to create relay: %w", err)
+			}
+
+			go func() {
+				if err := relay.Start(); err != nil {
+					svcManager.emitError()
+				}
+			}()
+		}
+	*/
+
+	/*
+		services := []*service{}
+		for _, ss := range svcManager.handles {
+			services = append(services, ss.Service)
+		}
+		services = append(services, &service{
+			name: "mev-boost-relay",
+			ports: []*port{
+				{name: "http", port: 5555},
+			},
+		}, &service{
+			name: "cl-proxy",
+			ports: []*port{
+				{name: "jsonrpc", port: 5656},
+			},
+		})
+	*/
+
+	/*
+		// add them for now to be able to resolve dependencies
+		for _, x := range services {
+			svcManager.handles = append(svcManager.handles, &handle{
+				Service: x,
+			})
+		}
+	*/
+
+	svcManager.Setup(services)
+
+	if dotFlag {
+		svcManager.PrintDot()
+		return nil
+	} else {
+		svcManager.Start()
 	}
-	fmt.Printf("\n")
+
+	/*
+		// print services info
+		fmt.Printf("Services started:\n==================\n")
+		for _, ss := range services {
+			sort.Slice(ss.ports, func(i, j int) bool {
+				return ss.ports[i].name < ss.ports[j].name
+			})
+
+			ports := []string{}
+			for _, p := range ss.ports {
+				ports = append(ports, fmt.Sprintf("%s: %d", p.name, p.port))
+			}
+			fmt.Printf("- %s (%s)\n", ss.name, strings.Join(ports, ", "))
+		}
+		fmt.Printf("\n")
+	*/
 
 	fmt.Printf("All services started, press Ctrl+C to stop\n")
 	return nil
@@ -776,6 +812,8 @@ type serviceManager struct {
 
 	// channel for the handles to nofify when they are shutting down
 	closeCh chan struct{}
+
+	dag *Dag
 }
 
 func newServiceManager(out *output) *serviceManager {
@@ -794,6 +832,9 @@ func (s *serviceManager) reserveAvailablePort(start_port int) (int, error) {
 		if _, ok := s.reserved_ports[port]; ok {
 			continue
 		}
+		fmt.Println("Checking port --> ", port)
+		fmt.Println(net.Dial("tcp", fmt.Sprintf("localhost:%d", port)))
+
 		addr := fmt.Sprintf("localhost:%d", port)
 		if _, err := net.Dial("tcp", addr); err != nil {
 			s.reserved_ports[port] = true
@@ -803,32 +844,355 @@ func (s *serviceManager) reserveAvailablePort(start_port int) (int, error) {
 	return 0, fmt.Errorf("no available ports found")
 }
 
-func (s *serviceManager) resolveArgs(args []string) ([]string, map[string]*port, error) {
-	tmplVars := map[string]interface{}{
-		"Dir": s.out.dst,
-	}
+type NativeService interface {
+	Run(out *output) error
+}
 
-	// list of ports reserved for this service
-	service_reserved_ports := map[string]*port{}
+type Service interface {
+	Generate(svcManager *serviceManager) *service
+}
+
+type MevBoostRelay struct {
+	Port int
+}
+
+func (m *MevBoostRelay) Generate(svcManager *serviceManager) *service {
+	service := svcManager.
+		NewService("mev-boost-relay")
+
+	m.Port = svcManager.reservePortFor("mev-boost-relay", "http", 5555)
+	service.WithPort("http", m.Port)
+
+	return service
+}
+
+func (m *MevBoostRelay) Run(out *output) error {
+	fmt.Println("Running mev-boost-relay on port --> ", m.Port)
+
+	cfg := mevboostrelay.DefaultConfig()
+	cfg.ApiListenPort = uint64(m.Port)
+	var err error
+	if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
+		return err
+	}
+	cfg.UseRethForValidation = useRethForValidation
+	relay, err := mevboostrelay.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create relay: %w", err)
+	}
+	if err := relay.Start(); err != nil {
+		return err
+	}
+	return nil
+}
+
+type RethNode struct {
+}
+
+func (r *RethNode) Generate(svcManager *serviceManager) *service {
+	return svcManager.
+		NewService("reth").
+		WithArgs(
+			"/Users/ferranbt/.playground/reth-v1.2.0",
+			"node",
+			"--chain", "{{.Dir}}/genesis.json",
+			"--datadir", "{{.Dir}}/data_reth",
+			"--color", "never",
+			"--ipcpath", "{{.Dir}}/reth.ipc",
+			// p2p config. Use a default discovery key and disable public discovery and connections
+			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
+			"--addr", "127.0.0.1",
+			"--port", "{{Port \"p2p\" 30303}}",
+			// "--disable-discovery",
+			// http config
+			"--http",
+			"--http.api", "admin,eth,net,web3",
+			"--http.port", "{{Port \"http\" 8545}}",
+			"--authrpc.port", "{{Port \"authrpc\" 8551}}",
+			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"--disable-discovery",
+			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
+			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
+			"-vvvv",
+		).
+		If(useRethForValidation, func(s *service) *service {
+			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
+		})
+}
+
+type LighthouseBeaconNode struct {
+}
+
+func (l *LighthouseBeaconNode) Generate(svcManager *serviceManager) *service {
+	return svcManager.
+		NewService("beacon_node").
+		WithArgs(
+			"/Users/ferranbt/.playground/lighthouse-v5.3.0",
+			"bn",
+			"--datadir", "{{.Dir}}/data_beacon_node",
+			"--testnet-dir", "{{.Dir}}/testnet",
+			"--enable-private-discovery",
+			"--disable-peer-scoring",
+			"--staking",
+			"--enr-address", "127.0.0.1",
+			"--enr-udp-port", "{{Port \"p2p\" 9000}}",
+			"--enr-tcp-port", "{{Port \"p2p\" 9000}}",
+			"--enr-quic-port", "{{Port \"quic\" 9001}}",
+			"--port", "{{Port \"p2p\" 9000}}",
+			"--quic-port", "{{Port \"quic\" 9100}}",
+			"--http",
+			"--http-port", "{{Port \"http\" 3500}}",
+			"--http-allow-origin", "*",
+			"--disable-packet-filter",
+			"--target-peers", "0",
+			"--execution-endpoint", "http://{{Connect \"reth\" \"authrpc\"}}",
+			"--execution-jwt", "{{.Dir}}/jwtsecret",
+			"--builder", "http://{{Connect \"mev-boost-relay\" \"http\"}}",
+			"--builder-fallback-epochs-since-finalization", "0",
+			"--builder-fallback-disable-checks",
+			"--always-prepare-payload",
+			"--prepare-payload-lookahead", "8000",
+			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
+		)
+}
+
+type LighthouseValidator struct {
+}
+
+func (l *LighthouseValidator) Generate(svcManager *serviceManager) *service {
+	return svcManager.
+		NewService("validator").
+		WithArgs(
+			"/Users/ferranbt/.playground/lighthouse-v5.3.0",
+			"vc",
+			"--datadir", "{{.Dir}}/data_validator",
+			"--testnet-dir", "{{.Dir}}/testnet",
+			"--init-slashing-protection",
+			"--beacon-nodes", "http://{{Connect \"beacon_node\" \"http\"}}",
+			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
+			"--builder-proposals",
+			"--prefer-builder-proposals",
+		)
+}
+
+type serviceSpec struct {
+	Connections []*Connection
+	Ports       map[string]int
+}
+
+func findConnectStatement(args []string) (*serviceSpec, error) {
+	spec := &serviceSpec{
+		Connections: []*Connection{},
+		Ports:       map[string]int{},
+	}
 
 	funcs := template.FuncMap{
 		"Port": func(name string, num int) int {
-			if port, ok := service_reserved_ports[name]; ok {
-				// reuse the same port with the same name for the same service
-				// For example, it might be using the same port for tcp and udp.
-				return port.port
-			}
-			available_port, err := s.reserveAvailablePort(num)
-			if err != nil {
-				panic(err)
-			}
-			service_reserved_ports[name] = &port{name: name, port: available_port}
-			return available_port
+			// We can write down the port in spec so taht it can be resolved but we do not have
+			// to write yet the block number
+			spec.Ports[name] = 0
+			return 0
+		},
+		"Connect": func(name string, port string) string {
+			spec.Connections = append(spec.Connections, &Connection{
+				Target: name,
+				Port:   port,
+			})
+			return ""
 		},
 	}
 
 	new_args := []string{}
 	for _, arg := range args {
+		tpl, err := template.New("").Funcs(funcs).Parse(arg)
+		if err != nil {
+			return nil, fmt.Errorf("BUG: failed to parse template, err: %s", err)
+		}
+
+		var out strings.Builder
+		if err := tpl.Execute(&out, nil); err != nil {
+			return nil, fmt.Errorf("BUG: failed to execute template, err: %s", err)
+		}
+		new_args = append(new_args, out.String())
+	}
+
+	return spec, nil
+}
+
+func (s *serviceManager) PrintDot() {
+	// create a dap with the handles that you have and the dependencies
+	dag := &Dag{}
+	for _, h := range s.handles {
+		dag.AddVertex(h.Service.name)
+	}
+	for _, handle := range s.handles {
+		serviceName := handle.Service.name
+		for _, conn := range handle.Service.connections {
+			dag.AddEdge(Edge{
+				Src: conn.Target,
+				Dst: serviceName,
+			})
+		}
+	}
+
+	dag.PrintDot(os.Stdout)
+}
+
+func (s *serviceManager) Setup(services []Service) {
+	// for each of the service, create a handle with the info returned with Generate
+	for _, svcType := range services {
+		svc := svcType.Generate(s) // TODO: it should return the spec not register it itself
+		s.Run(svc, svcType)
+	}
+
+	s.ValidateGraph()
+
+	// create a dap with the handles that you have and the dependencies
+	dag := &Dag{}
+	for _, h := range s.handles {
+		dag.AddVertex(h.Service.name)
+	}
+	for _, handle := range s.handles {
+		serviceName := handle.Service.name
+		for _, conn := range handle.Service.connections {
+			dag.AddEdge(Edge{
+				Src: conn.Target,
+				Dst: serviceName,
+			})
+		}
+	}
+	s.dag = dag
+}
+
+func (s *serviceManager) Start() {
+	// Now, we resolve the tree topologically to run the services in the correct order
+	fmt.Println(s.dag)
+
+	s.dag.TopologicalTraverse(func(v Vertex) {
+		fmt.Println("--> ", v)
+
+		// find the handle for this service
+		for _, h := range s.handles {
+			if h.Service.name == v {
+				s.Run2(h.Service)
+			}
+		}
+	})
+}
+
+func (s *serviceManager) findHandle(name string) (*handle, bool) {
+	for _, h := range s.handles {
+		if h.Service.name == name {
+			return h, true
+		}
+	}
+	return nil, false
+}
+
+func (s *serviceManager) ValidateGraph() {
+	// at this point, the handles alreadt have all the ports that they cover
+	// and the depednencies, we have to ensure now that those dependeices are correct
+
+	// now we do a safe check to ensure that all the services and connectiosn exist
+	indx := 0
+	for _, handle := range s.handles {
+		service := handle.Service
+
+		for _, conn := range service.connections {
+			target, ok := s.findHandle(conn.Target)
+			if !ok {
+				panic(fmt.Sprintf("service %s not found", conn.Target))
+			}
+
+			targetService := target.Service
+			if _, ok := targetService.ports[conn.Port]; !ok {
+				panic(fmt.Sprintf("port %s not found for service %s", conn.Port, conn.Target))
+			}
+		}
+		indx++
+	}
+}
+
+func (s *serviceManager) reservePortFor(name string, portName string, initialPort int) int {
+	available_port, err := s.reserveAvailablePort(initialPort)
+	if err != nil {
+		panic(err)
+	}
+
+	return available_port
+}
+
+type Connection struct {
+	Target string
+	Port   string
+}
+
+func (s *serviceManager) Run(ss *service, impl Service) {
+	if ss.ports == nil {
+		ss.ports = map[string]*port{}
+	}
+	if ss.connections == nil {
+		ss.connections = []*Connection{}
+	}
+	ss.serviceImpl = impl
+
+	// populate the ports and connections nfor the service now
+	spec, err := findConnectStatement(ss.args)
+	if err != nil {
+		panic(err)
+	}
+
+	// aggregate the extra data generate from the Spec
+	ss.connections = append(ss.connections, spec.Connections...)
+
+	for name, portNumber := range spec.Ports {
+		ss.ports[name] = &port{name: name, port: portNumber}
+	}
+
+	s.handles = append(s.handles, &handle{
+		Process: nil,
+		Service: ss,
+	})
+}
+
+func (s *serviceManager) resolveArgs(ss *service) ([]string, map[string]int, error) {
+	tmplVars := map[string]interface{}{
+		"Dir": s.out.dst,
+	}
+
+	reservedPorts := map[string]int{}
+
+	funcs := template.FuncMap{
+		"Port": func(name string, num int) int {
+			if portNum, ok := reservedPorts[name]; ok {
+				return portNum
+			}
+			availablePort, err := s.reserveAvailablePort(num)
+			if err != nil {
+				panic(err)
+			}
+			reservedPorts[name] = availablePort
+			return availablePort
+		},
+		"Connect": func(name string, port string) string {
+			fmt.Println("Connect --> ", name, port)
+			// It assumes that you are calling the services in roder to the port has already
+			// being populated
+			for _, h := range s.handles {
+				if h.Service.name == name {
+					num, ok := h.Service.ports[port]
+					if !ok {
+						panic(fmt.Sprintf("port %s not found for service %s", port, name))
+					}
+					return fmt.Sprintf("localhost:%d", num.port)
+				}
+			}
+			panic(fmt.Sprintf("service %s not found", name))
+		},
+	}
+
+	new_args := []string{}
+	for _, arg := range ss.args {
 		tpl, err := template.New("").Funcs(funcs).Parse(arg)
 		if err != nil {
 			return nil, nil, fmt.Errorf("BUG: failed to parse template, err: %s", err)
@@ -841,19 +1205,34 @@ func (s *serviceManager) resolveArgs(args []string) ([]string, map[string]*port,
 		new_args = append(new_args, out.String())
 	}
 
-	return new_args, service_reserved_ports, nil
+	return new_args, reservedPorts, nil
 }
 
-func (s *serviceManager) Run(ss *service) {
+func (s *serviceManager) Run2(ss *service) {
 	// use template substitution to load constants
-	args, ports, err := s.resolveArgs(ss.args)
+	fmt.Println(ss)
+
+	args, reservedPorts, err := s.resolveArgs(ss)
 	if err != nil {
 		panic(err)
 	}
 
-	// add the new ports resolved with the template
-	for _, port := range ports {
-		ss.ports = append(ss.ports, port)
+	// now that the ports are allocated, update the service
+	for name, portNumber := range reservedPorts {
+		ss.ports[name].port = portNumber
+	}
+
+	fmt.Println("-- new args --")
+	fmt.Println(args)
+
+	if native, ok := ss.serviceImpl.(NativeService); ok {
+		// it is native type, just let it go, it should be call internal type instead
+		go func() {
+			if err := native.Run(s.out); err != nil {
+				panic(err)
+			}
+		}()
+		return
 	}
 
 	cmd := exec.Command(args[0], args[1:]...)
@@ -866,7 +1245,7 @@ func (s *serviceManager) Run(ss *service) {
 	}
 
 	// first thing to output is the command itself
-	fmt.Fprint(logOutput, strings.Join(ss.args, " ")+"\n\n")
+	fmt.Fprint(logOutput, strings.Join(args, " ")+"\n\n")
 
 	cmd.Stdout = logOutput
 	cmd.Stderr = logOutput
@@ -882,6 +1261,7 @@ func (s *serviceManager) Run(ss *service) {
 		s.emitError()
 	}()
 
+	// redo, adding handles twice here
 	s.handles = append(s.handles, &handle{
 		Process: cmd,
 		Service: ss,
@@ -918,8 +1298,14 @@ type service struct {
 	name string
 	args []string
 
-	ports  []*port
+	serviceImpl Service
+
+	ports  map[string]*port
 	srvMng *serviceManager
+
+	// this is the target port when using the generator
+	// we also store this to do another check for service and port
+	connections []*Connection
 }
 
 func (s *serviceManager) NewService(name string) *service {
@@ -927,7 +1313,10 @@ func (s *serviceManager) NewService(name string) *service {
 }
 
 func (s *service) WithPort(name string, portNumber int) *service {
-	s.ports = append(s.ports, &port{name: name, port: portNumber})
+	if s.ports == nil {
+		s.ports = map[string]*port{}
+	}
+	s.ports[name] = &port{name: name, port: portNumber}
 	return s
 }
 
@@ -972,10 +1361,6 @@ func (s *service) If(cond bool, fn func(*service) *service) *service {
 		return fn(s)
 	}
 	return s
-}
-
-func (s *service) Run() {
-	s.srvMng.Run(s)
 }
 
 func applyTemplate(templateStr string, input interface{}) string {
@@ -1109,4 +1494,224 @@ func getProposerPayloadDelivered() ([]*mevRCommon.BidTraceV2JSON, error) {
 		return nil, err
 	}
 	return payloadDeliveredList, nil
+}
+
+// Dag is a directly acyclic graph
+type Dag struct {
+	once   sync.Once
+	vertex set
+
+	inbound  set
+	outbound set
+}
+
+// Hashable is the interface implemented by vertex objects
+// that have a hash representation
+type Hashable interface {
+	Hash() interface{}
+}
+
+// Vertex is a vertex in the graph
+type Vertex interface{}
+
+// Edge is an edge between two vertex of the graph
+type Edge struct {
+	Src Vertex
+	Dst Vertex
+}
+
+func (d *Dag) init() {
+	d.once.Do(func() {
+		d.vertex = set{}
+		d.inbound = set{}
+		d.outbound = set{}
+	})
+}
+
+func (d *Dag) GetInbound(v Vertex) (res []Vertex) {
+	vals, ok := d.inbound[v]
+	if !ok {
+		return
+	}
+	for k := range vals.(set) {
+		res = append(res, k)
+	}
+	return
+}
+
+func (d *Dag) GetOutbound(v Vertex) (res []Vertex) {
+	vals, ok := d.outbound[v]
+	if !ok {
+		return
+	}
+	for k := range vals.(set) {
+		res = append(res, k)
+	}
+	return
+}
+
+// AddVertex adds a new vertex on the DAG
+func (d *Dag) AddVertex(v Vertex) {
+	d.init()
+	d.vertex.add(v)
+}
+
+// AddEdge adds a new edge on the DAG
+func (d *Dag) AddEdge(e Edge) {
+	d.init()
+
+	if s, ok := d.inbound[e.Dst]; ok && s.(set).include(e.Src) {
+		return
+	}
+
+	s, ok := d.inbound[e.Dst]
+	if !ok {
+		s = set{}
+		d.inbound[e.Dst] = s
+	}
+	s.(set).add(e.Src)
+
+	s, ok = d.outbound[e.Src]
+	if !ok {
+		s = set{}
+		d.outbound[e.Src] = s
+	}
+	s.(set).add(e.Dst)
+}
+
+func (d *Dag) FindComponents() [][]Vertex {
+
+	// find components without any inbound
+	leafVertex := []Vertex{}
+	for v := range d.vertex {
+		if _, ok := d.inbound[v]; !ok {
+			leafVertex = append(leafVertex, v)
+		}
+	}
+
+	result := [][]Vertex{}
+
+	// follow each leaf vertex upwards to find the component
+	for _, leaf := range leafVertex {
+		component := []Vertex{}
+
+		queue := []Vertex{leaf}
+		for len(queue) != 0 {
+			var item Vertex
+			item, queue = queue[0], queue[1:]
+
+			component = append(component, item)
+			if outbound, ok := d.outbound[item]; ok {
+				for v := range outbound.(set) {
+					queue = append(queue, v)
+				}
+			}
+		}
+		result = append(result, component)
+	}
+	return result
+}
+
+type set map[interface{}]interface{}
+
+func (s set) add(v Vertex) {
+	k := v
+	if h, ok := v.(Hashable); ok {
+		k = h.Hash()
+	}
+	if _, ok := s[k]; !ok {
+		s[k] = struct{}{}
+	}
+}
+
+func (s set) include(v Vertex) bool {
+	_, ok := s[v]
+	return ok
+}
+
+// PrintDot generates a DOT file representation of the DAG
+func (d *Dag) PrintDot(w io.Writer) error {
+	// Write DOT file header
+	if _, err := fmt.Fprintln(w, "digraph DAG {"); err != nil {
+		return err
+	}
+
+	// Write all vertices
+	for v := range d.vertex {
+		// Convert vertex to string for label
+		label := fmt.Sprintf("%v", v)
+		// Escape quotes in label if present
+		label = strings.ReplaceAll(label, `"`, `\"`)
+		if _, err := fmt.Fprintf(w, "    \"%v\" [label=\"%s\"];\n", v, label); err != nil {
+			return err
+		}
+	}
+
+	// Write all edges
+	for dst, srcSet := range d.inbound {
+		for src := range srcSet.(set) {
+			if _, err := fmt.Fprintf(w, "    \"%v\" -> \"%v\";\n", src, dst); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Write DOT file footer
+	if _, err := fmt.Fprintln(w, "}"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// TopologicalTraverse traverses the DAG in topological order, ensuring all parents
+// are visited before visiting a vertex. The provided callback function is called
+// for each vertex in the correct order.
+func (d *Dag) TopologicalTraverse(callback func(v Vertex)) {
+	// Track visited vertices
+	visited := make(map[Vertex]bool)
+
+	// Track number of unvisited parents for each vertex
+	unvisitedParents := make(map[Vertex]int)
+
+	// Initialize unvisitedParents count
+	for v := range d.vertex {
+		if inbound, ok := d.inbound[v]; ok {
+			unvisitedParents[v] = len(inbound.(set))
+		} else {
+			unvisitedParents[v] = 0
+		}
+	}
+
+	// Start with vertices that have no parents (roots)
+	queue := []Vertex{}
+	for v := range d.vertex {
+		if unvisitedParents[v] == 0 && !visited[v] {
+			queue = append(queue, v)
+		}
+	}
+
+	// Process vertices in order
+	for len(queue) > 0 {
+		v := queue[0]
+		queue = queue[1:]
+
+		if visited[v] {
+			continue
+		}
+
+		// Visit the vertex
+		visited[v] = true
+		callback(v)
+
+		// Update unvisited parent count for all children and add ready children to queue
+		if outbound, ok := d.outbound[v]; ok {
+			for child := range outbound.(set) {
+				unvisitedParents[child]--
+				if unvisitedParents[child] == 0 && !visited[child] {
+					queue = append(queue, child)
+				}
+			}
+		}
+	}
 }
