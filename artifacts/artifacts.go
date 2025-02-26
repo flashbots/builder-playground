@@ -10,13 +10,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type release struct {
-	Name    string
-	Org     string
-	Version string
-	Arch    func(string, string) string
+	Name     string
+	Org      string
+	DownName string
+	Version  string
+	Arch     func(string, string) string
 }
 
 func DownloadArtifacts() (map[string]string, error) {
@@ -27,11 +29,11 @@ func DownloadArtifacts() (map[string]string, error) {
 			Version: "v1.2.0",
 			Arch: func(goos, goarch string) string {
 				if goos == "linux" {
-					return "x86_64-unknown-linux-gnu"
+					return "x86_64-unknown-linux-gnu.tar.gz"
 				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-					return "aarch64-apple-darwin"
+					return "aarch64-apple-darwin.tar.gz"
 				} else if goos == "darwin" && goarch == "amd64" {
-					return "x86_64-apple-darwin"
+					return "x86_64-apple-darwin.tar.gz"
 				}
 				return ""
 			},
@@ -42,11 +44,27 @@ func DownloadArtifacts() (map[string]string, error) {
 			Version: "v7.0.0-beta.0",
 			Arch: func(goos, goarch string) string {
 				if goos == "linux" {
-					return "x86_64-unknown-linux-gnu"
+					return "x86_64-unknown-linux-gnu.tar.gz"
 				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-					return "x86_64-apple-darwin"
+					return "aarch64-apple-darwin.tar.gz"
 				} else if goos == "darwin" && goarch == "amd64" {
-					return "x86_64-apple-darwin"
+					return "x86_64-apple-darwin.tar.gz"
+				}
+				return ""
+			},
+		},
+		{
+			Name:     "prysm",
+			Org:      "prysmaticlabs",
+			DownName: "beacon-chain",
+			Version:  "v5.3.0",
+			Arch: func(goos, goarch string) string {
+				if goos == "linux" {
+					panic("TODO: add linux support")
+				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+					return "darwin-arm64"
+				} else if goos == "darwin" && goarch == "amd64" {
+					return "darwin-amd64"
 				}
 				return ""
 			},
@@ -96,7 +114,11 @@ func DownloadArtifacts() (map[string]string, error) {
 				}
 			} else {
 				// Case 3. Download the binary from the release page
-				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, archVersion)
+				downName := artifact.DownName
+				if downName == "" {
+					downName = artifact.Name
+				}
+				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s", artifact.Org, artifact.Name, artifact.Version, downName, artifact.Version, archVersion)
 				fmt.Printf("Downloading %s: %s\n", outPath, releasesURL)
 
 				if err := downloadArtifact(releasesURL, artifact.Name, outPath); err != nil {
@@ -122,8 +144,33 @@ func downloadArtifact(url string, expectedFile string, outPath string) error {
 	}
 	defer resp.Body.Close()
 
+	// Check if the URL ends with .tar.gz
+	if strings.HasSuffix(url, ".tar.gz") {
+		return handleTarGz(resp.Body, expectedFile, outPath)
+	}
+
+	// Handle as a regular file
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		return fmt.Errorf("error creating output file: %v", err)
+	}
+	defer outFile.Close()
+
+	if _, err := io.Copy(outFile, resp.Body); err != nil {
+		return fmt.Errorf("error writing output file: %v", err)
+	}
+
+	// Change permissions
+	if err := os.Chmod(outPath, 0755); err != nil {
+		return fmt.Errorf("error changing permissions: %v", err)
+	}
+
+	return nil
+}
+
+func handleTarGz(reader io.Reader, expectedFile string, outPath string) error {
 	// Create a gzip reader
-	gzipReader, err := gzip.NewReader(resp.Body)
+	gzipReader, err := gzip.NewReader(reader)
 	if err != nil {
 		return fmt.Errorf("error creating gzip reader: %v", err)
 	}
@@ -157,7 +204,7 @@ func downloadArtifact(url string, expectedFile string, outPath string) error {
 				return fmt.Errorf("error writing output file: %v", err)
 			}
 
-			// change permissions
+			// Change permissions
 			if err := os.Chmod(outPath, 0755); err != nil {
 				return fmt.Errorf("error changing permissions: %v", err)
 			}
