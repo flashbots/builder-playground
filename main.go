@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/ecdsa"
 	_ "embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -312,6 +315,49 @@ func setupArtifacts() error {
 		gen.Alloc[addr] = types.Account{
 			Balance: prefundedBalance,
 			Nonce:   1,
+		}
+	}
+
+	// Apply Optimism pre-state
+	{
+		data, err := os.ReadFile("./utils/state.json")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var state struct {
+			L1StateDump string `json:"l1StateDump"`
+		}
+		if err := json.Unmarshal(data, &state); err != nil {
+			log.Fatal(err)
+		}
+
+		decoded, err := base64.StdEncoding.DecodeString(state.L1StateDump)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Create gzip reader from the base64 decoded data
+		gr, err := gzip.NewReader(bytes.NewReader(decoded))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer gr.Close()
+
+		// Read and decode the contents
+		contents, err := io.ReadAll(gr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var alloc types.GenesisAlloc
+		if err := json.Unmarshal(contents, &alloc); err != nil {
+			log.Fatal(err)
+		}
+
+		for addr, account := range alloc {
+			fmt.Printf("Address: %s, Balance: %s\n", addr.Hex(), account.Balance.String())
+			gen.Alloc[addr] = account
 		}
 	}
 
