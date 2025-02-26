@@ -536,6 +536,8 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		"--minimum-peers-per-subnet", "0",
 		"--enable-debug-rpc-endpoints",
 		"--force-clear-db",
+		"--http-mev-relay", "http://localhost:5555",
+		"--prepare-all-payloads",
 	).
 		WithPort("http", 3500).
 		Run()
