@@ -858,7 +858,9 @@ type MevBoostRelay struct {
 
 func (m *MevBoostRelay) Generate(svcManager *serviceManager) *service {
 	service := svcManager.
-		NewService("mev-boost-relay")
+		NewService("mev-boost-relay").
+		WithDependency("beacon_node").
+		WithConnection("beacon_node", "http")
 
 	m.Port = svcManager.reservePortFor("mev-boost-relay", "http", 5555)
 	service.WithPort("http", m.Port)
@@ -881,6 +883,7 @@ func (m *MevBoostRelay) Run(out *output) error {
 		return fmt.Errorf("failed to create relay: %w", err)
 	}
 	if err := relay.Start(); err != nil {
+		panic(err)
 		return err
 	}
 	return nil
@@ -926,6 +929,7 @@ type LighthouseBeaconNode struct {
 func (l *LighthouseBeaconNode) Generate(svcManager *serviceManager) *service {
 	return svcManager.
 		NewService("beacon_node").
+		WithDependency("reth").
 		WithArgs(
 			"/Users/ferranbt/.playground/lighthouse-v5.3.0",
 			"bn",
@@ -962,6 +966,7 @@ type LighthouseValidator struct {
 func (l *LighthouseValidator) Generate(svcManager *serviceManager) *service {
 	return svcManager.
 		NewService("validator").
+		WithDependency("beacon_node").
 		WithArgs(
 			"/Users/ferranbt/.playground/lighthouse-v5.3.0",
 			"vc",
@@ -1021,21 +1026,7 @@ func findConnectStatement(args []string) (*serviceSpec, error) {
 
 func (s *serviceManager) PrintDot() {
 	// create a dap with the handles that you have and the dependencies
-	dag := &Dag{}
-	for _, h := range s.handles {
-		dag.AddVertex(h.Service.name)
-	}
-	for _, handle := range s.handles {
-		serviceName := handle.Service.name
-		for _, conn := range handle.Service.connections {
-			dag.AddEdge(Edge{
-				Src: conn.Target,
-				Dst: serviceName,
-			})
-		}
-	}
-
-	dag.PrintDot(os.Stdout)
+	s.dag.PrintDot(os.Stdout)
 }
 
 func (s *serviceManager) Setup(services []Service) {
@@ -1054,9 +1045,9 @@ func (s *serviceManager) Setup(services []Service) {
 	}
 	for _, handle := range s.handles {
 		serviceName := handle.Service.name
-		for _, conn := range handle.Service.connections {
+		for _, target := range handle.Service.dependencies {
 			dag.AddEdge(Edge{
-				Src: conn.Target,
+				Src: target,
 				Dst: serviceName,
 			})
 		}
@@ -1229,7 +1220,7 @@ func (s *serviceManager) Run2(ss *service) {
 		// it is native type, just let it go, it should be call internal type instead
 		go func() {
 			if err := native.Run(s.out); err != nil {
-				panic(err)
+				fmt.Printf("Error running %s: %v\n", ss.name, err)
 			}
 		}()
 		return
@@ -1261,7 +1252,6 @@ func (s *serviceManager) Run2(ss *service) {
 		s.emitError()
 	}()
 
-	// redo, adding handles twice here
 	s.handles = append(s.handles, &handle{
 		Process: cmd,
 		Service: ss,
@@ -1306,10 +1296,17 @@ type service struct {
 	// this is the target port when using the generator
 	// we also store this to do another check for service and port
 	connections []*Connection
+
+	dependencies []string
 }
 
 func (s *serviceManager) NewService(name string) *service {
 	return &service{name: name, args: []string{}, srvMng: s}
+}
+
+func (s *service) WithDependency(name string) *service {
+	s.dependencies = append(s.dependencies, name)
+	return s
 }
 
 func (s *service) WithPort(name string, portNumber int) *service {
@@ -1317,6 +1314,11 @@ func (s *service) WithPort(name string, portNumber int) *service {
 		s.ports = map[string]*port{}
 	}
 	s.ports[name] = &port{name: name, port: portNumber}
+	return s
+}
+
+func (s *service) WithConnection(target string, port string) *service {
+	s.connections = append(s.connections, &Connection{Target: target, Port: port})
 	return s
 }
 
