@@ -440,13 +440,13 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			// p2p config. Use a default discovery key and disable public discovery and connections
 			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
 			"--addr", "127.0.0.1",
-			"--port", "30303",
+			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
 			"--http",
 			"--http.api", "admin,eth,net,web3",
-			"--http.port", "8545",
-			"--authrpc.port", "8551",
+			"--http.port", `{{Port "http" 8545}}`,
+			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
@@ -455,9 +455,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		If(useRethForValidation, func(s *service) *service {
 			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
 		}).
-		WithPort("rpc", 30303).
-		WithPort("http", 8545).
-		WithPort("authrpc", 8551).
 		Build()
 
 	lightHouseVersion := func() string {
@@ -503,13 +500,13 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--disable-peer-scoring",
 			"--staking",
 			"--enr-address", "127.0.0.1",
-			"--enr-udp-port", "9000",
-			"--enr-tcp-port", "9000",
-			"--enr-quic-port", "9100",
-			"--port", "9000",
-			"--quic-port", "9100",
+			"--enr-udp-port", `{{Port "p2p" 9000}}`,
+			"--enr-tcp-port", `{{Port "p2p" 9000}}`,
+			"--enr-quic-port", `{{Port "quic" 9100}}`,
+			"--port", `{{Port "p2p" 9000}}`,
+			"--quic-port", `{{Port "quic" 9100}}`,
 			"--http",
-			"--http-port", "3500",
+			"--http-port", `{{Port "http" 3500}}`,
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
 			"--target-peers", "0",
@@ -536,7 +533,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 				return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
 			},
 		).
-		WithPort("http", 3500).
 		Build()
 
 	// start validator client
@@ -894,6 +890,12 @@ func (s *serviceManager) NewService(name string) *service {
 }
 
 func (s *service) WithPort(name string, portNumber int) *service {
+	// add the port if not already present
+	for _, p := range s.ports {
+		if p.name == name {
+			return s
+		}
+	}
 	s.ports = append(s.ports, &port{name: name, port: portNumber})
 	return s
 }
@@ -902,7 +904,10 @@ func (s *service) WithArgs(args ...string) *service {
 	// use template substitution to load constants
 	tmplVars := s.tmplVars()
 	for i, arg := range args {
-		args[i] = applyTemplate(arg, tmplVars)
+		var port *port
+		if args[i], port = applyTemplate(arg, tmplVars); port != nil {
+			s.WithPort(port.name, port.port)
+		}
 	}
 
 	s.args = append(s.args, args...)
@@ -929,7 +934,10 @@ func (s *service) WithReplacementArgs(args ...string) *service {
 	// use template substitution to load constants
 	tmplVars := s.tmplVars()
 	for i, arg := range args {
-		args[i] = applyTemplate(arg, tmplVars)
+		var port *port
+		if args[i], port = applyTemplate(arg, tmplVars); port != nil {
+			s.WithPort(port.name, port.port)
+		}
 	}
 
 	if i := slices.Index(s.args, args[0]); i != -1 {
@@ -951,8 +959,16 @@ func (s *service) Build() {
 	s.srvMng.Build(s)
 }
 
-func applyTemplate(templateStr string, input interface{}) string {
-	tpl, err := template.New("").Parse(templateStr)
+func applyTemplate(templateStr string, input interface{}) (string, *port) {
+	var found_port *port
+	funcs := template.FuncMap{
+		"Port": func(name string, num int) int {
+			found_port = &port{name: name, port: num}
+			return num
+		},
+	}
+
+	tpl, err := template.New("").Funcs(funcs).Parse(templateStr)
 	if err != nil {
 		panic(fmt.Sprintf("BUG: failed to parse template, err: %s", err))
 	}
@@ -961,7 +977,7 @@ func applyTemplate(templateStr string, input interface{}) string {
 	if err := tpl.Execute(&out, input); err != nil {
 		panic(fmt.Sprintf("BUG: failed to execute template, err: %s", err))
 	}
-	return out.String()
+	return out.String(), found_port
 }
 
 func convert(config *params.BeaconChainConfig) ([]byte, error) {
