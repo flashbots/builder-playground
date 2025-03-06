@@ -376,26 +376,24 @@ func getPrivKey(privStr string) (*ecdsa.PrivateKey, error) {
 }
 
 func setupServices(svcManager *serviceManager, out *output) error {
-	/*
-		var (
-			rethBin, lighthouseBin string
-		)
+	var (
+		rethBin, lighthouseBin string
+	)
 
-		if useBinPathFlag {
-			fmt.Println("Using binaries from the PATH")
+	if useBinPathFlag {
+		fmt.Println("Using binaries from the PATH")
 
-			rethBin = "reth"
-			lighthouseBin = "lighthouse"
-		} else {
-			binArtifacts, err := artifacts.DownloadArtifacts()
-			if err != nil {
-				return err
-			}
-
-			rethBin = binArtifacts["reth"]
-			lighthouseBin = binArtifacts["lighthouse"]
+		rethBin = "reth"
+		lighthouseBin = "lighthouse"
+	} else {
+		binArtifacts, err := artifacts.DownloadArtifacts()
+		if err != nil {
+			return err
 		}
-	*/
+
+		rethBin = binArtifacts["reth"]
+		lighthouseBin = binArtifacts["lighthouse"]
+	}
 
 	// log the prefunded accounts
 	fmt.Printf("\nPrefunded accounts:\n==================\n")
@@ -408,30 +406,32 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		return err
 	}
 
-	// Start the cl proxy
-	{
-		cfg := clproxy.DefaultConfig()
-		cfg.Primary = "http://localhost:8551"
+	/*
+		// Start the cl proxy
+		{
+			cfg := clproxy.DefaultConfig()
+			cfg.Primary = "http://localhost:8551"
 
-		if secondaryBuilderPort != 0 {
-			cfg.Secondary = fmt.Sprintf("http://localhost:%d", secondaryBuilderPort)
-		}
-
-		var err error
-		if cfg.LogOutput, err = out.LogOutput("cl-proxy"); err != nil {
-			return err
-		}
-		clproxy, err := clproxy.New(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to create cl proxy: %w", err)
-		}
-
-		go func() {
-			if err := clproxy.Run(); err != nil {
-				svcManager.emitError()
+			if secondaryBuilderPort != 0 {
+				cfg.Secondary = fmt.Sprintf("http://localhost:%d", secondaryBuilderPort)
 			}
-		}()
-	}
+
+			var err error
+			if cfg.LogOutput, err = out.LogOutput("cl-proxy"); err != nil {
+				return err
+			}
+			clproxy, err := clproxy.New(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to create cl proxy: %w", err)
+			}
+
+			go func() {
+				if err := clproxy.Run(); err != nil {
+					svcManager.emitError()
+				}
+			}()
+		}
+	*/
 
 	/*
 		rethVersion := func() string {
@@ -456,11 +456,22 @@ func setupServices(svcManager *serviceManager, out *output) error {
 	*/
 
 	services := []Service{
-		&LighthouseBeaconNode{},
-		&LighthouseValidator{},
-		&RethNode{},
-		// &MevBoostRelay{},
+		&ClProxy{},
 	}
+
+	services = append(services, []Service{
+		&LighthouseBeaconNode{
+			LighthouseBin: lighthouseBin,
+			ELNode:        "cl-proxy",
+		},
+		&LighthouseValidator{
+			LighthouseBin: lighthouseBin,
+		},
+		&RethNode{
+			RethBin: rethBin,
+		},
+		&MevBoostRelay{},
+	}...)
 
 	/*
 		// start the reth el client
@@ -827,6 +838,11 @@ func (s *serviceManager) emitError() {
 	}
 }
 
+func (s *serviceManager) getPort(svcName, name string) int {
+	handle, _ := s.findHandle(svcName)
+	return handle.Service.ports[name].port
+}
+
 func (s *serviceManager) reserveAvailablePort(start_port int) (int, error) {
 	for port := start_port; port < 65535; port++ {
 		if _, ok := s.reserved_ports[port]; ok {
@@ -845,12 +861,53 @@ func (s *serviceManager) reserveAvailablePort(start_port int) (int, error) {
 }
 
 type NativeService interface {
-	Run(out *output) error
+	Run(out *output, svcManager *serviceManager) error
 }
 
 type Service interface {
 	Generate(svcManager *serviceManager) *service
 	Ready(ctx context.Context, service *service) error
+}
+
+type ClProxy struct {
+	primaryTarget int
+}
+
+func (c *ClProxy) Generate(svcManager *serviceManager) *service {
+	service := svcManager.NewService("cl-proxy")
+
+	c.primaryTarget = svcManager.reservePortFor("cl-proxy", "authrpc", 2323)
+	service.WithPort("authrpc", c.primaryTarget)
+
+	return service
+}
+
+func (c *ClProxy) Ready(ctx context.Context, service *service) error {
+	return nil
+}
+
+func (c *ClProxy) Run(out *output, svcManager *serviceManager) error {
+	cfg := clproxy.DefaultConfig()
+	cfg.Port = uint64(c.primaryTarget)
+	cfg.Primary = fmt.Sprintf("http://localhost:%d", svcManager.getPort("reth", "authrpc"))
+
+	if secondaryBuilderPort != 0 {
+		cfg.Secondary = fmt.Sprintf("http://localhost:%d", secondaryBuilderPort)
+	}
+
+	var err error
+	if cfg.LogOutput, err = out.LogOutput("cl-proxy"); err != nil {
+		return err
+	}
+	clproxy, err := clproxy.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create cl proxy: %w", err)
+	}
+
+	if err := clproxy.Run(); err != nil {
+		return err
+	}
+	return nil
 }
 
 type MevBoostRelay struct {
@@ -873,7 +930,7 @@ func (m *MevBoostRelay) Ready(ctx context.Context, service *service) error {
 	return nil
 }
 
-func (m *MevBoostRelay) Run(out *output) error {
+func (m *MevBoostRelay) Run(out *output, svcManager *serviceManager) error {
 	fmt.Println("Running mev-boost-relay on port --> ", m.Port)
 
 	cfg := mevboostrelay.DefaultConfig()
@@ -895,6 +952,7 @@ func (m *MevBoostRelay) Run(out *output) error {
 }
 
 type RethNode struct {
+	RethBin string
 }
 
 func (r *RethNode) Ready(ctx context.Context, service *service) error {
@@ -905,7 +963,7 @@ func (r *RethNode) Generate(svcManager *serviceManager) *service {
 	return svcManager.
 		NewService("reth").
 		WithArgs(
-			"/Users/ferranbt/.playground/reth-v1.2.0",
+			r.RethBin,
 			"node",
 			"--chain", "{{.Dir}}/genesis.json",
 			"--datadir", "{{.Dir}}/data_reth",
@@ -933,6 +991,8 @@ func (r *RethNode) Generate(svcManager *serviceManager) *service {
 }
 
 type LighthouseBeaconNode struct {
+	LighthouseBin string
+	ELNode        string
 }
 
 func (l *LighthouseBeaconNode) Ready(ctx context.Context, service *service) error {
@@ -944,6 +1004,13 @@ func (l *LighthouseBeaconNode) Ready(ctx context.Context, service *service) erro
 	// connect to the beacon client
 	url := fmt.Sprintf("http://localhost:%d", service.ports["http"].port)
 
+	log := mevRCommon.LogSetup(false, "info")
+	log.Logger.SetOutput(os.Stdout)
+
+	bClient := beaconclient.NewMultiBeaconClient(log, []beaconclient.IBeaconInstance{
+		beaconclient.NewProdBeaconInstance(log, url, url),
+	})
+
 	syncTimeoutCh := time.After(20 * time.Second)
 	for {
 		select {
@@ -952,28 +1019,24 @@ func (l *LighthouseBeaconNode) Ready(ctx context.Context, service *service) erro
 		case <-ctx.Done():
 			return nil
 		case <-time.After(100 * time.Millisecond):
-			resp, err := http.Get(url + "/eth/v1/node/syncing")
-			if err != nil {
-				fmt.Println(err)
-				continue
-				// return fmt.Errorf("failed to get beacon node syncing status: %w", err)
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode == 200 {
+			if _, err := bClient.BestSyncStatus(); err == nil {
 				return nil
 			}
-			fmt.Println(resp.Status)
-
 		}
 	}
 }
 
 func (l *LighthouseBeaconNode) Generate(svcManager *serviceManager) *service {
+	elNode := l.ELNode
+	if elNode == "" {
+		elNode = "reth"
+	}
+
 	return svcManager.
 		NewService("beacon_node").
 		WithDependency("reth").
 		WithArgs(
-			"/Users/ferranbt/.playground/lighthouse-v5.3.0",
+			l.LighthouseBin,
 			"bn",
 			"--datadir", "{{.Dir}}/data_beacon_node",
 			"--testnet-dir", "{{.Dir}}/testnet",
@@ -991,7 +1054,7 @@ func (l *LighthouseBeaconNode) Generate(svcManager *serviceManager) *service {
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
 			"--target-peers", "0",
-			"--execution-endpoint", "http://{{Connect \"reth\" \"authrpc\"}}",
+			"--execution-endpoint", "http://{{Connect \""+elNode+"\" \"authrpc\"}}",
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			// "--builder", "http://{{Connect \"mev-boost-relay\" \"http\"}}",
 			"--builder-fallback-epochs-since-finalization", "0",
@@ -1003,6 +1066,7 @@ func (l *LighthouseBeaconNode) Generate(svcManager *serviceManager) *service {
 }
 
 type LighthouseValidator struct {
+	LighthouseBin string
 }
 
 func (l *LighthouseValidator) Ready(ctx context.Context, service *service) error {
@@ -1014,7 +1078,7 @@ func (l *LighthouseValidator) Generate(svcManager *serviceManager) *service {
 		NewService("validator").
 		WithDependency("beacon_node").
 		WithArgs(
-			"/Users/ferranbt/.playground/lighthouse-v5.3.0",
+			l.LighthouseBin,
 			"vc",
 			"--datadir", "{{.Dir}}/data_validator",
 			"--testnet-dir", "{{.Dir}}/testnet",
@@ -1031,7 +1095,7 @@ type serviceSpec struct {
 	Ports       map[string]int
 }
 
-func findConnectStatement(args []string) (*serviceSpec, error) {
+func (s *serviceManager) findConnectStatement(args []string) (*serviceSpec, error) {
 	spec := &serviceSpec{
 		Connections: []*Connection{},
 		Ports:       map[string]int{},
@@ -1039,10 +1103,17 @@ func findConnectStatement(args []string) (*serviceSpec, error) {
 
 	funcs := template.FuncMap{
 		"Port": func(name string, num int) int {
-			// We can write down the port in spec so taht it can be resolved but we do not have
-			// to write yet the block number
-			spec.Ports[name] = 0
-			return 0
+			// We have to do it now because there are some cross dependenices that create cycles
+			// so we have to do this beforehand.
+			if portNum, ok := spec.Ports[name]; ok {
+				return portNum
+			}
+			availablePort, err := s.reserveAvailablePort(num)
+			if err != nil {
+				panic(err)
+			}
+			spec.Ports[name] = availablePort
+			return availablePort
 		},
 		"Connect": func(name string, port string) string {
 			spec.Connections = append(spec.Connections, &Connection{
@@ -1072,7 +1143,21 @@ func findConnectStatement(args []string) (*serviceSpec, error) {
 
 func (s *serviceManager) PrintDot() {
 	// create a dap with the handles that you have and the dependencies
-	s.dag.PrintDot(os.Stdout)
+	dag := &Dag{}
+	for _, h := range s.handles {
+		dag.AddVertex(h.Service.name)
+	}
+	for _, handle := range s.handles {
+		serviceName := handle.Service.name
+		for _, target := range handle.Service.connections {
+			dag.AddEdge(Edge{
+				Src: target.Target,
+				Dst: serviceName,
+			})
+		}
+	}
+
+	dag.PrintDot(os.Stdout)
 }
 
 func (s *serviceManager) Setup(services []Service) {
@@ -1262,7 +1347,7 @@ func (s *serviceManager) Run(ss *service, impl Service) {
 	ss.serviceImpl = impl
 
 	// populate the ports and connections nfor the service now
-	spec, err := findConnectStatement(ss.args)
+	spec, err := s.findConnectStatement(ss.args)
 	if err != nil {
 		panic(err)
 	}
@@ -1280,24 +1365,15 @@ func (s *serviceManager) Run(ss *service, impl Service) {
 	})
 }
 
-func (s *serviceManager) resolveArgs(ss *service) ([]string, map[string]int, error) {
+func (s *serviceManager) resolveArgs(ss *service) ([]string, error) {
 	tmplVars := map[string]interface{}{
 		"Dir": s.out.dst,
 	}
 
-	reservedPorts := map[string]int{}
-
 	funcs := template.FuncMap{
 		"Port": func(name string, num int) int {
-			if portNum, ok := reservedPorts[name]; ok {
-				return portNum
-			}
-			availablePort, err := s.reserveAvailablePort(num)
-			if err != nil {
-				panic(err)
-			}
-			reservedPorts[name] = availablePort
-			return availablePort
+			// port already alocated, just return it
+			return ss.ports[name].port
 		},
 		"Connect": func(name string, port string) string {
 			fmt.Println("Connect --> ", name, port)
@@ -1320,31 +1396,26 @@ func (s *serviceManager) resolveArgs(ss *service) ([]string, map[string]int, err
 	for _, arg := range ss.args {
 		tpl, err := template.New("").Funcs(funcs).Parse(arg)
 		if err != nil {
-			return nil, nil, fmt.Errorf("BUG: failed to parse template, err: %s", err)
+			return nil, fmt.Errorf("BUG: failed to parse template, err: %s", err)
 		}
 
 		var out strings.Builder
 		if err := tpl.Execute(&out, tmplVars); err != nil {
-			return nil, nil, fmt.Errorf("BUG: failed to execute template, err: %s", err)
+			return nil, fmt.Errorf("BUG: failed to execute template, err: %s", err)
 		}
 		new_args = append(new_args, out.String())
 	}
 
-	return new_args, reservedPorts, nil
+	return new_args, nil
 }
 
 func (s *serviceManager) Run2(ss *service) {
 	// use template substitution to load constants
 	fmt.Println(ss)
 
-	args, reservedPorts, err := s.resolveArgs(ss)
+	args, err := s.resolveArgs(ss)
 	if err != nil {
 		panic(err)
-	}
-
-	// now that the ports are allocated, update the service
-	for name, portNumber := range reservedPorts {
-		ss.ports[name].port = portNumber
 	}
 
 	fmt.Println("-- new args --")
@@ -1353,7 +1424,7 @@ func (s *serviceManager) Run2(ss *service) {
 	if native, ok := ss.serviceImpl.(NativeService); ok {
 		// it is native type, just let it go, it should be call internal type instead
 		go func() {
-			if err := native.Run(s.out); err != nil {
+			if err := native.Run(s.out, s); err != nil {
 				fmt.Printf("Error running %s: %v\n", ss.name, err)
 			}
 		}()

@@ -60,6 +60,9 @@ func (s *ClProxy) Run() error {
 	mux.HandleFunc("/", s.handleRequest)
 
 	s.log.Infof("Starting server on port %d", s.config.Port)
+	s.log.Infof("Primary: %s", s.config.Primary)
+	s.log.Infof("Secondary: %s", s.config.Secondary)
+
 	if err := s.server.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("server error: %v", err)
 	}
