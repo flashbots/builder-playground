@@ -406,31 +406,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		return err
 	}
 
-	// Start the cl proxy
-	{
-		cfg := clproxy.DefaultConfig()
-		cfg.Primary = "http://localhost:8551"
-
-		if secondaryBuilderPort != 0 {
-			cfg.Secondary = fmt.Sprintf("http://localhost:%d", secondaryBuilderPort)
-		}
-
-		var err error
-		if cfg.LogOutput, err = out.LogOutput("cl-proxy"); err != nil {
-			return err
-		}
-		clproxy, err := clproxy.New(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to create cl proxy: %w", err)
-		}
-
-		go func() {
-			if err := clproxy.Run(); err != nil {
-				svcManager.emitError()
-			}
-		}()
-	}
-
 	rethVersion := func() string {
 		cmd := exec.Command(rethBin, "--version")
 		out, err := cmd.Output()
@@ -483,7 +458,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		WithPort("rpc", 30303).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
-		Run()
+		Build()
 
 	lightHouseVersion := func() string {
 		cmd := exec.Command(lighthouseBin, "--version")
@@ -562,7 +537,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			},
 		).
 		WithPort("http", 3500).
-		Run()
+		Build()
 
 	// start validator client
 	svcManager.
@@ -577,46 +552,19 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 			"--builder-proposals",
 			"--prefer-builder-proposals",
-		).Run()
+		).Build()
 
-	{
-		cfg := mevboostrelay.DefaultConfig()
-		var err error
-		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
-			return err
-		}
-		cfg.UseRethForValidation = useRethForValidation
-		relay, err := mevboostrelay.New(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to create relay: %w", err)
-		}
+	svcManager.AddNativeService(&MevBoostRelay{})
+	svcManager.AddNativeService(&ClProxy{})
 
-		go func() {
-			if err := relay.Start(); err != nil {
-				svcManager.emitError()
-			}
-		}()
+	// start all the services
+	for _, ss := range svcManager.services {
+		svcManager.runService(ss)
 	}
-
-	services := []*service{}
-	for _, ss := range svcManager.handles {
-		services = append(services, ss.Service)
-	}
-	services = append(services, &service{
-		name: "mev-boost-relay",
-		ports: []*port{
-			{name: "http", port: 5555},
-		},
-	}, &service{
-		name: "cl-proxy",
-		ports: []*port{
-			{name: "jsonrpc", port: 5656},
-		},
-	})
 
 	// print services info
 	fmt.Printf("Services started:\n==================\n")
-	for _, ss := range services {
+	for _, ss := range svcManager.services {
 		sort.Slice(ss.ports, func(i, j int) bool {
 			return ss.ports[i].name < ss.ports[j].name
 		})
@@ -631,6 +579,65 @@ func setupServices(svcManager *serviceManager, out *output) error {
 
 	fmt.Printf("All services started, press Ctrl+C to stop\n")
 	return nil
+}
+
+type ClProxy struct {
+}
+
+func (c *ClProxy) Service() *service {
+	return &service{
+		name: "cl-proxy",
+		ports: []*port{
+			{name: "jsonrpc", port: 5656},
+		},
+	}
+}
+
+func (c *ClProxy) Run(out *output, ctx context.Context) error {
+	// Start the cl proxy
+	cfg := clproxy.DefaultConfig()
+	cfg.Primary = "http://localhost:8551"
+
+	if secondaryBuilderPort != 0 {
+		cfg.Secondary = fmt.Sprintf("http://localhost:%d", secondaryBuilderPort)
+	}
+
+	var err error
+	if cfg.LogOutput, err = out.LogOutput("cl-proxy"); err != nil {
+		return err
+	}
+	clproxy, err := clproxy.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create cl proxy: %w", err)
+	}
+	return clproxy.Run()
+}
+
+type MevBoostRelay struct {
+}
+
+func (m *MevBoostRelay) Service() *service {
+	return &service{
+		name: "mev-boost-relay",
+		ports: []*port{
+			{name: "http", port: 5555},
+		},
+	}
+}
+
+func (m *MevBoostRelay) Run(out *output, ctx context.Context) error {
+	cfg := mevboostrelay.DefaultConfig()
+	var err error
+	if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
+		return err
+	}
+	cfg.UseRethForValidation = useRethForValidation
+	relay, err := mevboostrelay.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create relay: %w", err)
+	}
+
+	return relay.Start()
 }
 
 type output struct {
@@ -766,6 +773,9 @@ type sszObject interface {
 }
 
 type serviceManager struct {
+	// list of services to start
+	services []*service
+
 	out     *output
 	handles []*handle
 
@@ -788,7 +798,31 @@ func (s *serviceManager) emitError() {
 	}
 }
 
-func (s *serviceManager) Run(ss *service) {
+func (s *serviceManager) Build(ss *service) {
+	s.services = append(s.services, ss)
+}
+
+type NativeService interface {
+	Run(out *output, ctx context.Context) error
+	Service() *service
+}
+
+func (s *serviceManager) AddNativeService(srv NativeService) {
+	s.services = append(s.services, srv.Service())
+
+	go func() {
+		if err := srv.Run(s.out, context.Background()); err != nil {
+			s.emitError()
+		}
+	}()
+}
+
+func (s *serviceManager) runService(ss *service) {
+	if ss.srvMng == nil {
+		// this one was not created with Build so it is not a binary service, but a native one
+		return
+	}
+
 	cmd := exec.Command(ss.args[0], ss.args[1:]...)
 
 	logOutput, err := s.out.LogOutput(ss.name)
@@ -913,8 +947,8 @@ func (s *service) If(cond bool, fn func(*service) *service) *service {
 	return s
 }
 
-func (s *service) Run() {
-	s.srvMng.Run(s)
+func (s *service) Build() {
+	s.srvMng.Build(s)
 }
 
 func applyTemplate(templateStr string, input interface{}) string {
@@ -1006,6 +1040,20 @@ func getHomeDir() (string, error) {
 }
 
 func watchProposerPayloads() {
+	// Wait for at least 10 seconds for Mev-boost to start
+	timerC := time.After(10 * time.Second)
+LOOP:
+	for {
+		select {
+		case <-timerC:
+			break
+		case <-time.After(2 * time.Second):
+			if _, err := getProposerPayloadDelivered(); err == nil {
+				break LOOP
+			}
+		}
+	}
+
 	// This is not the most efficient solution since we are querying the endpoint for the full list of payloads
 	// every 2 seconds. It should be fine for the kind of workloads expected to run.
 
