@@ -1,0 +1,241 @@
+networks:
+  ethereum:
+    name: ethereum
+services:
+  beacon_node:
+    command:
+      - lighthouse
+      - bn
+      - --datadir
+      - output/data_beacon_node
+      - --testnet-dir
+      - output/testnet
+      - --enable-private-discovery
+      - --disable-peer-scoring
+      - --staking
+      - --enr-address
+      - 127.0.0.1
+      - --enr-udp-port
+      - "9000"
+      - --enr-tcp-port
+      - "9000"
+      - --enr-quic-port
+      - "9100"
+      - --port
+      - "9000"
+      - --quic-port
+      - "9100"
+      - --http
+      - --http-port
+      - "3500"
+      - --http-address
+      - 0.0.0.0
+      - --http-allow-origin
+      - "*"
+      - --disable-packet-filter
+      - --target-peers
+      - "0"
+      - --execution-endpoint
+      - http://reth:8551
+      - --execution-jwt
+      - output/jwtsecret
+      - --builder
+      - http://localhost:5555
+      - --builder-fallback-epochs-since-finalization
+      - "0"
+      - --builder-fallback-disable-checks
+      - --always-prepare-payload
+      - --prepare-payload-lookahead
+      - "8000"
+      - --suggested-fee-recipient
+      - 0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990
+    image: sigp/lighthouse:v7.0.0-beta.0
+    networks:
+      - ethereum
+    ports:
+      - 3500:3500
+    volumes:
+      - ./output:/output
+  op-geth:
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        geth init --datadir output/op-geth --state.scheme hash output/l2-genesis.json && \
+        exec geth \
+          --datadir output/op-geth \
+          --verbosity 3 \
+          --http \
+          --http.corsdomain "*" \
+          --http.vhosts "*" \
+          --http.addr 0.0.0.0 \
+          --http.port 8547 \
+          --http.api web3,debug,eth,txpool,net,engine,miner \
+          --ws \
+          --ws.addr 0.0.0.0 \
+          --ws.port 8548 \
+          --ws.origins "*" \
+          --ws.api debug,eth,txpool,net,engine,miner \
+          --syncmode full \
+          --nodiscover \
+          --maxpeers 0 \
+          --rpc.allow-unprotected-txs \
+          --authrpc.addr 0.0.0.0 \
+          --authrpc.port 8552 \
+          --authrpc.vhosts "*" \
+          --authrpc.jwtsecret output/jwt-secret.txt \
+          --gcmode archive \
+          --state.scheme hash \
+          --metrics \
+          --metrics.addr 0.0.0.0 \
+          --metrics.port 6061
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101500.0
+    networks:
+      - ethereum
+    ports:
+      - 8547:8547
+      - 8548:8548
+      - 8552:8552
+      - 6061:6061
+    volumes:
+      - ./output:/output
+  op-batcher:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.1
+    command:
+      - op-batcher
+      - --l1-eth-rpc
+      - http://reth:8545
+      - --l2-eth-rpc
+      - http://op-geth:8547
+      - --rollup-rpc
+      - http://op-node:8549
+      - --max-channel-duration=2
+      - --sub-safety-margin=4
+      - --poll-interval=1s
+      - --num-confirmations=1
+      - --private-key=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6
+    networks:
+      - ethereum
+  op-node:
+    command:
+      - op-node
+      - --l1
+      - http://reth:8545
+      - --l1.beacon
+      - http://beacon_node:3500
+      - --l1.epoch-poll-interval
+      - 12s
+      - --l1.http-poll-interval
+      - 6s
+      - --l2
+      - http://op-geth:8552
+      - --l2.jwt-secret
+      - output/jwt-secret.txt
+      - --sequencer.enabled
+      - --sequencer.l1-confs
+      - "0"
+      - --verifier.l1-confs
+      - "0"
+      - --p2p.sequencer.key
+      - 8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba
+      - --rollup.config
+      - output/rollup.json
+      - --rpc.addr
+      - 0.0.0.0
+      - --rpc.port
+      - "8549"
+      - --p2p.listen.ip
+      - 0.0.0.0
+      - --p2p.listen.tcp
+      - "9003"
+      - --p2p.listen.udp
+      - "9003"
+      - --p2p.scoring.peers
+      - light
+      - --p2p.ban.peers
+      - "true"
+      - --metrics.enabled
+      - --metrics.addr
+      - 0.0.0.0
+      - --metrics.port
+      - "7300"
+      - --pprof.enabled
+      - --rpc.enable-admin
+      - --safedb.path
+      - output/db
+      - --log.level
+      - debug
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.0
+    networks:
+      - ethereum
+    ports:
+      - 8549:8549
+      - 9003:9003
+      - 7300:7300
+    volumes:
+      - ./output:/output
+  reth:
+    command:
+      - node
+      - --chain
+      - output/genesis.json
+      - --datadir
+      - output/data_reth
+      - --color
+      - never
+      - --ipcpath
+      - output/reth.ipc
+      - --p2p-secret-key
+      - /tmp/tmp-reth-disc.txt
+      - --addr
+      - 127.0.0.1
+      - --port
+      - "30303"
+      - --http
+      - --http.addr
+      - 0.0.0.0
+      - --http.api
+      - admin,eth,net,web3
+      - --http.port
+      - "8545"
+      - --authrpc.port
+      - "8551"
+      - --authrpc.addr
+      - 0.0.0.0
+      - --authrpc.jwtsecret
+      - output/jwtsecret
+      - --engine.persistence-threshold
+      - "0"
+      - --engine.memory-block-buffer-target
+      - "0"
+      - -vvvv
+    image: ghcr.io/paradigmxyz/reth:v1.2.0
+    networks:
+      - ethereum
+    ports:
+      - 30303:30303
+      - 8545:8545
+      - 8551:8551
+    volumes:
+      - ./output:/output
+  validator:
+    command:
+      - lighthouse
+      - vc
+      - --datadir
+      - output/data_validator
+      - --testnet-dir
+      - output/testnet
+      - --init-slashing-protection
+      - --beacon-nodes
+      - http://beacon_node:3500
+      - --suggested-fee-recipient
+      - 0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990
+      - --builder-proposals
+      - --prefer-builder-proposals
+    image: sigp/lighthouse:v7.0.0-beta.0
+    networks:
+      - ethereum
+    volumes:
+      - ./output:/output
+version: "3.8"

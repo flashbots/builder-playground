@@ -12,7 +12,7 @@ import (
 	"runtime"
 )
 
-type release struct {
+type Release struct {
 	Name    string
 	Org     string
 	Version string
@@ -20,7 +20,7 @@ type release struct {
 }
 
 func DownloadArtifacts() (map[string]string, error) {
-	var artifacts = []release{
+	var artifacts = []Release{
 		{
 			Name:    "reth",
 			Org:     "paradigmxyz",
@@ -77,41 +77,51 @@ func DownloadArtifacts() (map[string]string, error) {
 	// 3. If the architecture is not supported, check if the binary is found in PATH.
 	releases := make(map[string]string)
 	for _, artifact := range artifacts {
-		outPath := filepath.Join(customHomeDir, artifact.Name+"-"+artifact.Version)
-		_, err := os.Stat(outPath)
-		if err != nil && !os.IsNotExist(err) {
-			return nil, fmt.Errorf("error checking file existence: %v", err)
-		}
-
+		releasePath, err := DownloadRelease(customHomeDir, artifact)
 		if err != nil {
-			archVersion := artifact.Arch(goos, goarch)
-			if archVersion == "" {
-				// Case 2. The architecture is not supported.
-				fmt.Printf("unsupported OS/Arch: %s/%s\n", goos, goarch)
-				if _, err := exec.LookPath(artifact.Name); err != nil {
-					return nil, fmt.Errorf("error looking up binary in PATH: %v", err)
-				} else {
-					outPath = artifact.Name
-					fmt.Printf("Using %s from PATH\n", artifact.Name)
-				}
-			} else {
-				// Case 3. Download the binary from the release page
-				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, archVersion)
-				fmt.Printf("Downloading %s: %s\n", outPath, releasesURL)
-
-				if err := downloadArtifact(releasesURL, artifact.Name, outPath); err != nil {
-					return nil, fmt.Errorf("error downloading artifact: %v", err)
-				}
-			}
-		} else {
-			// Case 1. Use the binary in $HOME/.playground
-			fmt.Printf("%s already exists, skipping download\n", outPath)
+			return nil, fmt.Errorf("error downloading release: %v", err)
 		}
+		releases[artifact.Name] = releasePath
+	}
+	return releases, nil
+}
 
-		releases[artifact.Name] = outPath
+func DownloadRelease(customHomeDir string, artifact Release) (string, error) {
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	outPath := filepath.Join(customHomeDir, artifact.Name+"-"+artifact.Version)
+	_, err := os.Stat(outPath)
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("error checking file existence: %v", err)
 	}
 
-	return releases, nil
+	if err != nil {
+		archVersion := artifact.Arch(goos, goarch)
+		if archVersion == "" {
+			// Case 2. The architecture is not supported.
+			fmt.Printf("unsupported OS/Arch: %s/%s\n", goos, goarch)
+			if _, err := exec.LookPath(artifact.Name); err != nil {
+				return "", fmt.Errorf("error looking up binary in PATH: %v", err)
+			} else {
+				outPath = artifact.Name
+				fmt.Printf("Using %s from PATH\n", artifact.Name)
+			}
+		} else {
+			// Case 3. Download the binary from the release page
+			releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, archVersion)
+			fmt.Printf("Downloading %s: %s\n", outPath, releasesURL)
+
+			if err := downloadArtifact(releasesURL, artifact.Name, outPath); err != nil {
+				return "", fmt.Errorf("error downloading artifact: %v", err)
+			}
+		}
+	} else {
+		// Case 1. Use the binary in $HOME/.playground
+		fmt.Printf("%s already exists, skipping download\n", outPath)
+	}
+
+	return outPath, nil
 }
 
 func downloadArtifact(url string, expectedFile string, outPath string) error {

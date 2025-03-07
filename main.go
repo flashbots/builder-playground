@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/ecdsa"
 	_ "embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,7 +20,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -315,6 +317,49 @@ func setupArtifacts() error {
 		}
 	}
 
+	// Apply Optimism pre-state
+	{
+		data, err := os.ReadFile("./utils/state.json")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var state struct {
+			L1StateDump string `json:"l1StateDump"`
+		}
+		if err := json.Unmarshal(data, &state); err != nil {
+			log.Fatal(err)
+		}
+
+		decoded, err := base64.StdEncoding.DecodeString(state.L1StateDump)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Create gzip reader from the base64 decoded data
+		gr, err := gzip.NewReader(bytes.NewReader(decoded))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer gr.Close()
+
+		// Read and decode the contents
+		contents, err := io.ReadAll(gr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var alloc types.GenesisAlloc
+		if err := json.Unmarshal(contents, &alloc); err != nil {
+			log.Fatal(err)
+		}
+
+		for addr, account := range alloc {
+			fmt.Printf("Address: %s, Balance: %s\n", addr.Hex(), account.Balance.String())
+			gen.Alloc[addr] = account
+		}
+	}
+
 	block := gen.ToBlock()
 	header, _ := json.MarshalIndent(block.Header(), "", "  ")
 	log.Printf("Genesis block hash: %s json: %s", block.Hash(), header)
@@ -344,6 +389,12 @@ func setupArtifacts() error {
 		return err
 	}
 
+	if err := out.CopyFile("./utils/genesis.json", "l2-genesis.json"); err != nil {
+		return err
+	}
+	if err := out.CopyFile("./utils/rollup.json", "rollup.json"); err != nil {
+		return err
+	}
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
@@ -376,24 +427,26 @@ func getPrivKey(privStr string) (*ecdsa.PrivateKey, error) {
 }
 
 func setupServices(svcManager *serviceManager, out *output) error {
-	var (
-		rethBin, lighthouseBin string
-	)
+	/*
+		var (
+			rethBin, lighthouseBin string
+		)
 
-	if useBinPathFlag {
-		fmt.Println("Using binaries from the PATH")
+		if useBinPathFlag {
+			fmt.Println("Using binaries from the PATH")
 
-		rethBin = "reth"
-		lighthouseBin = "lighthouse"
-	} else {
-		binArtifacts, err := artifacts.DownloadArtifacts()
-		if err != nil {
-			return err
+			rethBin = "reth"
+			lighthouseBin = "lighthouse"
+		} else {
+			binArtifacts, err := artifacts.DownloadArtifacts()
+			if err != nil {
+				return err
+			}
+
+			rethBin = binArtifacts["reth"]
+			lighthouseBin = binArtifacts["lighthouse"]
 		}
-
-		rethBin = binArtifacts["reth"]
-		lighthouseBin = binArtifacts["lighthouse"]
-	}
+	*/
 
 	// log the prefunded accounts
 	fmt.Printf("\nPrefunded accounts:\n==================\n")
@@ -406,32 +459,230 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		return err
 	}
 
-	rethVersion := func() string {
-		cmd := exec.Command(rethBin, "--version")
-		out, err := cmd.Output()
-		if err != nil {
-			return "unknown"
-		}
-		// find the line of the form:
-		// reth Version: x.y.z
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "reth Version: ") {
-				v := strings.TrimSpace(strings.TrimPrefix(line, "reth Version: "))
-				if !strings.HasPrefix(v, "v") {
-					v = "v" + v
-				}
-				return semver.Canonical(v)
-			}
-		}
-		return "unknown"
-	}()
+	svcManager.AddService(&RethEL{})
+	svcManager.AddService(&LighthouseBeaconNode{})
+	svcManager.AddService(&LighthouseValidator{})
+	svcManager.AddService(&OpNode{})
+	svcManager.AddService(&OpGeth{})
 
+	// svcManager.AddNativeService(&MevBoostRelay{})
+	// svcManager.AddNativeService(&ClProxy{})
+
+	// start all the services
+	svcManager.Start(true)
+
+	// svcManager.GenerateDockerCompose("docker-compose.yaml")
+
+	// print services info
+	fmt.Printf("Services started:\n==================\n")
+	for _, ss := range svcManager.services {
+		sort.Slice(ss.ports, func(i, j int) bool {
+			return ss.ports[i].name < ss.ports[j].name
+		})
+
+		ports := []string{}
+		for _, p := range ss.ports {
+			ports = append(ports, fmt.Sprintf("%s: %d", p.name, p.port))
+		}
+		fmt.Printf("- %s (%s)\n", ss.name, strings.Join(ports, ", "))
+	}
+	fmt.Printf("\n")
+
+	fmt.Printf("All services started, press Ctrl+C to stop\n")
+	return nil
+}
+
+// Add this new function to generate docker-compose.yaml
+func (s *serviceManager) GenerateDockerCompose(outputPath string) error {
+	compose := map[string]interface{}{
+		"version":  "3.8",
+		"services": map[string]interface{}{},
+		// Add networks configuration
+		"networks": map[string]interface{}{
+			"ethereum": map[string]interface{}{
+				"name": "ethereum",
+			},
+		},
+	}
+
+	services := compose["services"].(map[string]interface{})
+
+	for _, svc := range s.services {
+		if svc.srvMng != nil { // Only include services that were created with NewService
+			services[svc.name] = svc.ToDockerComposeService()
+		}
+	}
+
+	yamlData, err := yaml.Marshal(compose)
+	if err != nil {
+		return fmt.Errorf("failed to marshal docker-compose: %w", err)
+	}
+
+	return os.WriteFile(outputPath, yamlData, 0644)
+}
+
+func (s *service) ToDockerComposeService() map[string]interface{} {
+	service := map[string]interface{}{
+		"image":   fmt.Sprintf("%s:%s", s.imageReal, s.tag),
+		"command": s.args,
+		// Add volume mount for the output directory
+		"volumes": []string{
+			fmt.Sprintf("./%s:/output", s.srvMng.out.dst),
+		},
+		// Add the ethereum network
+		"networks": []string{"ethereum"},
+	}
+
+	if len(s.ports) > 0 {
+		ports := []string{}
+		for _, p := range s.ports {
+			ports = append(ports, fmt.Sprintf("%d:%d", p.port, p.port))
+		}
+		service["ports"] = ports
+	}
+
+	return service
+}
+
+type OpNode struct {
+}
+
+func (o *OpNode) Artifacts() []artifacts.Release {
+	return []artifacts.Release{}
+}
+
+func (o *OpNode) Run(svcManager *serviceManager) {
+	svcManager.
+		NewService("op-node").
+		WithImage("op-node").
+		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
+		WithTag("v1.4.1").
+		WithArgs(
+			"--l1", "ws://l1:8546",
+			"--l1.beacon", "http://l1-bn:5052",
+			"--l1.epoch-poll-interval", "12s",
+			"--l1.http-poll-interval", "6s",
+			"--l2", "http://op-geth:8552",
+			"--l2.jwt-secret", "{{.Dir}}/jwt-secret.txt",
+			"--sequencer.enabled",
+			"--sequencer.l1-confs", "0",
+			"--verifier.l1-confs", "0",
+			"--p2p.sequencer.key", "8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+			"--rollup.config", "{{.Dir}}/rollup.json",
+			"--rpc.addr", "0.0.0.0",
+			"--rpc.port", "8549",
+			"--p2p.listen.ip", "0.0.0.0",
+			"--p2p.listen.tcp", "9003",
+			"--p2p.listen.udp", "9003",
+			"--p2p.scoring.peers", "light",
+			"--p2p.ban.peers", "true",
+			// "--p2p.priv.path", "{{.Dir}}/p2p-node-key.txt",
+			"--metrics.enabled",
+			"--metrics.addr", "0.0.0.0",
+			"--metrics.port", "7300",
+			"--pprof.enabled",
+			"--rpc.enable-admin",
+			"--safedb.path", "{{.Dir}}/db",
+		).
+		WithPort("rpc", 8549).
+		WithPort("p2p", 9003).
+		WithPort("metrics", 7300).
+		Build()
+}
+
+type OpGeth struct {
+}
+
+func (o *OpGeth) Artifacts() []artifacts.Release {
+	return []artifacts.Release{}
+}
+
+func (o *OpGeth) Run(svcManager *serviceManager) {
+	svcManager.
+		NewService("op-geth").
+		WithImage("geth").
+		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
+		WithTag("v1.101411.8-rc.1").
+		WithArgs(
+			"/bin/sh", "-c",
+			strings.Join([]string{
+				// First command: init
+				"geth",
+				"--verbosity", "3",
+				"init",
+				"--datadir", "{{.Dir}}/op-reth",
+				"--state.scheme", "hash",
+				"{{.Dir}}/l2-genesis.json",
+				"&&",
+				// Second command: run
+				"exec geth",
+				"--datadir", "{{.Dir}}/op-reth",
+				"--verbosity", "3",
+				"--http",
+				"--http.corsdomain", "*",
+				"--http.vhosts", "*",
+				"--http.addr", "0.0.0.0",
+				"--http.port", "8547",
+				"--http.api", "web3,debug,eth,txpool,net,engine,miner",
+				"--ws",
+				"--ws.addr", "0.0.0.0",
+				"--ws.port", "8548",
+				"--ws.origins", "*",
+				"--ws.api", "debug,eth,txpool,net,engine,miner",
+				"--syncmode", "full",
+				"--nodiscover",
+				"--maxpeers", "0",
+				// "--networkid", "13",
+				"--rpc.allow-unprotected-txs",
+				"--authrpc.addr", "0.0.0.0",
+				"--authrpc.port", "8552",
+				"--authrpc.vhosts", "*",
+				"--authrpc.jwtsecret", "{{.Dir}}/jwt-secret.txt",
+				"--gcmode", "archive",
+				"--state.scheme", "hash",
+				"--metrics",
+				"--metrics.addr", "0.0.0.0",
+				"--metrics.port", "6061",
+			}, " "),
+		).
+		WithPort("http", 8547).
+		WithPort("ws", 8548).
+		WithPort("authrpc", 8552).
+		WithPort("metrics", 6061).
+		Build()
+}
+
+type RethEL struct {
+}
+
+func (r *RethEL) Artifacts() []artifacts.Release {
+	return []artifacts.Release{
+		{
+			Name:    "reth",
+			Org:     "paradigmxyz",
+			Version: "v1.2.0",
+			Arch: func(goos, goarch string) string {
+				if goos == "linux" {
+					return "x86_64-unknown-linux-gnu"
+				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+					return "aarch64-apple-darwin"
+				} else if goos == "darwin" && goarch == "amd64" {
+					return "x86_64-apple-darwin"
+				}
+				return ""
+			},
+		},
+	}
+}
+
+func (r *RethEL) Run(svcManager *serviceManager) {
 	// start the reth el client
-	fmt.Println("Starting reth version " + rethVersion)
 	svcManager.
 		NewService("reth").
+		WithImage("reth").
+		WithImageReal("ghcr.io/paradigmxyz/reth").
+		WithTag("v1.2.0").
 		WithArgs(
-			rethBin,
 			"node",
 			"--chain", "{{.Dir}}/genesis.json",
 			"--datadir", "{{.Dir}}/data_reth",
@@ -447,6 +698,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http.api", "admin,eth,net,web3",
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
+			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
@@ -459,43 +711,75 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
 		Build()
+}
 
-	lightHouseVersion := func() string {
-		cmd := exec.Command(lighthouseBin, "--version")
-		out, err := cmd.Output()
-		if err != nil {
-			return "unknown"
-		}
-		// find the line of the form:
-		// Lighthouse v5.2.1-9e12c21
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "Lighthouse ") {
-				v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
-				if !strings.HasPrefix(v, "v") {
-					v = "v" + v
+type LighthouseBeaconNode struct {
+}
+
+func (l *LighthouseBeaconNode) Artifacts() []artifacts.Release {
+	return []artifacts.Release{
+		{
+			Name:    "lighthouse",
+			Org:     "sigp",
+			Version: "v7.0.0-beta.0",
+			Arch: func(goos, goarch string) string {
+				if goos == "linux" {
+					return "x86_64-unknown-linux-gnu"
+				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+					return "x86_64-apple-darwin"
+				} else if goos == "darwin" && goarch == "amd64" {
+					return "x86_64-apple-darwin"
 				}
-				// Go semver considers - as a pre-release, so we need to remove it
-				v = strings.Split(v, "-")[0]
-				return semver.Canonical(v)
-			}
-		}
-		return "unknown"
-	}()
-
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		cmd := exec.Command("file", lighthouseBin)
-		out, _ := cmd.Output()
-		if strings.Contains(string(out), "x86_64") {
-			fmt.Println("WARNING: ", lighthouseBin, "is an x86_64 binary, using a self-compiled verison with `--use-bin-path` is recommended.")
-		}
+				return ""
+			},
+		},
 	}
+}
+
+func (l *LighthouseBeaconNode) Run(svcManager *serviceManager) {
+	/*
+		// TODO: Figure out how to do this
+			lightHouseVersion := func() string {
+				cmd := exec.Command(lighthouseBin, "--version")
+				out, err := cmd.Output()
+				if err != nil {
+					return "unknown"
+				}
+				// find the line of the form:
+				// Lighthouse v5.2.1-9e12c21
+				for _, line := range strings.Split(string(out), "\n") {
+					if strings.HasPrefix(line, "Lighthouse ") {
+						v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
+						if !strings.HasPrefix(v, "v") {
+							v = "v" + v
+						}
+						// Go semver considers - as a pre-release, so we need to remove it
+						v = strings.Split(v, "-")[0]
+						return semver.Canonical(v)
+					}
+				}
+				return "unknown"
+			}()
+
+			if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+				cmd := exec.Command("file", lighthouseBin)
+				out, _ := cmd.Output()
+				if strings.Contains(string(out), "x86_64") {
+					fmt.Println("WARNING: ", lighthouseBin, "is an x86_64 binary, using a self-compiled verison with `--use-bin-path` is recommended.")
+				}
+			}
+	*/
+
+	lightHouseVersion := "v5.3"
 
 	// start the beacon node
-	fmt.Println("Starting lighthouse version " + lightHouseVersion)
 	svcManager.
 		NewService("beacon_node").
+		WithImage("lighthouse").
+		WithImageReal("sigp/lighthouse").
+		WithTag("v7.0.0-beta.0").
 		WithArgs(
-			lighthouseBin,
+			"lighthouse",
 			"bn",
 			"--datadir", "{{.Dir}}/data_beacon_node",
 			"--testnet-dir", "{{.Dir}}/testnet",
@@ -510,10 +794,11 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--quic-port", "9100",
 			"--http",
 			"--http-port", "3500",
+			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
 			"--target-peers", "0",
-			"--execution-endpoint", "http://localhost:5656",
+			"--execution-endpoint", "http://reth:8551",
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--builder", "http://localhost:5555",
 			"--builder-fallback-epochs-since-finalization", "0",
@@ -538,47 +823,49 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		).
 		WithPort("http", 3500).
 		Build()
+}
 
+type LighthouseValidator struct {
+}
+
+func (l *LighthouseValidator) Artifacts() []artifacts.Release {
+	return []artifacts.Release{
+		{
+			Name:    "lighthouse",
+			Org:     "sigp",
+			Version: "v7.0.0-beta.0",
+			Arch: func(goos, goarch string) string {
+				if goos == "linux" {
+					return "x86_64-unknown-linux-gnu"
+				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+					return "x86_64-apple-darwin"
+				} else if goos == "darwin" && goarch == "amd64" {
+					return "x86_64-apple-darwin"
+				}
+				return ""
+			},
+		},
+	}
+}
+
+func (l *LighthouseValidator) Run(svcManager *serviceManager) {
 	// start validator client
 	svcManager.
 		NewService("validator").
+		WithImage("lighthouse").
+		WithImageReal("sigp/lighthouse").
+		WithTag("v7.0.0-beta.0").
 		WithArgs(
-			lighthouseBin,
+			"lighthouse",
 			"vc",
 			"--datadir", "{{.Dir}}/data_validator",
 			"--testnet-dir", "{{.Dir}}/testnet",
 			"--init-slashing-protection",
-			"--beacon-nodes", "http://localhost:3500",
+			"--beacon-nodes", "http://beacon_node:3500",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 			"--builder-proposals",
 			"--prefer-builder-proposals",
 		).Build()
-
-	svcManager.AddNativeService(&MevBoostRelay{})
-	svcManager.AddNativeService(&ClProxy{})
-
-	// start all the services
-	for _, ss := range svcManager.services {
-		svcManager.runService(ss)
-	}
-
-	// print services info
-	fmt.Printf("Services started:\n==================\n")
-	for _, ss := range svcManager.services {
-		sort.Slice(ss.ports, func(i, j int) bool {
-			return ss.ports[i].name < ss.ports[j].name
-		})
-
-		ports := []string{}
-		for _, p := range ss.ports {
-			ports = append(ports, fmt.Sprintf("%s: %d", p.name, p.port))
-		}
-		fmt.Printf("- %s (%s)\n", ss.name, strings.Join(ports, ", "))
-	}
-	fmt.Printf("\n")
-
-	fmt.Printf("All services started, press Ctrl+C to stop\n")
-	return nil
 }
 
 type ClProxy struct {
@@ -651,6 +938,45 @@ func (o *output) Exists(path string) bool {
 
 func (o *output) Remove(path string) error {
 	return os.RemoveAll(filepath.Join(o.dst, path))
+}
+
+func (o *output) CopyFile(src string, dst string) error {
+	// Open the source file
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	// Create the destination directory if it doesn't exist
+	dstPath := filepath.Join(o.dst, dst)
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	// Create the destination file
+	destFile, err := os.Create(dstPath)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destFile.Close()
+
+	// Copy the contents
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return fmt.Errorf("failed to copy file contents: %w", err)
+	}
+
+	// Copy file permissions from source to destination
+	sourceInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("failed to get source file info: %w", err)
+	}
+
+	if err := os.Chmod(dstPath, sourceInfo.Mode()); err != nil {
+		return fmt.Errorf("failed to set destination file permissions: %w", err)
+	}
+
+	return nil
 }
 
 func (o *output) WriteBatch(data map[string]interface{}) error {
@@ -776,6 +1102,9 @@ type serviceManager struct {
 	// list of services to start
 	services []*service
 
+	// list of available artifacts to download
+	artifacts []artifacts.Release
+
 	out     *output
 	handles []*handle
 
@@ -788,7 +1117,7 @@ type serviceManager struct {
 }
 
 func newServiceManager(out *output) *serviceManager {
-	return &serviceManager{out: out, handles: []*handle{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5)}
+	return &serviceManager{out: out, handles: []*handle{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5), artifacts: []artifacts.Release{}}
 }
 
 func (s *serviceManager) emitError() {
@@ -802,9 +1131,21 @@ func (s *serviceManager) Build(ss *service) {
 	s.services = append(s.services, ss)
 }
 
+type Service interface {
+	Run(svcManager *serviceManager)
+	Artifacts() []artifacts.Release
+}
+
 type NativeService interface {
 	Run(out *output, ctx context.Context) error
 	Service() *service
+}
+
+func (s *serviceManager) AddService(srv Service) {
+	// add the artifacts to the list of available artifacts
+	s.artifacts = append(s.artifacts, srv.Artifacts()...)
+
+	srv.Run(s)
 }
 
 func (s *serviceManager) AddNativeService(srv NativeService) {
@@ -817,13 +1158,66 @@ func (s *serviceManager) AddNativeService(srv NativeService) {
 	}()
 }
 
+func (s *serviceManager) downloadArtifact(ss *service) error {
+	if ss.srvMng == nil {
+		return nil
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	// Define the path for our custom home directory
+	customHomeDir := filepath.Join(homeDir, ".playground")
+
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(customHomeDir, 0755); err != nil {
+		return err
+	}
+
+	for _, a := range s.artifacts {
+		if a.Name == ss.image {
+			a.Version = ss.tag
+			binPath, err := artifacts.DownloadRelease(customHomeDir, a)
+			if err != nil {
+				panic(err)
+			}
+			ss.imagePath = binPath
+			return nil
+		}
+	}
+	return fmt.Errorf("artifact not found: %s", ss.image)
+}
+
+func (s *serviceManager) Start(dryRun bool) {
+	// first, try to download all the artifacts
+	/*
+		for _, ss := range s.services {
+			if err := s.downloadArtifact(ss); err != nil {
+				panic(err)
+			}
+		}
+	*/
+
+	if dryRun {
+		return
+	}
+
+	// now, run the services
+	for _, ss := range s.services {
+		s.runService(ss)
+	}
+}
+
 func (s *serviceManager) runService(ss *service) {
 	if ss.srvMng == nil {
 		// this one was not created with Build so it is not a binary service, but a native one
 		return
 	}
 
-	cmd := exec.Command(ss.args[0], ss.args[1:]...)
+	fmt.Println("Running", ss.imagePath, ss.args)
+	cmd := exec.Command(ss.imagePath, ss.args...)
 
 	logOutput, err := s.out.LogOutput(ss.name)
 	if err != nil {
@@ -887,10 +1281,32 @@ type service struct {
 
 	ports  []*port
 	srvMng *serviceManager
+
+	// release specific configuration
+	// we call this image here but it can also represent a release binary
+	image     string
+	imagePath string
+	tag       string
+	imageReal string
 }
 
 func (s *serviceManager) NewService(name string) *service {
 	return &service{name: name, args: []string{}, srvMng: s}
+}
+
+func (s *service) WithImageReal(image string) *service {
+	s.imageReal = image
+	return s
+}
+
+func (s *service) WithImage(image string) *service {
+	s.image = image
+	return s
+}
+
+func (s *service) WithTag(tag string) *service {
+	s.tag = tag
+	return s
 }
 
 func (s *service) WithPort(name string, portNumber int) *service {
