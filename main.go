@@ -21,17 +21,23 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/events"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 	"golang.org/x/mod/semver"
 
 	gethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 
@@ -48,6 +54,15 @@ import (
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
 )
+
+//go:embed utils/rollup.json
+var opRollupConfig []byte
+
+//go:embed utils/genesis.json
+var opGenesis []byte
+
+//go:embed utils/state.json
+var opState []byte
 
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
@@ -259,6 +274,11 @@ func runIt() error {
 		return err
 	}
 
+	dockerRunner := NewDockerRunner(out, svcManager)
+	if err := dockerRunner.Run(); err != nil {
+		return err
+	}
+
 	go watchProposerPayloads()
 
 	sig := make(chan os.Signal, 1)
@@ -270,7 +290,9 @@ func runIt() error {
 	case <-svcManager.NotifyErrCh():
 	}
 
+	dockerRunner.Stop()
 	svcManager.StopAndWait()
+
 	return nil
 }
 
@@ -319,15 +341,10 @@ func setupArtifacts() error {
 
 	// Apply Optimism pre-state
 	{
-		data, err := os.ReadFile("./utils/state.json")
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		var state struct {
 			L1StateDump string `json:"l1StateDump"`
 		}
-		if err := json.Unmarshal(data, &state); err != nil {
+		if err := json.Unmarshal(opState, &state); err != nil {
 			log.Fatal(err)
 		}
 
@@ -389,12 +406,6 @@ func setupArtifacts() error {
 		return err
 	}
 
-	if err := out.CopyFile("./utils/genesis.json", "l2-genesis.json"); err != nil {
-		return err
-	}
-	if err := out.CopyFile("./utils/rollup.json", "rollup.json"); err != nil {
-		return err
-	}
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
@@ -410,7 +421,93 @@ func setupArtifacts() error {
 		return err
 	}
 
+	{
+		opTimestamp := genesisTime + 2
+
+		// override l2 genesis, make the timestamp start 2 seconds after the L1 genesis
+		newOpGenesis, err := overrideJSON(opGenesis, map[string]interface{}{
+			"timestamp": hexutil.Uint64(opTimestamp).String(),
+		})
+		if err != nil {
+			return err
+		}
+
+		// the hash of the genesis has changed beause of the timestamp so we need to account for that
+		var opGenesisObj core.Genesis
+		if err := json.Unmarshal(newOpGenesis, &opGenesisObj); err != nil {
+			panic(err)
+		}
+
+		opGenesisHash := opGenesisObj.ToBlock().Hash()
+
+		// override rollup.json with the real values for the L1 chain and the correct timestamp
+		newOpRollup, err := overrideJSON(opRollupConfig, map[string]interface{}{
+			"genesis": map[string]interface{}{
+				"l2_time": opTimestamp, // this one not in hex
+				"l1": map[string]interface{}{
+					"hash":   block.Hash().String(),
+					"number": 0,
+				},
+				"l2": map[string]interface{}{
+					"hash":   opGenesisHash.String(),
+					"number": 0,
+				},
+			},
+			"chain_op_config": map[string]interface{}{ // TODO: Read this from somewhere (genesis??)
+				"eip1559Elasticity":        6,
+				"eip1559Denominator":       50,
+				"eip1559DenominatorCanyon": 250,
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		if err := out.WriteFile("l2-genesis.json", newOpGenesis); err != nil {
+			return err
+		}
+		if err := out.WriteFile("rollup.json", newOpRollup); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func overrideJSON(jsonData []byte, overrides map[string]interface{}) ([]byte, error) {
+	// Parse original JSON into a map
+	var original map[string]interface{}
+	if err := json.Unmarshal(jsonData, &original); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal original JSON: %w", err)
+	}
+
+	// Recursively merge the overrides into the original
+	mergeMap(original, overrides)
+
+	// Marshal back to JSON
+	result, err := json.Marshal(original)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal modified JSON: %w", err)
+	}
+
+	return result, nil
+}
+
+// mergeMap recursively merges src into dst
+func mergeMap(dst, src map[string]interface{}) {
+	for key, srcVal := range src {
+		if dstVal, exists := dst[key]; exists {
+			// If both values are maps, merge them recursively
+			if dstMap, ok := dstVal.(map[string]interface{}); ok {
+				if srcMap, ok := srcVal.(map[string]interface{}); ok {
+					mergeMap(dstMap, srcMap)
+					continue
+				}
+			}
+		}
+		// For all other cases, override the value
+		dst[key] = srcVal
+	}
 }
 
 func getPrivKey(privStr string) (*ecdsa.PrivateKey, error) {
@@ -464,6 +561,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 	svcManager.AddService(&LighthouseValidator{})
 	svcManager.AddService(&OpNode{})
 	svcManager.AddService(&OpGeth{})
+	svcManager.AddService(&OpBatcher{})
 
 	// svcManager.AddNativeService(&MevBoostRelay{})
 	// svcManager.AddNativeService(&ClProxy{})
@@ -471,29 +569,34 @@ func setupServices(svcManager *serviceManager, out *output) error {
 	// start all the services
 	svcManager.Start(true)
 
-	// svcManager.GenerateDockerCompose("docker-compose.yaml")
-
-	// print services info
-	fmt.Printf("Services started:\n==================\n")
-	for _, ss := range svcManager.services {
-		sort.Slice(ss.ports, func(i, j int) bool {
-			return ss.ports[i].name < ss.ports[j].name
+	/*
+		svcManager.GenerateDockerCompose("docker-compose.yaml", map[string]string{
+			"playground": "true",
 		})
 
-		ports := []string{}
-		for _, p := range ss.ports {
-			ports = append(ports, fmt.Sprintf("%s: %d", p.name, p.port))
-		}
-		fmt.Printf("- %s (%s)\n", ss.name, strings.Join(ports, ", "))
-	}
-	fmt.Printf("\n")
+		// print services info
+		fmt.Printf("Services started:\n==================\n")
+		for _, ss := range svcManager.services {
+			sort.Slice(ss.ports, func(i, j int) bool {
+				return ss.ports[i].name < ss.ports[j].name
+			})
 
-	fmt.Printf("All services started, press Ctrl+C to stop\n")
+			ports := []string{}
+			for _, p := range ss.ports {
+				ports = append(ports, fmt.Sprintf("%s: %d", p.name, p.port))
+			}
+			fmt.Printf("- %s (%s)\n", ss.name, strings.Join(ports, ", "))
+		}
+		fmt.Printf("\n")
+
+		fmt.Printf("All services started, press Ctrl+C to stop\n")
+	*/
+
 	return nil
 }
 
 // Add this new function to generate docker-compose.yaml
-func (s *serviceManager) GenerateDockerCompose(outputPath string) error {
+func (s *serviceManager) GenerateDockerCompose(outputPath string, labels map[string]string) ([]byte, error) {
 	compose := map[string]interface{}{
 		"version":  "3.8",
 		"services": map[string]interface{}{},
@@ -509,28 +612,33 @@ func (s *serviceManager) GenerateDockerCompose(outputPath string) error {
 
 	for _, svc := range s.services {
 		if svc.srvMng != nil { // Only include services that were created with NewService
-			services[svc.name] = svc.ToDockerComposeService()
+			services[svc.name] = svc.ToDockerComposeService(labels)
 		}
 	}
 
 	yamlData, err := yaml.Marshal(compose)
 	if err != nil {
-		return fmt.Errorf("failed to marshal docker-compose: %w", err)
+		return nil, fmt.Errorf("failed to marshal docker-compose: %w", err)
 	}
 
-	return os.WriteFile(outputPath, yamlData, 0644)
+	return yamlData, nil
 }
 
-func (s *service) ToDockerComposeService() map[string]interface{} {
+func (s *service) ToDockerComposeService(labels map[string]string) map[string]interface{} {
 	service := map[string]interface{}{
 		"image":   fmt.Sprintf("%s:%s", s.imageReal, s.tag),
 		"command": s.args,
 		// Add volume mount for the output directory
 		"volumes": []string{
-			fmt.Sprintf("./%s:/output", s.srvMng.out.dst),
+			fmt.Sprintf("./:/output"),
 		},
 		// Add the ethereum network
 		"networks": []string{"ethereum"},
+		"labels":   labels,
+	}
+
+	if s.entrypoint != "" {
+		service["entrypoint"] = s.entrypoint
 	}
 
 	if len(s.ports) > 0 {
@@ -542,6 +650,32 @@ func (s *service) ToDockerComposeService() map[string]interface{} {
 	}
 
 	return service
+}
+
+type OpBatcher struct{}
+
+func (o *OpBatcher) Artifacts() []artifacts.Release {
+	return []artifacts.Release{}
+}
+
+func (o *OpBatcher) Run(svcManager *serviceManager) {
+	svcManager.
+		NewService("op-batcher").
+		WithImage("op-batcher").
+		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
+		WithTag("v1.11.1").
+		WithArgs(
+			"op-batcher",
+			"--l1-eth-rpc", "http://reth:8545",
+			"--l2-eth-rpc", "http://op-geth:8547",
+			"--rollup-rpc", "http://op-node:8549",
+			"--max-channel-duration=2",
+			"--sub-safety-margin=4",
+			"--poll-interval=1s",
+			"--num-confirmations=1",
+			"--private-key=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+		).
+		Build()
 }
 
 type OpNode struct {
@@ -556,10 +690,11 @@ func (o *OpNode) Run(svcManager *serviceManager) {
 		NewService("op-node").
 		WithImage("op-node").
 		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
-		WithTag("v1.4.1").
+		WithTag("v1.11.0").
 		WithArgs(
-			"--l1", "ws://l1:8546",
-			"--l1.beacon", "http://l1-bn:5052",
+			"op-node",
+			"--l1", "http://reth:8545",
+			"--l1.beacon", "http://beacon_node:3500",
 			"--l1.epoch-poll-interval", "12s",
 			"--l1.http-poll-interval", "6s",
 			"--l2", "http://op-geth:8552",
@@ -602,48 +737,38 @@ func (o *OpGeth) Run(svcManager *serviceManager) {
 		NewService("op-geth").
 		WithImage("geth").
 		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
-		WithTag("v1.101411.8-rc.1").
+		WithTag("v1.101500.0").
+		WithEntrypoint("/bin/sh").
 		WithArgs(
-			"/bin/sh", "-c",
-			strings.Join([]string{
-				// First command: init
-				"geth",
-				"--verbosity", "3",
-				"init",
-				"--datadir", "{{.Dir}}/op-reth",
-				"--state.scheme", "hash",
-				"{{.Dir}}/l2-genesis.json",
-				"&&",
-				// Second command: run
-				"exec geth",
-				"--datadir", "{{.Dir}}/op-reth",
-				"--verbosity", "3",
-				"--http",
-				"--http.corsdomain", "*",
-				"--http.vhosts", "*",
-				"--http.addr", "0.0.0.0",
-				"--http.port", "8547",
-				"--http.api", "web3,debug,eth,txpool,net,engine,miner",
-				"--ws",
-				"--ws.addr", "0.0.0.0",
-				"--ws.port", "8548",
-				"--ws.origins", "*",
-				"--ws.api", "debug,eth,txpool,net,engine,miner",
-				"--syncmode", "full",
-				"--nodiscover",
-				"--maxpeers", "0",
-				// "--networkid", "13",
-				"--rpc.allow-unprotected-txs",
-				"--authrpc.addr", "0.0.0.0",
-				"--authrpc.port", "8552",
-				"--authrpc.vhosts", "*",
-				"--authrpc.jwtsecret", "{{.Dir}}/jwt-secret.txt",
-				"--gcmode", "archive",
-				"--state.scheme", "hash",
-				"--metrics",
-				"--metrics.addr", "0.0.0.0",
-				"--metrics.port", "6061",
-			}, " "),
+			"-c",
+			"geth init --datadir {{.Dir}}/op-reth --state.scheme hash {{.Dir}}/l2-genesis.json && "+
+				"exec geth "+
+				"--datadir {{.Dir}}/op-reth "+
+				"--verbosity 3 "+
+				"--http "+
+				"--http.corsdomain \"*\" "+
+				"--http.vhosts \"*\" "+
+				"--http.addr 0.0.0.0 "+
+				"--http.port 8547 "+
+				"--http.api web3,debug,eth,txpool,net,engine,miner "+
+				"--ws "+
+				"--ws.addr 0.0.0.0 "+
+				"--ws.port 8548 "+
+				"--ws.origins \"*\" "+
+				"--ws.api debug,eth,txpool,net,engine,miner "+
+				"--syncmode full "+
+				"--nodiscover "+
+				"--maxpeers 0 "+
+				"--rpc.allow-unprotected-txs "+
+				"--authrpc.addr 0.0.0.0 "+
+				"--authrpc.port 8552 "+
+				"--authrpc.vhosts \"*\" "+
+				"--authrpc.jwtsecret {{.Dir}}/jwt-secret.txt "+
+				"--gcmode archive "+
+				"--state.scheme hash "+
+				"--metrics "+
+				"--metrics.addr 0.0.0.0 "+
+				"--metrics.port 6061",
 		).
 		WithPort("http", 8547).
 		WithPort("ws", 8548).
@@ -695,6 +820,7 @@ func (r *RethEL) Run(svcManager *serviceManager) {
 			// "--disable-discovery",
 			// http config
 			"--http",
+			"--http.addr", "0.0.0.0",
 			"--http.api", "admin,eth,net,web3",
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
@@ -1284,10 +1410,11 @@ type service struct {
 
 	// release specific configuration
 	// we call this image here but it can also represent a release binary
-	image     string
-	imagePath string
-	tag       string
-	imageReal string
+	image      string
+	imagePath  string
+	tag        string
+	imageReal  string
+	entrypoint string
 }
 
 func (s *serviceManager) NewService(name string) *service {
@@ -1301,6 +1428,11 @@ func (s *service) WithImageReal(image string) *service {
 
 func (s *service) WithImage(image string) *service {
 	s.image = image
+	return s
+}
+
+func (s *service) WithEntrypoint(entrypoint string) *service {
+	s.entrypoint = entrypoint
 	return s
 }
 
@@ -1512,4 +1644,136 @@ func getProposerPayloadDelivered() ([]*mevRCommon.BidTraceV2JSON, error) {
 		return nil, err
 	}
 	return payloadDeliveredList, nil
+}
+
+type DockerRunner struct {
+	out        *output
+	svcManager *serviceManager
+	composeCmd *exec.Cmd
+	ctx        context.Context
+	cancel     context.CancelFunc
+	client     *client.Client
+}
+
+func NewDockerRunner(out *output, svcManager *serviceManager) *DockerRunner {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		panic(err)
+	}
+
+	return &DockerRunner{
+		out:        out,
+		svcManager: svcManager,
+		ctx:        ctx,
+		cancel:     cancel,
+		client:     client,
+	}
+}
+
+func (d *DockerRunner) Stop() {
+	fmt.Println("Stopping all containers")
+
+	// try to stop all the containers from the container list for playground
+	containers, err := d.client.ContainerList(d.ctx, container.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
+	})
+	if err != nil {
+		fmt.Println("Error getting container list:", err)
+		return
+	}
+
+	fmt.Printf("Found %d containers to stop\n", len(containers))
+
+	var wg sync.WaitGroup
+	wg.Add(len(containers))
+
+	for _, cont := range containers {
+		fmt.Println("Stopping container:", cont.ID)
+
+		go func(contID string) {
+			defer wg.Done()
+			if err := d.client.ContainerRemove(context.Background(), contID, container.RemoveOptions{
+				RemoveVolumes: true,
+				RemoveLinks:   false,
+				Force:         true,
+			}); err != nil {
+				fmt.Println("Error removing container:", err)
+			}
+		}(cont.ID)
+	}
+
+	wg.Wait()
+}
+
+func (d *DockerRunner) Run() error {
+	yamlData, err := d.svcManager.GenerateDockerCompose("docker-compose.yaml", map[string]string{
+		"playground": "true",
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
+		return err
+	}
+
+	d.composeCmd = exec.Command("docker-compose", "-f", "./output/docker-compose.yaml", "up", "-d")
+	// d.composeCmd.Stdout = os.Stdout
+	// d.composeCmd.Stderr = os.Stderr
+
+	go func() {
+		fmt.Println("Starting event listener")
+
+		// Ok, track all the events that happen for the playground=true contianers.
+		eventCh, errCh := d.client.Events(context.Background(), events.ListOptions{
+			Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
+		})
+
+		for {
+			select {
+			case event := <-eventCh:
+				fmt.Println("--- event ---")
+				name := event.Actor.Attributes["com.docker.compose.service"]
+				fmt.Println(event.Action, event.Actor.ID, name)
+
+				if event.Action == "start" {
+					// track the container logs
+					go func() {
+						fmt.Println("Starting log listener for", name)
+
+						log_output, err := d.out.LogOutput(name)
+						if err != nil {
+							fmt.Println("Error getting log output:", err)
+							return
+						}
+
+						logs, err := d.client.ContainerLogs(context.Background(), event.Actor.ID, container.LogsOptions{
+							ShowStdout: true,
+							ShowStderr: true,
+							Follow:     true,
+						})
+						if err != nil {
+							fmt.Println("Error getting container logs:", err)
+							return
+						}
+
+						if _, err := stdcopy.StdCopy(log_output, log_output, logs); err != nil {
+							fmt.Println("Error copying logs:", err)
+							return
+						}
+						fmt.Println("DONE")
+					}()
+				}
+			case err := <-errCh:
+				fmt.Println("--- err ---")
+				fmt.Println(err)
+			case <-d.ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return d.composeCmd.Run()
 }
