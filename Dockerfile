@@ -1,17 +1,16 @@
-FROM golang:1.24-alpine
-
+FROM golang:1.24
 WORKDIR /app
 
+# Install build dependencies required for CGo
+RUN apt-get update && apt-get install -y gcc musl-dev
+
+# Copy go mod files first
 COPY go.* ./
+RUN go mod download
+
+# Copy the rest of the source code
 COPY . .
 
-# Build all applications
-RUN go build -o /cl-proxy ./cl-proxy/cmd/main.go && \
-    go build -o /mev-boost-relay ./mev-boost-relay/cmd/main.go 
-
-# Use an argument to determine which binary to run
-ARG SERVICE=remotenv
-ENV SERVICE_BIN=$SERVICE
-
-# Run the selected binary based on the SERVICE argument
-CMD ["sh", "-c", "/$SERVICE_BIN"]
+# Build all applications with CGo enabled
+RUN go build -o /usr/local/bin/cl-proxy ./cl-proxy/cmd/main.go && \
+    go build -o /usr/local/bin/mev-boost-relay ./mev-boost-relay/cmd/main.go

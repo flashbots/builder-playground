@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -40,10 +41,6 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
-
-	"github.com/ferranbt/builder-playground/artifacts"
-	clproxy "github.com/ferranbt/builder-playground/cl-proxy"
-	mevboostrelay "github.com/ferranbt/builder-playground/mev-boost-relay"
 
 	"github.com/hashicorp/go-uuid"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
@@ -82,6 +79,7 @@ var genesisDelayFlag uint64
 var latestForkFlag bool
 var useRethForValidation bool
 var secondaryBuilderPort uint64
+var withOverrides []string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -89,30 +87,6 @@ var rootCmd = &cobra.Command{
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runIt()
-	},
-}
-
-var downloadArtifactsCmd = &cobra.Command{
-	Use:   "download-artifacts",
-	Short: "Download the artifacts",
-	Long:  `Download the artifacts`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		bins, err := artifacts.DownloadArtifacts()
-		if err != nil {
-			return err
-		}
-
-		if validateFlag {
-			for _, path := range bins {
-				// make sure you can run the binary
-				// In this case, both reth and lighthouse have the --version flag
-				cmd := exec.Command(path, "--version")
-				if err := cmd.Run(); err != nil {
-					return fmt.Errorf("error running %s: %v", path, err)
-				}
-			}
-		}
-		return err
 	},
 }
 
@@ -215,12 +189,11 @@ func main() {
 	rootCmd.Flags().BoolVar(&latestForkFlag, "electra", false, "")
 	rootCmd.Flags().BoolVar(&useRethForValidation, "use-reth-for-validation", false, "enable flashbots_validateBuilderSubmissionV* on reth and use them for validation")
 	rootCmd.Flags().Uint64Var(&secondaryBuilderPort, "secondary", 1234, "port to use for the secondary builder")
+	rootCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
 
-	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
 	watchCmd.Flags().Uint64Var(&numBlocksValidate, "validate-num-blocks", 5, "")
 	watchCmd.Flags().BoolVar(&validatePayloads, "validate-payloads", false, "")
 
-	rootCmd.AddCommand(downloadArtifactsCmd)
 	rootCmd.AddCommand(watchCmd)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -274,7 +247,20 @@ func runIt() error {
 		return err
 	}
 
-	dockerRunner := NewDockerRunner(out, svcManager)
+	if err := saveDotGraph(svcManager, out); err != nil {
+		fmt.Println("Error saving dot graph:", err)
+	}
+
+	// generate the overrides map --override mev-boost-relay=./mev-boost-relay
+	overrides := make(map[string]string)
+	for _, override := range withOverrides {
+		parts := strings.Split(override, "=")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid override: %s", override)
+		}
+		overrides[parts[0]] = parts[1]
+	}
+	dockerRunner := NewDockerRunner(out, svcManager, overrides)
 	if err := dockerRunner.Run(); err != nil {
 		return err
 	}
@@ -556,15 +542,31 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		return err
 	}
 
-	svcManager.AddService(&RethEL{})
-	svcManager.AddService(&LighthouseBeaconNode{})
-	svcManager.AddService(&LighthouseValidator{})
-	svcManager.AddService(&OpNode{})
-	svcManager.AddService(&OpGeth{})
-	svcManager.AddService(&OpBatcher{})
+	svcManager.AddService("el", &RethEL{})
+	svcManager.AddService("beacon", &LighthouseBeaconNode{
+		ExecutionNode: "el",
+		MevBoostNode:  "mev-boost",
+	})
+	svcManager.AddService("validator", &LighthouseValidator{
+		BeaconNode: "beacon",
+	})
+	svcManager.AddService("op-node", &OpNode{
+		L1Node:   "el",
+		L1Beacon: "beacon",
+		L2Node:   "op-geth",
+	})
+	svcManager.AddService("op-geth", &OpGeth{})
+	svcManager.AddService("op-batcher", &OpBatcher{
+		L1Node:     "el",
+		L2Node:     "op-geth",
+		RollupNode: "op-node",
+	})
+	svcManager.AddService("mev-boost", &MevBoostRelay{
+		BeaconClient:     "beacon",
+		ValidationServer: "el",
+	})
 
-	// svcManager.AddNativeService(&MevBoostRelay{})
-	// svcManager.AddNativeService(&ClProxy{})
+	// svcManager.AddService(&ClProxy{})
 
 	// start all the services
 	svcManager.Start(true)
@@ -595,80 +597,26 @@ func setupServices(svcManager *serviceManager, out *output) error {
 	return nil
 }
 
-// Add this new function to generate docker-compose.yaml
-func (s *serviceManager) GenerateDockerCompose(outputPath string, labels map[string]string) ([]byte, error) {
-	compose := map[string]interface{}{
-		"version":  "3.8",
-		"services": map[string]interface{}{},
-		// Add networks configuration
-		"networks": map[string]interface{}{
-			"ethereum": map[string]interface{}{
-				"name": "ethereum",
-			},
-		},
-	}
-
-	services := compose["services"].(map[string]interface{})
-
-	for _, svc := range s.services {
-		if svc.srvMng != nil { // Only include services that were created with NewService
-			services[svc.name] = svc.ToDockerComposeService(labels)
-		}
-	}
-
-	yamlData, err := yaml.Marshal(compose)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal docker-compose: %w", err)
-	}
-
-	return yamlData, nil
+func Connect(service, port string) string {
+	return fmt.Sprintf(`{{Service "%s" "%s"}}`, service, port)
 }
 
-func (s *service) ToDockerComposeService(labels map[string]string) map[string]interface{} {
-	service := map[string]interface{}{
-		"image":   fmt.Sprintf("%s:%s", s.imageReal, s.tag),
-		"command": s.args,
-		// Add volume mount for the output directory
-		"volumes": []string{
-			fmt.Sprintf("./:/output"),
-		},
-		// Add the ethereum network
-		"networks": []string{"ethereum"},
-		"labels":   labels,
-	}
-
-	if s.entrypoint != "" {
-		service["entrypoint"] = s.entrypoint
-	}
-
-	if len(s.ports) > 0 {
-		ports := []string{}
-		for _, p := range s.ports {
-			ports = append(ports, fmt.Sprintf("%d:%d", p.port, p.port))
-		}
-		service["ports"] = ports
-	}
-
-	return service
+type OpBatcher struct {
+	L1Node     string
+	L2Node     string
+	RollupNode string
 }
 
-type OpBatcher struct{}
-
-func (o *OpBatcher) Artifacts() []artifacts.Release {
-	return []artifacts.Release{}
-}
-
-func (o *OpBatcher) Run(svcManager *serviceManager) {
-	svcManager.
-		NewService("op-batcher").
+func (o *OpBatcher) Run(service *service) {
+	service.
 		WithImage("op-batcher").
 		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
 		WithTag("v1.11.1").
+		WithEntrypoint("op-batcher").
 		WithArgs(
-			"op-batcher",
-			"--l1-eth-rpc", "http://reth:8545",
-			"--l2-eth-rpc", "http://op-geth:8547",
-			"--rollup-rpc", "http://op-node:8549",
+			"--l1-eth-rpc", Connect(o.L1Node, "http"),
+			"--l2-eth-rpc", Connect(o.L1Node, "http"),
+			"--rollup-rpc", Connect(o.RollupNode, "http"),
 			"--max-channel-duration=2",
 			"--sub-safety-margin=4",
 			"--poll-interval=1s",
@@ -678,26 +626,30 @@ func (o *OpBatcher) Run(svcManager *serviceManager) {
 		Build()
 }
 
+// NodeRef is a connection reference from one service to another
+type NodeRef struct {
+	Service   string
+	PortLabel string
+}
+
 type OpNode struct {
+	L1Node   string
+	L1Beacon string
+	L2Node   string
 }
 
-func (o *OpNode) Artifacts() []artifacts.Release {
-	return []artifacts.Release{}
-}
-
-func (o *OpNode) Run(svcManager *serviceManager) {
-	svcManager.
-		NewService("op-node").
+func (o *OpNode) Run(service *service) {
+	service.
 		WithImage("op-node").
 		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.11.0").
+		WithEntrypoint("op-node").
 		WithArgs(
-			"op-node",
-			"--l1", "http://reth:8545",
-			"--l1.beacon", "http://beacon_node:3500",
+			"--l1", Connect(o.L1Node, "http"),
+			"--l1.beacon", Connect(o.L1Beacon, "http"),
 			"--l1.epoch-poll-interval", "12s",
 			"--l1.http-poll-interval", "6s",
-			"--l2", "http://op-geth:8552",
+			"--l2", Connect(o.L2Node, "authrpc"),
 			"--l2.jwt-secret", "{{.Dir}}/jwt-secret.txt",
 			"--sequencer.enabled",
 			"--sequencer.l1-confs", "0",
@@ -705,36 +657,27 @@ func (o *OpNode) Run(svcManager *serviceManager) {
 			"--p2p.sequencer.key", "8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
 			"--rollup.config", "{{.Dir}}/rollup.json",
 			"--rpc.addr", "0.0.0.0",
-			"--rpc.port", "8549",
+			"--rpc.port", `{{Port "http" 8549}}`,
 			"--p2p.listen.ip", "0.0.0.0",
-			"--p2p.listen.tcp", "9003",
-			"--p2p.listen.udp", "9003",
+			"--p2p.listen.tcp", `{{Port "p2p" 9003}}`,
+			"--p2p.listen.udp", `{{Port "p2p" 9003}}`,
 			"--p2p.scoring.peers", "light",
 			"--p2p.ban.peers", "true",
-			// "--p2p.priv.path", "{{.Dir}}/p2p-node-key.txt",
 			"--metrics.enabled",
 			"--metrics.addr", "0.0.0.0",
-			"--metrics.port", "7300",
+			"--metrics.port", `{{Port "metrics" 7300}}`,
 			"--pprof.enabled",
 			"--rpc.enable-admin",
 			"--safedb.path", "{{.Dir}}/db",
 		).
-		WithPort("rpc", 8549).
-		WithPort("p2p", 9003).
-		WithPort("metrics", 7300).
 		Build()
 }
 
 type OpGeth struct {
 }
 
-func (o *OpGeth) Artifacts() []artifacts.Release {
-	return []artifacts.Release{}
-}
-
-func (o *OpGeth) Run(svcManager *serviceManager) {
-	svcManager.
-		NewService("op-geth").
+func (o *OpGeth) Run(service *service) {
+	service.
 		WithImage("geth").
 		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101500.0").
@@ -749,11 +692,11 @@ func (o *OpGeth) Run(svcManager *serviceManager) {
 				"--http.corsdomain \"*\" "+
 				"--http.vhosts \"*\" "+
 				"--http.addr 0.0.0.0 "+
-				"--http.port 8547 "+
+				"--http.port "+`{{Port "http" 8545}} `+
 				"--http.api web3,debug,eth,txpool,net,engine,miner "+
 				"--ws "+
 				"--ws.addr 0.0.0.0 "+
-				"--ws.port 8548 "+
+				"--ws.port "+`{{Port "ws" 8546}} `+
 				"--ws.origins \"*\" "+
 				"--ws.api debug,eth,txpool,net,engine,miner "+
 				"--syncmode full "+
@@ -761,52 +704,28 @@ func (o *OpGeth) Run(svcManager *serviceManager) {
 				"--maxpeers 0 "+
 				"--rpc.allow-unprotected-txs "+
 				"--authrpc.addr 0.0.0.0 "+
-				"--authrpc.port 8552 "+
+				"--authrpc.port "+`{{Port "authrpc" 8551}} `+
 				"--authrpc.vhosts \"*\" "+
 				"--authrpc.jwtsecret {{.Dir}}/jwt-secret.txt "+
 				"--gcmode archive "+
 				"--state.scheme hash "+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
-				"--metrics.port 6061",
+				"--metrics.port "+`{{Port "metrics" 6061}}`,
 		).
-		WithPort("http", 8547).
-		WithPort("ws", 8548).
-		WithPort("authrpc", 8552).
-		WithPort("metrics", 6061).
 		Build()
 }
 
 type RethEL struct {
 }
 
-func (r *RethEL) Artifacts() []artifacts.Release {
-	return []artifacts.Release{
-		{
-			Name:    "reth",
-			Org:     "paradigmxyz",
-			Version: "v1.2.0",
-			Arch: func(goos, goarch string) string {
-				if goos == "linux" {
-					return "x86_64-unknown-linux-gnu"
-				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-					return "aarch64-apple-darwin"
-				} else if goos == "darwin" && goarch == "amd64" {
-					return "x86_64-apple-darwin"
-				}
-				return ""
-			},
-		},
-	}
-}
-
-func (r *RethEL) Run(svcManager *serviceManager) {
+func (r *RethEL) Run(svc *service) {
 	// start the reth el client
-	svcManager.
-		NewService("reth").
+	svc.
 		WithImage("reth").
 		WithImageReal("ghcr.io/paradigmxyz/reth").
 		WithTag("v1.2.0").
+		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",
 			"--chain", "{{.Dir}}/genesis.json",
@@ -816,14 +735,14 @@ func (r *RethEL) Run(svcManager *serviceManager) {
 			// p2p config. Use a default discovery key and disable public discovery and connections
 			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
 			"--addr", "127.0.0.1",
-			"--port", "30303",
+			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
 			"--http",
 			"--http.addr", "0.0.0.0",
 			"--http.api", "admin,eth,net,web3",
-			"--http.port", "8545",
-			"--authrpc.port", "8551",
+			"--http.port", `{{Port "http" 8545}}`,
+			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
@@ -833,36 +752,15 @@ func (r *RethEL) Run(svcManager *serviceManager) {
 		If(useRethForValidation, func(s *service) *service {
 			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
 		}).
-		WithPort("rpc", 30303).
-		WithPort("http", 8545).
-		WithPort("authrpc", 8551).
 		Build()
 }
 
 type LighthouseBeaconNode struct {
+	ExecutionNode string
+	MevBoostNode  string
 }
 
-func (l *LighthouseBeaconNode) Artifacts() []artifacts.Release {
-	return []artifacts.Release{
-		{
-			Name:    "lighthouse",
-			Org:     "sigp",
-			Version: "v7.0.0-beta.0",
-			Arch: func(goos, goarch string) string {
-				if goos == "linux" {
-					return "x86_64-unknown-linux-gnu"
-				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-					return "x86_64-apple-darwin"
-				} else if goos == "darwin" && goarch == "amd64" {
-					return "x86_64-apple-darwin"
-				}
-				return ""
-			},
-		},
-	}
-}
-
-func (l *LighthouseBeaconNode) Run(svcManager *serviceManager) {
+func (l *LighthouseBeaconNode) Run(svc *service) {
 	/*
 		// TODO: Figure out how to do this
 			lightHouseVersion := func() string {
@@ -899,13 +797,12 @@ func (l *LighthouseBeaconNode) Run(svcManager *serviceManager) {
 	lightHouseVersion := "v5.3"
 
 	// start the beacon node
-	svcManager.
-		NewService("beacon_node").
+	svc.
 		WithImage("lighthouse").
 		WithImageReal("sigp/lighthouse").
 		WithTag("v7.0.0-beta.0").
+		WithEntrypoint("lighthouse").
 		WithArgs(
-			"lighthouse",
 			"bn",
 			"--datadir", "{{.Dir}}/data_beacon_node",
 			"--testnet-dir", "{{.Dir}}/testnet",
@@ -913,22 +810,19 @@ func (l *LighthouseBeaconNode) Run(svcManager *serviceManager) {
 			"--disable-peer-scoring",
 			"--staking",
 			"--enr-address", "127.0.0.1",
-			"--enr-udp-port", "9000",
-			"--enr-tcp-port", "9000",
-			"--enr-quic-port", "9100",
-			"--port", "9000",
-			"--quic-port", "9100",
+			"--enr-udp-port", `{{Port "p2p" 9000}}`,
+			"--enr-tcp-port", `{{Port "p2p" 9000}}`,
+			"--enr-quic-port", `{{Port "quic-p2p" 9100}}`,
+			"--port", `{{Port "p2p" 9000}}`,
+			"--quic-port", `{{Port "quic-p2p" 9100}}`,
 			"--http",
-			"--http-port", "3500",
+			"--http-port", `{{Port "http" 3500}}`,
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
 			"--target-peers", "0",
-			"--execution-endpoint", "http://reth:8551",
+			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
-			"--builder", "http://localhost:5555",
-			"--builder-fallback-epochs-since-finalization", "0",
-			"--builder-fallback-disable-checks",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 		).
@@ -946,48 +840,36 @@ func (l *LighthouseBeaconNode) Run(svcManager *serviceManager) {
 				// For versions >= v5.3.0, ----suggested-fee-recipient is apparently now required for non-validator nodes as well
 				return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
 			},
-		).
-		WithPort("http", 3500).
-		Build()
+		)
+
+	if l.MevBoostNode != "" {
+		svc.WithArgs(
+			"--builder", Connect(l.MevBoostNode, "http"),
+			"--builder-fallback-epochs-since-finalization", "0",
+			"--builder-fallback-disable-checks",
+		)
+	}
+
+	svc.Build()
 }
 
 type LighthouseValidator struct {
+	BeaconNode string
 }
 
-func (l *LighthouseValidator) Artifacts() []artifacts.Release {
-	return []artifacts.Release{
-		{
-			Name:    "lighthouse",
-			Org:     "sigp",
-			Version: "v7.0.0-beta.0",
-			Arch: func(goos, goarch string) string {
-				if goos == "linux" {
-					return "x86_64-unknown-linux-gnu"
-				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-					return "x86_64-apple-darwin"
-				} else if goos == "darwin" && goarch == "amd64" {
-					return "x86_64-apple-darwin"
-				}
-				return ""
-			},
-		},
-	}
-}
-
-func (l *LighthouseValidator) Run(svcManager *serviceManager) {
+func (l *LighthouseValidator) Run(service *service) {
 	// start validator client
-	svcManager.
-		NewService("validator").
+	service.
 		WithImage("lighthouse").
 		WithImageReal("sigp/lighthouse").
 		WithTag("v7.0.0-beta.0").
+		WithEntrypoint("lighthouse").
 		WithArgs(
-			"lighthouse",
 			"vc",
 			"--datadir", "{{.Dir}}/data_validator",
 			"--testnet-dir", "{{.Dir}}/testnet",
 			"--init-slashing-protection",
-			"--beacon-nodes", "http://beacon_node:3500",
+			"--beacon-nodes", Connect(l.BeaconNode, "http"),
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 			"--builder-proposals",
 			"--prefer-builder-proposals",
@@ -995,17 +877,24 @@ func (l *LighthouseValidator) Run(svcManager *serviceManager) {
 }
 
 type ClProxy struct {
+	PrimaryBuilder   string
+	SecondaryBuilder string
 }
 
-func (c *ClProxy) Service() *service {
-	return &service{
-		name: "cl-proxy",
-		ports: []*port{
-			{name: "jsonrpc", port: 5656},
-		},
-	}
+func (c *ClProxy) Run(service *service) {
+	service.
+		WithImage("cl-proxy").
+		WithImageReal("ghcr.io/flashbots/playground/utils").
+		WithTag("latest").
+		WithEntrypoint("cl-proxy").
+		WithArgs(
+			"--primary-builder", Connect(c.PrimaryBuilder, "authrpc"),
+			"--secondary-builder", Connect(c.SecondaryBuilder, "authrpc"),
+			"--port", `{{Port "authrpc" 5656}}`,
+		).Build()
 }
 
+/*
 func (c *ClProxy) Run(out *output, ctx context.Context) error {
 	// Start the cl proxy
 	cfg := clproxy.DefaultConfig()
@@ -1025,26 +914,41 @@ func (c *ClProxy) Run(out *output, ctx context.Context) error {
 	}
 	return clproxy.Run()
 }
+*/
 
 type MevBoostRelay struct {
+	BeaconClient     string
+	ValidationServer string
 }
 
-func (m *MevBoostRelay) Service() *service {
-	return &service{
-		name: "mev-boost-relay",
-		ports: []*port{
-			{name: "http", port: 5555},
-		},
+func (m *MevBoostRelay) Run(service *service) {
+	srv := service.
+		WithImage("mev-boost-relay").
+		WithImageReal("ghcr.io/flashbots/playground/utils").
+		WithTag("latest").
+		WithEntrypoint("mev-boost-relay").
+		WithArgs(
+			"--api-listen-addr", "0.0.0.0",
+			"--api-listen-port", `{{Port "http" 5555}}`,
+			"--beacon-client-addr", Connect(m.BeaconClient, "http"),
+		)
+
+	if m.ValidationServer != "" {
+		srv.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
 	}
+	srv.Build()
 }
 
+/*
 func (m *MevBoostRelay) Run(out *output, ctx context.Context) error {
 	cfg := mevboostrelay.DefaultConfig()
 	var err error
 	if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
 		return err
 	}
-	cfg.UseRethForValidation = useRethForValidation
+	if useRethForValidation {
+		cfg.ValidationServerAddr = "http://localhost:8545"
+	}
 	relay, err := mevboostrelay.New(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create relay: %w", err)
@@ -1052,6 +956,7 @@ func (m *MevBoostRelay) Run(out *output, ctx context.Context) error {
 
 	return relay.Start()
 }
+*/
 
 type output struct {
 	dst string
@@ -1228,9 +1133,6 @@ type serviceManager struct {
 	// list of services to start
 	services []*service
 
-	// list of available artifacts to download
-	artifacts []artifacts.Release
-
 	out     *output
 	handles []*handle
 
@@ -1243,7 +1145,7 @@ type serviceManager struct {
 }
 
 func newServiceManager(out *output) *serviceManager {
-	return &serviceManager{out: out, handles: []*handle{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5), artifacts: []artifacts.Release{}}
+	return &serviceManager{out: out, handles: []*handle{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5)}
 }
 
 func (s *serviceManager) emitError() {
@@ -1258,22 +1160,15 @@ func (s *serviceManager) Build(ss *service) {
 }
 
 type Service interface {
-	Run(svcManager *serviceManager)
-	Artifacts() []artifacts.Release
+	Run(service *service)
 }
 
-type NativeService interface {
-	Run(out *output, ctx context.Context) error
-	Service() *service
+func (s *serviceManager) AddService(name string, srv Service) {
+	service := s.NewService(name)
+	srv.Run(service)
 }
 
-func (s *serviceManager) AddService(srv Service) {
-	// add the artifacts to the list of available artifacts
-	s.artifacts = append(s.artifacts, srv.Artifacts()...)
-
-	srv.Run(s)
-}
-
+/*
 func (s *serviceManager) AddNativeService(srv NativeService) {
 	s.services = append(s.services, srv.Service())
 
@@ -1283,48 +1178,36 @@ func (s *serviceManager) AddNativeService(srv NativeService) {
 		}
 	}()
 }
-
-func (s *serviceManager) downloadArtifact(ss *service) error {
-	if ss.srvMng == nil {
-		return nil
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(homeDir, ".playground")
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(customHomeDir, 0755); err != nil {
-		return err
-	}
-
-	for _, a := range s.artifacts {
-		if a.Name == ss.image {
-			a.Version = ss.tag
-			binPath, err := artifacts.DownloadRelease(customHomeDir, a)
-			if err != nil {
-				panic(err)
-			}
-			ss.imagePath = binPath
-			return nil
-		}
-	}
-	return fmt.Errorf("artifact not found: %s", ss.image)
-}
+*/
 
 func (s *serviceManager) Start(dryRun bool) {
 	// first, try to download all the artifacts
-	/*
-		for _, ss := range s.services {
-			if err := s.downloadArtifact(ss); err != nil {
-				panic(err)
+	// figure out if all the port dependencies are met from the service description
+	servicesMap := make(map[string]*service)
+	for _, ss := range s.services {
+		servicesMap[ss.name] = ss
+	}
+
+	for _, ss := range s.services {
+		for _, nodeRef := range ss.nodeRefs {
+			targetService, ok := servicesMap[nodeRef.Service]
+			if !ok {
+				panic(fmt.Sprintf("service %s depends on service %s, but it is not defined", ss.name, nodeRef.Service))
+			}
+
+			found := false
+			for _, targetPort := range targetService.ports {
+				if targetPort.name == nodeRef.PortLabel {
+					found = true
+					break
+				}
+			}
+			if !found {
+				fmt.Println(targetService.ports)
+				panic(fmt.Sprintf("service %s depends on service %s, but it does not expose port %s", ss.name, nodeRef.Service, nodeRef.PortLabel))
 			}
 		}
-	*/
+	}
 
 	if dryRun {
 		return
@@ -1399,14 +1282,21 @@ func (s *serviceManager) StopAndWait() {
 type port struct {
 	name string
 	port int
+
+	// this is populated by the service manager
+	hostPort int
 }
 
 type service struct {
 	name string
 	args []string
 
-	ports  []*port
+	ports    []*port
+	nodeRefs []*NodeRef
+
 	srvMng *serviceManager
+
+	override string
 
 	// release specific configuration
 	// we call this image here but it can also represent a release binary
@@ -1417,8 +1307,17 @@ type service struct {
 	entrypoint string
 }
 
+func (s *service) GetPort(name string) *port {
+	for _, p := range s.ports {
+		if p.name == name {
+			return p
+		}
+	}
+	panic(fmt.Sprintf("BUG: port %s not found for service %s", name, s.name))
+}
+
 func (s *serviceManager) NewService(name string) *service {
-	return &service{name: name, args: []string{}, srvMng: s}
+	return &service{name: name, args: []string{}, srvMng: s, ports: []*port{}, nodeRefs: []*NodeRef{}}
 }
 
 func (s *service) WithImageReal(image string) *service {
@@ -1442,6 +1341,16 @@ func (s *service) WithTag(tag string) *service {
 }
 
 func (s *service) WithPort(name string, portNumber int) *service {
+	// add the port if not already present with the same name.
+	// if preset with the same name, they must have same port number
+	for _, p := range s.ports {
+		if p.name == name {
+			if p.port != portNumber {
+				panic(fmt.Sprintf("port %s already defined with different port number", name))
+			}
+			return s
+		}
+	}
 	s.ports = append(s.ports, &port{name: name, port: portNumber})
 	return s
 }
@@ -1450,9 +1359,16 @@ func (s *service) WithArgs(args ...string) *service {
 	// use template substitution to load constants
 	tmplVars := s.tmplVars()
 	for i, arg := range args {
-		args[i] = applyTemplate(arg, tmplVars)
+		var port []port
+		var nodeRef []NodeRef
+		args[i], port, nodeRef = applyTemplate(arg, tmplVars)
+		for _, p := range port {
+			s.WithPort(p.name, p.port)
+		}
+		for _, n := range nodeRef {
+			s.nodeRefs = append(s.nodeRefs, &n)
+		}
 	}
-
 	s.args = append(s.args, args...)
 	return s
 }
@@ -1477,7 +1393,8 @@ func (s *service) WithReplacementArgs(args ...string) *service {
 	// use template substitution to load constants
 	tmplVars := s.tmplVars()
 	for i, arg := range args {
-		args[i] = applyTemplate(arg, tmplVars)
+		// skip refs since we do not do them yet on replacement args
+		args[i], _, _ = applyTemplate(arg, tmplVars)
 	}
 
 	if i := slices.Index(s.args, args[0]); i != -1 {
@@ -1499,8 +1416,34 @@ func (s *service) Build() {
 	s.srvMng.Build(s)
 }
 
-func applyTemplate(templateStr string, input interface{}) string {
-	tpl, err := template.New("").Parse(templateStr)
+func applyTemplate(templateStr string, input interface{}) (string, []port, []NodeRef) {
+	var portRef []port
+	var nodeRef []NodeRef
+	// ther can be multiple port and nodere because in the case of op-geth we pass a whole string as nested command args
+
+	funcs := template.FuncMap{
+		"Service": func(name string, portLabel string) string {
+			if name == "" {
+				panic("BUG: service name cannot be empty")
+			}
+			if portLabel == "" {
+				panic("BUG: port label cannot be empty")
+			}
+
+			// for the first pass of service we do not do anything, keep it as it is for the followup pass
+			// here we only keep the references to the services to be checked if they are valid and an be resolved
+			// later on for the runtime we will do the resolve stage.
+			// TODO: this will get easier when we move away from templates and use interface and structs.
+			nodeRef = append(nodeRef, NodeRef{Service: name, PortLabel: portLabel})
+			return fmt.Sprintf(`{{Service "%s" "%s"}}`, name, portLabel)
+		},
+		"Port": func(name string, defaultPort int) string {
+			portRef = append(portRef, port{name: name, port: defaultPort})
+			return fmt.Sprintf(`{{Port "%s" %d}}`, name, defaultPort)
+		},
+	}
+
+	tpl, err := template.New("").Funcs(funcs).Parse(templateStr)
 	if err != nil {
 		panic(fmt.Sprintf("BUG: failed to parse template, err: %s", err))
 	}
@@ -1509,7 +1452,12 @@ func applyTemplate(templateStr string, input interface{}) string {
 	if err := tpl.Execute(&out, input); err != nil {
 		panic(fmt.Sprintf("BUG: failed to execute template, err: %s", err))
 	}
-	return out.String()
+	res := out.String()
+
+	// escape quotes
+	res = strings.ReplaceAll(res, `&#34;`, `"`)
+
+	return res, portRef, nodeRef
 }
 
 func convert(config *params.BeaconChainConfig) ([]byte, error) {
@@ -1647,15 +1595,18 @@ func getProposerPayloadDelivered() ([]*mevRCommon.BidTraceV2JSON, error) {
 }
 
 type DockerRunner struct {
-	out        *output
-	svcManager *serviceManager
-	composeCmd *exec.Cmd
-	ctx        context.Context
-	cancel     context.CancelFunc
-	client     *client.Client
+	out           *output
+	svcManager    *serviceManager
+	composeCmd    *exec.Cmd
+	ctx           context.Context
+	cancel        context.CancelFunc
+	client        *client.Client
+	reservedPorts map[int]bool
+	overrides     map[string]string
+	handles       []*exec.Cmd
 }
 
-func NewDockerRunner(out *output, svcManager *serviceManager) *DockerRunner {
+func NewDockerRunner(out *output, svcManager *serviceManager, overrides map[string]string) *DockerRunner {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -1664,11 +1615,14 @@ func NewDockerRunner(out *output, svcManager *serviceManager) *DockerRunner {
 	}
 
 	return &DockerRunner{
-		out:        out,
-		svcManager: svcManager,
-		ctx:        ctx,
-		cancel:     cancel,
-		client:     client,
+		out:           out,
+		svcManager:    svcManager,
+		ctx:           ctx,
+		cancel:        cancel,
+		client:        client,
+		reservedPorts: map[int]bool{},
+		overrides:     overrides,
+		handles:       []*exec.Cmd{},
 	}
 }
 
@@ -1705,12 +1659,207 @@ func (d *DockerRunner) Stop() {
 	}
 
 	wg.Wait()
+
+	// stop all the handles
+	for _, handle := range d.handles {
+		handle.Process.Kill()
+	}
+}
+
+func (d *DockerRunner) reservePort(startPort int) int {
+	for i := startPort; i < startPort+1000; i++ {
+		if _, ok := d.reservedPorts[i]; ok {
+			continue
+		}
+		// make a net.Listen on the port to see if it is aavailable
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", i))
+		if err != nil {
+			continue
+		}
+		listener.Close()
+		d.reservedPorts[i] = true
+		return i
+	}
+	panic("BUG: could not reserve a port")
+}
+
+func (d *DockerRunner) getService(name string) *service {
+	for _, svc := range d.svcManager.services {
+		if svc.name == name {
+			return svc
+		}
+	}
+	return nil
+}
+
+func (d *DockerRunner) applyTemplate(s *service) []string {
+	funcs := template.FuncMap{
+		"Service": func(name string, portLabel string) string {
+			// find the service and the port that it resolves for that label
+			svc := d.getService(name)
+			if svc == nil {
+				panic(fmt.Sprintf("BUG: service %s not found", name))
+			}
+			port := svc.GetPort(portLabel)
+			if port == nil {
+				panic(fmt.Sprintf("BUG: port label %s not found for service %s", portLabel, name))
+			}
+
+			if s.override == "" {
+				// service is running inside docker
+				if svc.override == "" {
+					// use the DNS discovery of docker compose to connect to the service and the docker port
+					return fmt.Sprintf("http://%s:%d", svc.name, port.port)
+				}
+				// the service is going to be running with the host port in the host machine
+				// use host.docker.internal to connect to it.
+				return fmt.Sprintf("http://host.docker.internal:%d", port.hostPort)
+			} else {
+				// either if the target service is running inside docker or outside, it is exposed in localhost
+				// with the host port
+				return fmt.Sprintf("http://localhost:%d", port.hostPort)
+			}
+		},
+		"Port": func(name string, defaultPort int) int {
+			if s.override == "" {
+				// running inside docker, return the port
+				return defaultPort
+			}
+			// return the host port
+			return s.GetPort(name).hostPort
+		},
+	}
+
+	var argsResult []string
+	for _, arg := range s.args {
+		tpl, err := template.New("").Funcs(funcs).Parse(arg)
+		if err != nil {
+			panic(fmt.Sprintf("BUG: failed to parse template, err: %s, arg: %s", err, arg))
+		}
+
+		var out strings.Builder
+		if err := tpl.Execute(&out, nil); err != nil {
+			panic(fmt.Sprintf("BUG: failed to execute template, err: %s, arg: %s", err, arg))
+		}
+		argsResult = append(argsResult, out.String())
+	}
+
+	return argsResult
+}
+
+func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{} {
+	// apply the template again on the arguments to figure out the connections
+	// at this point all of them are valid, we just have to resolve them again. We assume for now
+	// everyone is going to be on docker at the same network.
+	args := d.applyTemplate(s)
+
+	service := map[string]interface{}{
+		"image":   fmt.Sprintf("%s:%s", s.imageReal, s.tag),
+		"command": args,
+		// Add volume mount for the output directory
+		"volumes": []string{
+			fmt.Sprintf("./:/output"),
+		},
+		// Add the ethereum network
+		"networks": []string{"ethereum"},
+		"labels":   map[string]string{"playground": "true"},
+	}
+
+	if s.entrypoint != "" {
+		service["entrypoint"] = s.entrypoint
+	}
+
+	if len(s.ports) > 0 {
+		ports := []string{}
+		for _, p := range s.ports {
+			ports = append(ports, fmt.Sprintf("%d:%d", p.hostPort, p.port))
+		}
+		service["ports"] = ports
+	}
+
+	return service
+}
+
+func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
+	// First, figure out if the overrides are valid, they might reference a service that does not exist.
+	for name, val := range d.overrides {
+		svc := d.getService(name)
+		if svc == nil {
+			return nil, fmt.Errorf("service %s from override not found", name)
+		}
+		svc.override = val
+	}
+
+	compose := map[string]interface{}{
+		"version":  "3.8",
+		"services": map[string]interface{}{},
+		// Add networks configuration
+		"networks": map[string]interface{}{
+			"ethereum": map[string]interface{}{
+				"name": "ethereum",
+			},
+		},
+	}
+
+	services := compose["services"].(map[string]interface{})
+
+	// for each of the ports, reserve a port on the host machine
+	for _, svc := range d.svcManager.services {
+		for _, port := range svc.ports {
+			port.hostPort = d.reservePort(port.port)
+		}
+	}
+
+	for _, svc := range d.svcManager.services {
+		if svc.srvMng != nil { // Only include services that were created with NewService
+			// resolve the template again for the variables because things Connect need to be resolved now.
+			if svc.override != "" {
+				// skip services that are going to be launched with an override
+				continue
+			}
+			services[svc.name] = d.ToDockerComposeService(svc)
+		}
+	}
+
+	yamlData, err := yaml.Marshal(compose)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal docker-compose: %w", err)
+	}
+
+	return yamlData, nil
+}
+
+func (d *DockerRunner) runOnHost(ss *service) {
+	// we have to apply the template to the args like we do in docker-compose services
+	args := d.applyTemplate(ss)
+
+	fmt.Println("Running", ss.override, args)
+	cmd := exec.Command(ss.override, args...)
+
+	logOutput, err := d.out.LogOutput(ss.name)
+	if err != nil {
+		// this should not happen, log it
+		fmt.Println("Error creating log output for", ss.name)
+		logOutput = os.Stdout
+	}
+
+	// first thing to output is the command itself
+	fmt.Fprint(logOutput, strings.Join(ss.args, " ")+"\n\n")
+
+	cmd.Stdout = logOutput
+	cmd.Stderr = logOutput
+
+	go func() {
+		if err := cmd.Run(); err != nil {
+			panic(err)
+		}
+	}()
+
+	d.handles = append(d.handles, cmd)
 }
 
 func (d *DockerRunner) Run() error {
-	yamlData, err := d.svcManager.GenerateDockerCompose("docker-compose.yaml", map[string]string{
-		"playground": "true",
-	})
+	yamlData, err := d.GenerateDockerCompose()
 	if err != nil {
 		return err
 	}
@@ -1720,8 +1869,15 @@ func (d *DockerRunner) Run() error {
 	}
 
 	d.composeCmd = exec.Command("docker-compose", "-f", "./output/docker-compose.yaml", "up", "-d")
-	// d.composeCmd.Stdout = os.Stdout
-	// d.composeCmd.Stderr = os.Stderr
+
+	// in parallel start the services that need to be overriten and ran on host
+	go func() {
+		for _, svc := range d.svcManager.services {
+			if svc.override != "" {
+				d.runOnHost(svc)
+			}
+		}
+	}()
 
 	go func() {
 		fmt.Println("Starting event listener")
@@ -1776,4 +1932,55 @@ func (d *DockerRunner) Run() error {
 	}()
 
 	return d.composeCmd.Run()
+}
+
+func (s *serviceManager) GenerateDotGraph() string {
+	var b strings.Builder
+	b.WriteString("digraph G {\n")
+	b.WriteString("  rankdir=LR;\n")
+	b.WriteString("  node [shape=record];\n\n")
+
+	// Create a map of services for easy lookup
+	servicesMap := make(map[string]*service)
+	for _, ss := range s.services {
+		servicesMap[ss.name] = ss
+	}
+
+	// Add nodes (services) with their ports as labels
+	for _, ss := range s.services {
+		var ports []string
+		for _, p := range ss.ports {
+			ports = append(ports, fmt.Sprintf("%s:%d", p.name, p.port))
+		}
+		portLabel := ""
+		if len(ports) > 0 {
+			portLabel = "|{" + strings.Join(ports, "|") + "}"
+		}
+		// Replace hyphens with underscores for DOT compatibility
+		nodeName := strings.ReplaceAll(ss.name, "-", "_")
+		b.WriteString(fmt.Sprintf("  %s [label=\"%s%s\"];\n", nodeName, ss.name, portLabel))
+	}
+
+	b.WriteString("\n")
+
+	// Add edges (connections between services)
+	for _, ss := range s.services {
+		sourceNode := strings.ReplaceAll(ss.name, "-", "_")
+		for _, ref := range ss.nodeRefs {
+			targetNode := strings.ReplaceAll(ref.Service, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -> %s [label=\"%s\"];\n",
+				sourceNode,
+				targetNode,
+				ref.PortLabel,
+			))
+		}
+	}
+
+	b.WriteString("}\n")
+	return b.String()
+}
+
+func saveDotGraph(svcManager *serviceManager, out *output) error {
+	dotGraph := svcManager.GenerateDotGraph()
+	return out.WriteFile("services.dot", dotGraph)
 }
