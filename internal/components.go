@@ -17,12 +17,12 @@ type RollupBoost struct {
 func (r *RollupBoost) Run(service *service) {
 	service.
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("0.3rc3").
+		WithTag("0.4rc1").
 		WithArgs(
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
-			"--l2-jwt-token", "{{.Dir}}/jwtsecret",
-			"--l2-url", Connect(r.ELNode, "http"),
-			"--builder-jwt-token", "{{.Dir}}/jwtsecret",
+			"--l2-jwt-path", "/output/jwtsecret",
+			"--l2-url", Connect(r.ELNode, "authrpc"),
+			"--builder-jwt-path", "/output/jwtsecret", // TODO: Fix this
 			"--builder-url", r.Builder,
 		)
 }
@@ -73,7 +73,7 @@ func (o *OpNode) Run(service *service) {
 			"--l1.epoch-poll-interval", "12s",
 			"--l1.http-poll-interval", "6s",
 			"--l2", Connect(o.L2Node, "authrpc"),
-			"--l2.jwt-secret", "{{.Dir}}/jwt-secret.txt",
+			"--l2.jwt-secret", "{{.Dir}}/jwtsecret",
 			"--sequencer.enabled",
 			"--sequencer.l1-confs", "0",
 			"--verifier.l1-confs", "0",
@@ -127,7 +127,7 @@ func (o *OpGeth) Run(service *service) {
 				"--authrpc.addr 0.0.0.0 "+
 				"--authrpc.port "+`{{Port "authrpc" 8551}} `+
 				"--authrpc.vhosts \"*\" "+
-				"--authrpc.jwtsecret {{.Dir}}/jwt-secret.txt "+
+				"--authrpc.jwtsecret {{.Dir}}/jwtsecret "+
 				"--gcmode archive "+
 				"--state.scheme hash "+
 				"--metrics "+

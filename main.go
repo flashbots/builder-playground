@@ -76,7 +76,9 @@ func runIt(recipe internal.Recipe) error {
 	}
 
 	svcManager := recipe.Apply(artifacts)
-	svcManager.Validate()
+	if err := svcManager.Validate(); err != nil {
+		return fmt.Errorf("failed to validate manifest: %w", err)
+	}
 
 	// generate the dot graph
 	dotGraph := svcManager.GenerateDotGraph()

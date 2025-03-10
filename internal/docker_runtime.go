@@ -230,22 +230,22 @@ func (d *DockerRunner) applyTemplate(s *service) []string {
 			}
 
 			if d.isOverride(s.name) {
-				// service is running inside docker
-				if d.isOverride(svc.name) {
-					// use the DNS discovery of docker compose to connect to the service and the docker port
-					return fmt.Sprintf("http://%s:%d", svc.name, port.port)
-				}
-				// the service is going to be running with the host port in the host machine
-				// use host.docker.internal to connect to it.
-				return fmt.Sprintf("http://host.docker.internal:%d", port.hostPort)
-			} else {
 				// either if the target service is running inside docker or outside, it is exposed in localhost
 				// with the host port
 				return fmt.Sprintf("http://localhost:%d", port.hostPort)
+			} else {
+				// service is running inside docker
+				if d.isOverride(svc.name) {
+					// the service is going to be running with the host port in the host machine
+					// use host.docker.internal to connect to it.
+					return fmt.Sprintf("http://host.docker.internal:%d", port.hostPort)
+				}
+				// use the DNS discovery of docker compose to connect to the service and the docker port
+				return fmt.Sprintf("http://%s:%d", svc.name, port.port)
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
-			if d.isOverride(s.name) {
+			if !d.isOverride(s.name) {
 				// running inside docker, return the port
 				return defaultPort
 			}
