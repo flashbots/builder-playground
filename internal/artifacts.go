@@ -338,6 +338,10 @@ type output struct {
 	dst string
 }
 
+func (o *output) AbsoluteDstPath() (string, error) {
+	return filepath.Abs(o.dst)
+}
+
 func (o *output) Exists(path string) bool {
 	_, err := os.Stat(filepath.Join(o.dst))
 	return err == nil

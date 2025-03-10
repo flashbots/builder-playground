@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -81,26 +82,22 @@ func (d *DockerRunner) updateTaskStatus(name string, status string) {
 	}
 }
 
-func (d *DockerRunner) Stop() {
-	fmt.Println("Stopping all containers")
-
+func (d *DockerRunner) Stop() error {
 	// try to stop all the containers from the container list for playground
 	containers, err := d.client.ContainerList(d.ctx, container.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
 	})
 	if err != nil {
-		fmt.Println("Error getting container list:", err)
-		return
+		return fmt.Errorf("error getting container list: %w", err)
 	}
-
-	fmt.Printf("Found %d containers to stop\n", len(containers))
 
 	var wg sync.WaitGroup
 	wg.Add(len(containers))
 
-	for _, cont := range containers {
-		fmt.Println("Stopping container:", cont.ID)
+	var errCh chan error
+	errCh = make(chan error, len(containers))
 
+	for _, cont := range containers {
 		go func(contID string) {
 			defer wg.Done()
 			if err := d.client.ContainerRemove(context.Background(), contID, container.RemoveOptions{
@@ -108,7 +105,7 @@ func (d *DockerRunner) Stop() {
 				RemoveLinks:   false,
 				Force:         true,
 			}); err != nil {
-				fmt.Println("Error removing container:", err)
+				errCh <- fmt.Errorf("error removing container: %w", err)
 			}
 		}(cont.ID)
 	}
@@ -119,6 +116,16 @@ func (d *DockerRunner) Stop() {
 	for _, handle := range d.handles {
 		handle.Process.Kill()
 	}
+
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (d *DockerRunner) reservePort(startPort int) int {
@@ -212,12 +219,17 @@ func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{}
 	// everyone is going to be on docker at the same network.
 	args := d.applyTemplate(s)
 
+	outputFolder, err := d.out.AbsoluteDstPath()
+	if err != nil {
+		panic(fmt.Sprintf("BUG: failed to get absolute path for output folder: %s", err))
+	}
+
 	service := map[string]interface{}{
 		"image":   fmt.Sprintf("%s:%s", s.image, s.tag),
 		"command": args,
 		// Add volume mount for the output directory
 		"volumes": []string{
-			fmt.Sprintf("%s:/output", d.out.dst),
+			fmt.Sprintf("%s:/output", outputFolder),
 		},
 		// Add the ethereum network
 		"networks": []string{"ethereum"},
@@ -375,14 +387,17 @@ func (d *DockerRunner) Run() error {
 
 	yamlData, err := d.GenerateDockerCompose()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate docker-compose: %w", err)
 	}
 
 	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
-		return err
+		return fmt.Errorf("failed to write docker-compose: %w", err)
 	}
 
 	d.composeCmd = exec.Command("docker-compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
+
+	var errOut bytes.Buffer
+	d.composeCmd.Stderr = &errOut
 
 	// on a separate goroutine start the services that need to be overriten and run on host
 	go func() {
@@ -393,5 +408,8 @@ func (d *DockerRunner) Run() error {
 		}
 	}()
 
-	return d.composeCmd.Run()
+	if err := d.composeCmd.Run(); err != nil {
+		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
+	}
+	return nil
 }

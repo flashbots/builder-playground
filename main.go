@@ -90,10 +90,10 @@ func runIt(recipe internal.Recipe) error {
 
 	dockerRunner, err := internal.NewDockerRunner(artifacts.Out, svcManager, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 	if err := dockerRunner.Run(); err != nil {
-		return err
+		return fmt.Errorf("failed to run docker: %w", err)
 	}
 
 	watchdogErr := make(chan error, 1)
@@ -115,6 +115,8 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
-	dockerRunner.Stop()
+	if err := dockerRunner.Stop(); err != nil {
+		return fmt.Errorf("failed to stop docker: %w", err)
+	}
 	return nil
 }
