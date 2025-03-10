@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/ethereum/go-ethereum/log"
 	"gopkg.in/yaml.v2"
 )
 
@@ -27,18 +28,35 @@ type DockerRunner struct {
 	client        *client.Client
 	reservedPorts map[int]bool
 	overrides     map[string]string
-	handles       []*exec.Cmd
+	// handles are the handles to the processes that are running on host machine
+	handles []*exec.Cmd
+
+	// tasks are the tasks that are running in docker
+	tasksMtx     sync.Mutex
+	tasks        map[string]string
+	taskUpdateCh chan struct{}
 }
 
-func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]string) *DockerRunner {
+var (
+	taskStatusPending = "pending"
+	taskStatusStarted = "started"
+	taskStatusDie     = "die"
+)
+
+func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]string) (*DockerRunner, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	return &DockerRunner{
+	tasks := map[string]string{}
+	for _, svc := range svcManager.services {
+		tasks[svc.name] = taskStatusPending
+	}
+
+	d := &DockerRunner{
 		out:           out,
 		svcManager:    svcManager,
 		ctx:           ctx,
@@ -47,6 +65,19 @@ func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]str
 		reservedPorts: map[int]bool{},
 		overrides:     overrides,
 		handles:       []*exec.Cmd{},
+		tasks:         tasks,
+	}
+	return d, nil
+}
+
+func (d *DockerRunner) updateTaskStatus(name string, status string) {
+	d.tasksMtx.Lock()
+	defer d.tasksMtx.Unlock()
+	d.tasks[name] = status
+
+	select {
+	case d.taskUpdateCh <- struct{}{}:
+	default:
 	}
 }
 
@@ -283,7 +314,65 @@ func (d *DockerRunner) runOnHost(ss *service) {
 	d.handles = append(d.handles, cmd)
 }
 
+func (d *DockerRunner) trackLogs(serviceName string, containerID string) error {
+	log_output, err := d.out.LogOutput(serviceName)
+	if err != nil {
+		return fmt.Errorf("error getting log output: %w", err)
+	}
+
+	logs, err := d.client.ContainerLogs(context.Background(), containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+	})
+	if err != nil {
+		return fmt.Errorf("error getting container logs: %w", err)
+	}
+
+	if _, err := stdcopy.StdCopy(log_output, log_output, logs); err != nil {
+		return fmt.Errorf("error copying logs: %w", err)
+	}
+
+	return nil
+}
+
+func (d *DockerRunner) trackContainerStatusAndLogs() {
+	eventCh, errCh := d.client.Events(context.Background(), events.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
+	})
+
+	for {
+		select {
+		case event := <-eventCh:
+			name := event.Actor.Attributes["com.docker.compose.service"]
+
+			switch event.Action {
+			case events.ActionStart:
+				d.updateTaskStatus(name, taskStatusStarted)
+
+				// the container has started, we can track the logs now
+				go func() {
+					if err := d.trackLogs(name, event.Actor.ID); err != nil {
+						log.Warn("error tracking logs", "error", err)
+					}
+				}()
+			case events.ActionDie:
+				d.updateTaskStatus(name, taskStatusDie)
+				log.Info("container died", "name", name)
+			}
+
+		case err := <-errCh:
+			log.Warn("error tracking events", "error", err)
+
+		case <-d.ctx.Done():
+			return
+		}
+	}
+}
+
 func (d *DockerRunner) Run() error {
+	go d.trackContainerStatusAndLogs()
+
 	yamlData, err := d.GenerateDockerCompose()
 	if err != nil {
 		return err
@@ -293,65 +382,13 @@ func (d *DockerRunner) Run() error {
 		return err
 	}
 
-	d.composeCmd = exec.Command("docker-compose", "-f", "./output/docker-compose.yaml", "up", "-d")
+	d.composeCmd = exec.Command("docker-compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
 
-	// in parallel start the services that need to be overriten and ran on host
+	// on a separate goroutine start the services that need to be overriten and run on host
 	go func() {
 		for _, svc := range d.svcManager.services {
 			if d.isOverride(svc.name) {
 				d.runOnHost(svc)
-			}
-		}
-	}()
-
-	go func() {
-		fmt.Println("Starting event listener")
-
-		// Ok, track all the events that happen for the playground=true contianers.
-		eventCh, errCh := d.client.Events(context.Background(), events.ListOptions{
-			Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
-		})
-
-		for {
-			select {
-			case event := <-eventCh:
-				fmt.Println("--- event ---")
-				name := event.Actor.Attributes["com.docker.compose.service"]
-				fmt.Println(event.Action, event.Actor.ID, name)
-
-				if event.Action == "start" {
-					// track the container logs
-					go func() {
-						fmt.Println("Starting log listener for", name)
-
-						log_output, err := d.out.LogOutput(name)
-						if err != nil {
-							fmt.Println("Error getting log output:", err)
-							return
-						}
-
-						logs, err := d.client.ContainerLogs(context.Background(), event.Actor.ID, container.LogsOptions{
-							ShowStdout: true,
-							ShowStderr: true,
-							Follow:     true,
-						})
-						if err != nil {
-							fmt.Println("Error getting container logs:", err)
-							return
-						}
-
-						if _, err := stdcopy.StdCopy(log_output, log_output, logs); err != nil {
-							fmt.Println("Error copying logs:", err)
-							return
-						}
-						fmt.Println("DONE")
-					}()
-				}
-			case err := <-errCh:
-				fmt.Println("--- err ---")
-				fmt.Println(err)
-			case <-d.ctx.Done():
-				return
 			}
 		}
 	}()

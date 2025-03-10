@@ -88,7 +88,10 @@ func runIt(recipe internal.Recipe) error {
 		return nil
 	}
 
-	dockerRunner := internal.NewDockerRunner(artifacts.Out, svcManager, nil)
+	dockerRunner, err := internal.NewDockerRunner(artifacts.Out, svcManager, nil)
+	if err != nil {
+		return err
+	}
 	if err := dockerRunner.Run(); err != nil {
 		return err
 	}
