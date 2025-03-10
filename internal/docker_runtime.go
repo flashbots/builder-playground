@@ -11,6 +11,8 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
@@ -44,6 +46,12 @@ var (
 	taskStatusDie     = "die"
 )
 
+type taskUI struct {
+	tasks    map[string]string
+	spinners map[string]spinner.Model
+	style    lipgloss.Style
+}
+
 func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]string) (*DockerRunner, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -67,8 +75,62 @@ func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]str
 		overrides:     overrides,
 		handles:       []*exec.Cmd{},
 		tasks:         tasks,
+		taskUpdateCh:  make(chan struct{}),
 	}
+
+	go d.printStatus()
+	select {
+	case d.taskUpdateCh <- struct{}{}:
+	default:
+	}
+
 	return d, nil
+}
+
+func (d *DockerRunner) printStatus() {
+	fmt.Print("\033[s")
+	lineOffset := 0
+
+	// Get ordered service names from manifest
+	orderedServices := make([]string, 0, len(d.svcManager.services))
+	for _, svc := range d.svcManager.services {
+		orderedServices = append(orderedServices, svc.name)
+	}
+
+	for {
+		select {
+		case <-d.taskUpdateCh:
+			d.tasksMtx.Lock()
+
+			fmt.Print("\033[u")
+			for i := 0; i < lineOffset; i++ {
+				fmt.Print("\033[K\n")
+			}
+			fmt.Print("\033[u")
+
+			lineOffset = 0
+			// Use ordered services instead of ranging over map
+			for _, name := range orderedServices {
+				status := d.tasks[name]
+				sp := spinner.New()
+				sp.Spinner = spinner.Dot
+
+				switch status {
+				case taskStatusStarted:
+					fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("%s [%s] Running", sp.View(), name)))
+				case taskStatusDie:
+					fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("✗ [%s] Failed", name)))
+				case taskStatusPending:
+					fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pending", sp.View(), name)))
+				}
+				lineOffset++
+			}
+
+			d.tasksMtx.Unlock()
+		case <-d.ctx.Done():
+			return
+		}
+	}
 }
 
 func (d *DockerRunner) updateTaskStatus(name string, status string) {
