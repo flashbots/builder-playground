@@ -9,6 +9,24 @@ var (
 	defaultRethDiscoveryPrivKeyLoc = "/tmp/tmp-reth-disc.txt"
 )
 
+type RollupBoost struct {
+	ELNode  string
+	Builder string
+}
+
+func (r *RollupBoost) Run(service *service) {
+	service.
+		WithImage("docker.io/flashbots/rollup-boost").
+		WithTag("0.3rc3").
+		WithArgs(
+			"--rpc-port", `{{Port "authrpc" 8551}}`,
+			"--l2-jwt-token", "{{.Dir}}/jwtsecret",
+			"--l2-url", Connect(r.ELNode, "http"),
+			"--builder-jwt-token", "{{.Dir}}/jwtsecret",
+			"--builder-url", r.Builder,
+		)
+}
+
 type OpBatcher struct {
 	L1Node     string
 	L2Node     string

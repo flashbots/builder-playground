@@ -7,6 +7,7 @@ import (
 var _ Recipe = &OpRecipe{}
 
 type OpRecipe struct {
+	externalBuilder string
 }
 
 func (o *OpRecipe) Name() string {
@@ -15,6 +16,7 @@ func (o *OpRecipe) Name() string {
 
 func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("opstack", flag.ContinueOnError)
+	flags.StringVar(&o.externalBuilder, "external-builder", "", "External builder URL")
 	return flags
 }
 
@@ -32,8 +34,18 @@ func (o *OpRecipe) Apply(artifacts *Artifacts) *Manifest {
 	svcManager.AddService("validator", &LighthouseValidator{
 		BeaconNode: "beacon",
 	})
+
+	elNode := "el"
+	if o.externalBuilder != "" {
+		elNode = "rollup-boost"
+
+		svcManager.AddService("rollup-boost", &RollupBoost{
+			ELNode:  elNode,
+			Builder: o.externalBuilder,
+		})
+	}
 	svcManager.AddService("op-node", &OpNode{
-		L1Node:   "el",
+		L1Node:   elNode,
 		L1Beacon: "beacon",
 		L2Node:   "op-geth",
 	})
