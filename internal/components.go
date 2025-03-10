@@ -17,8 +17,7 @@ type OpBatcher struct {
 
 func (o *OpBatcher) Run(service *service) {
 	service.
-		WithImage("op-batcher").
-		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
+		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
 		WithTag("v1.11.1").
 		WithEntrypoint("op-batcher").
 		WithArgs(
@@ -30,8 +29,7 @@ func (o *OpBatcher) Run(service *service) {
 			"--poll-interval=1s",
 			"--num-confirmations=1",
 			"--private-key=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
-		).
-		Build()
+		)
 }
 
 // NodeRef is a connection reference from one service to another
@@ -48,8 +46,7 @@ type OpNode struct {
 
 func (o *OpNode) Run(service *service) {
 	service.
-		WithImage("op-node").
-		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
+		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.11.0").
 		WithEntrypoint("op-node").
 		WithArgs(
@@ -77,8 +74,7 @@ func (o *OpNode) Run(service *service) {
 			"--pprof.enabled",
 			"--rpc.enable-admin",
 			"--safedb.path", "{{.Dir}}/db",
-		).
-		Build()
+		)
 }
 
 type OpGeth struct {
@@ -86,8 +82,7 @@ type OpGeth struct {
 
 func (o *OpGeth) Run(service *service) {
 	service.
-		WithImage("geth").
-		WithImageReal("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
+		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101500.0").
 		WithEntrypoint("/bin/sh").
 		WithArgs(
@@ -120,8 +115,7 @@ func (o *OpGeth) Run(service *service) {
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
-		).
-		Build()
+		)
 }
 
 type RethEL struct {
@@ -130,9 +124,8 @@ type RethEL struct {
 
 func (r *RethEL) Run(svc *service) {
 	// start the reth el client
-	svc = svc.
-		WithImage("reth").
-		WithImageReal("ghcr.io/paradigmxyz/reth").
+	svc.
+		WithImage("ghcr.io/paradigmxyz/reth").
 		WithTag("v1.2.0").
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
@@ -160,9 +153,8 @@ func (r *RethEL) Run(svc *service) {
 		)
 
 	if r.UseRethForValidation {
-		svc = svc.WithArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
+		svc.WithArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
 	}
-	svc.Build()
 }
 
 type LighthouseBeaconNode struct {
@@ -208,8 +200,7 @@ func (l *LighthouseBeaconNode) Run(svc *service) {
 
 	// start the beacon node
 	svc.
-		WithImage("lighthouse").
-		WithImageReal("sigp/lighthouse").
+		WithImage("sigp/lighthouse").
 		WithTag("v7.0.0-beta.0").
 		WithEntrypoint("lighthouse").
 		WithArgs(
@@ -259,8 +250,6 @@ func (l *LighthouseBeaconNode) Run(svc *service) {
 			"--builder-fallback-disable-checks",
 		)
 	}
-
-	svc.Build()
 }
 
 type LighthouseValidator struct {
@@ -270,8 +259,7 @@ type LighthouseValidator struct {
 func (l *LighthouseValidator) Run(service *service) {
 	// start validator client
 	service.
-		WithImage("lighthouse").
-		WithImageReal("sigp/lighthouse").
+		WithImage("sigp/lighthouse").
 		WithTag("v7.0.0-beta.0").
 		WithEntrypoint("lighthouse").
 		WithArgs(
@@ -283,7 +271,7 @@ func (l *LighthouseValidator) Run(service *service) {
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 			"--builder-proposals",
 			"--prefer-builder-proposals",
-		).Build()
+		)
 }
 
 type ClProxy struct {
@@ -293,15 +281,14 @@ type ClProxy struct {
 
 func (c *ClProxy) Run(service *service) {
 	service.
-		WithImage("cl-proxy").
-		WithImageReal("ghcr.io/flashbots/playground/utils").
+		WithImage("ghcr.io/flashbots/playground/utils").
 		WithTag("latest").
 		WithEntrypoint("cl-proxy").
 		WithArgs(
 			"--primary-builder", Connect(c.PrimaryBuilder, "authrpc"),
 			"--secondary-builder", c.SecondaryBuilder,
 			"--port", `{{Port "authrpc" 5656}}`,
-		).Build()
+		)
 }
 
 type MevBoostRelay struct {
@@ -310,9 +297,8 @@ type MevBoostRelay struct {
 }
 
 func (m *MevBoostRelay) Run(service *service) {
-	srv := service.
-		WithImage("mev-boost-relay").
-		WithImageReal("ghcr.io/flashbots/playground/utils").
+	service.
+		WithImage("ghcr.io/flashbots/playground/utils").
 		WithTag("latest").
 		WithEntrypoint("mev-boost-relay").
 		WithArgs(
@@ -322,7 +308,6 @@ func (m *MevBoostRelay) Run(service *service) {
 		)
 
 	if m.ValidationServer != "" {
-		srv.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
+		service.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
 	}
-	srv.Build()
 }

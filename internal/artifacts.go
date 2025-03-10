@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -154,34 +155,32 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			L1StateDump string `json:"l1StateDump"`
 		}
 		if err := json.Unmarshal(opState, &state); err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
 		}
 
 		decoded, err := base64.StdEncoding.DecodeString(state.L1StateDump)
 		if err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("failed to decode opState: %w", err)
 		}
 
 		// Create gzip reader from the base64 decoded data
 		gr, err := gzip.NewReader(bytes.NewReader(decoded))
 		if err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 		}
 		defer gr.Close()
 
 		// Read and decode the contents
 		contents, err := io.ReadAll(gr)
 		if err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("failed to read opState: %w", err)
 		}
 
 		var alloc types.GenesisAlloc
 		if err := json.Unmarshal(contents, &alloc); err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
 		}
-
 		for addr, account := range alloc {
-			fmt.Printf("Address: %s, Balance: %s\n", addr.Hex(), account.Balance.String())
 			gen.Alloc[addr] = account
 		}
 	}
@@ -243,7 +242,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		// the hash of the genesis has changed beause of the timestamp so we need to account for that
 		var opGenesisObj core.Genesis
 		if err := json.Unmarshal(newOpGenesis, &opGenesisObj); err != nil {
-			panic(err)
+			return nil, fmt.Errorf("failed to unmarshal opGenesis: %w", err)
 		}
 
 		opGenesisHash := opGenesisObj.ToBlock().Hash()
@@ -329,94 +328,6 @@ func getPrivKey(privStr string) (*ecdsa.PrivateKey, error) {
 		return nil, err
 	}
 	return priv, nil
-}
-
-func setupServices(svcManager *serviceManager, out *output) error {
-	/*
-		var (
-			rethBin, lighthouseBin string
-		)
-
-		if useBinPathFlag {
-			fmt.Println("Using binaries from the PATH")
-
-			rethBin = "reth"
-			lighthouseBin = "lighthouse"
-		} else {
-			binArtifacts, err := artifacts.DownloadArtifacts()
-			if err != nil {
-				return err
-			}
-
-			rethBin = binArtifacts["reth"]
-			lighthouseBin = binArtifacts["lighthouse"]
-		}
-	*/
-
-	// log the prefunded accounts
-	fmt.Printf("\nPrefunded accounts:\n==================\n")
-	for indx, acc := range prefundedAccounts {
-		priv, _ := getPrivKey(acc)
-		fmt.Printf("(%d) %s (%s)\n", indx, acc, ecrypto.PubkeyToAddress(priv.PublicKey).Hex())
-	}
-	fmt.Println("")
-	if err := os.WriteFile(defaultRethDiscoveryPrivKeyLoc, []byte(defaultRethDiscoveryPrivKey), 0644); err != nil {
-		return err
-	}
-
-	svcManager.AddService("el", &RethEL{})
-	svcManager.AddService("beacon", &LighthouseBeaconNode{
-		ExecutionNode: "el",
-		MevBoostNode:  "mev-boost",
-	})
-	svcManager.AddService("validator", &LighthouseValidator{
-		BeaconNode: "beacon",
-	})
-	svcManager.AddService("op-node", &OpNode{
-		L1Node:   "el",
-		L1Beacon: "beacon",
-		L2Node:   "op-geth",
-	})
-	svcManager.AddService("op-geth", &OpGeth{})
-	svcManager.AddService("op-batcher", &OpBatcher{
-		L1Node:     "el",
-		L2Node:     "op-geth",
-		RollupNode: "op-node",
-	})
-	svcManager.AddService("mev-boost", &MevBoostRelay{
-		BeaconClient:     "beacon",
-		ValidationServer: "el",
-	})
-
-	// svcManager.AddService(&ClProxy{})
-
-	// start all the services
-	// svcManager.Start(true)
-
-	/*
-		svcManager.GenerateDockerCompose("docker-compose.yaml", map[string]string{
-			"playground": "true",
-		})
-
-		// print services info
-		fmt.Printf("Services started:\n==================\n")
-		for _, ss := range svcManager.services {
-			sort.Slice(ss.ports, func(i, j int) bool {
-				return ss.ports[i].name < ss.ports[j].name
-			})
-
-			ports := []string{}
-			for _, p := range ss.ports {
-				ports = append(ports, fmt.Sprintf("%s: %d", p.name, p.port))
-			}
-			fmt.Printf("- %s (%s)\n", ss.name, strings.Join(ports, ", "))
-		}
-		fmt.Printf("\n")
-
-		fmt.Printf("All services started, press Ctrl+C to stop\n")
-	*/
-
-	return nil
 }
 
 func Connect(service, port string) string {
@@ -592,4 +503,79 @@ type encObject interface {
 
 type sszObject interface {
 	MarshalSSZ() ([]byte, error)
+}
+
+func getHomeDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("error getting user home directory: %w", err)
+	}
+
+	// Define the path for our custom home directory
+	customHomeDir := filepath.Join(homeDir, ".playground")
+
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(customHomeDir, 0755); err != nil {
+		return "", fmt.Errorf("error creating output directory: %v", err)
+	}
+
+	return customHomeDir, nil
+}
+
+func convert(config *params.BeaconChainConfig) ([]byte, error) {
+	val := reflect.ValueOf(config).Elem()
+
+	vals := []string{}
+	for i := 0; i < val.NumField(); i++ {
+		// only encode the public fields with tag 'yaml'
+		tag := val.Type().Field(i).Tag.Get("yaml")
+		if tag == "" {
+			continue
+		}
+
+		// decode the type of the value
+		typ := val.Field(i).Type()
+
+		var resTyp string
+		if isByteArray(typ) || isByteSlice(typ) {
+			resTyp = "0x" + hex.EncodeToString(val.Field(i).Bytes())
+		} else {
+			// basic types
+			switch typ.Kind() {
+			case reflect.String:
+				resTyp = val.Field(i).String()
+			case reflect.Uint8, reflect.Uint64:
+				resTyp = fmt.Sprintf("%d", val.Field(i).Uint())
+			case reflect.Int:
+				resTyp = fmt.Sprintf("%d", val.Field(i).Int())
+			default:
+				panic(fmt.Sprintf("BUG: unsupported type, tag '%s', err: '%s'", tag, val.Field(i).Kind()))
+			}
+		}
+
+		vals = append(vals, fmt.Sprintf("%s: %s", tag, resTyp))
+	}
+
+	return []byte(strings.Join(vals, "\n")), nil
+}
+
+func isByteArray(t reflect.Type) bool {
+	return t.Kind() == reflect.Array && t.Elem().Kind() == reflect.Uint8
+}
+
+func isByteSlice(t reflect.Type) bool {
+	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
+}
+
+var prefundedAccounts = []string{
+	"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+	"0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+	"0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+	"0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
+	"0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+	"0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+	"0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
+	"0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
+	"0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
+	"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
 }

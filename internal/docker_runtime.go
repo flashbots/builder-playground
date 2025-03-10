@@ -20,7 +20,7 @@ import (
 
 type DockerRunner struct {
 	out           *output
-	svcManager    *serviceManager
+	svcManager    *Manifest
 	composeCmd    *exec.Cmd
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -30,7 +30,7 @@ type DockerRunner struct {
 	handles       []*exec.Cmd
 }
 
-func NewDockerRunner(out *output, svcManager *serviceManager, overrides map[string]string) *DockerRunner {
+func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]string) *DockerRunner {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -124,14 +124,14 @@ func (d *DockerRunner) applyTemplate(s *service) []string {
 			if svc == nil {
 				panic(fmt.Sprintf("BUG: service %s not found", name))
 			}
-			port := svc.GetPort(portLabel)
-			if port == nil {
+			port, ok := svc.GetPort(portLabel)
+			if !ok {
 				panic(fmt.Sprintf("BUG: port label %s not found for service %s", portLabel, name))
 			}
 
-			if s.override == "" {
+			if d.isOverride(s.name) {
 				// service is running inside docker
-				if svc.override == "" {
+				if d.isOverride(svc.name) {
 					// use the DNS discovery of docker compose to connect to the service and the docker port
 					return fmt.Sprintf("http://%s:%d", svc.name, port.port)
 				}
@@ -145,12 +145,16 @@ func (d *DockerRunner) applyTemplate(s *service) []string {
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
-			if s.override == "" {
+			if d.isOverride(s.name) {
 				// running inside docker, return the port
 				return defaultPort
 			}
 			// return the host port
-			return s.GetPort(name).hostPort
+			port, ok := s.GetPort(name)
+			if !ok {
+				panic(fmt.Sprintf("BUG: port %s not found for service %s", name, s.name))
+			}
+			return port.hostPort
 		},
 	}
 
@@ -178,11 +182,11 @@ func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{}
 	args := d.applyTemplate(s)
 
 	service := map[string]interface{}{
-		"image":   fmt.Sprintf("%s:%s", s.imageReal, s.tag),
+		"image":   fmt.Sprintf("%s:%s", s.image, s.tag),
 		"command": args,
 		// Add volume mount for the output directory
 		"volumes": []string{
-			fmt.Sprintf("./:/output"),
+			fmt.Sprintf("%s:/output", d.out.dst),
 		},
 		// Add the ethereum network
 		"networks": []string{"ethereum"},
@@ -204,16 +208,12 @@ func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{}
 	return service
 }
 
-func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
-	// First, figure out if the overrides are valid, they might reference a service that does not exist.
-	for name, val := range d.overrides {
-		svc := d.getService(name)
-		if svc == nil {
-			return nil, fmt.Errorf("service %s from override not found", name)
-		}
-		svc.override = val
-	}
+func (d *DockerRunner) isOverride(name string) bool {
+	_, ok := d.overrides[name]
+	return ok
+}
 
+func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 	compose := map[string]interface{}{
 		"version":  "3.8",
 		"services": map[string]interface{}{},
@@ -237,7 +237,7 @@ func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 	for _, svc := range d.svcManager.services {
 		if svc.srvMng != nil { // Only include services that were created with NewService
 			// resolve the template again for the variables because things Connect need to be resolved now.
-			if svc.override != "" {
+			if d.isOverride(svc.name) {
 				// skip services that are going to be launched with an override
 				continue
 			}
@@ -256,9 +256,10 @@ func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 func (d *DockerRunner) runOnHost(ss *service) {
 	// we have to apply the template to the args like we do in docker-compose services
 	args := d.applyTemplate(ss)
+	execPath := d.overrides[ss.name]
 
-	fmt.Println("Running", ss.override, args)
-	cmd := exec.Command(ss.override, args...)
+	fmt.Println("Running", execPath, args)
+	cmd := exec.Command(execPath, args...)
 
 	logOutput, err := d.out.LogOutput(ss.name)
 	if err != nil {
@@ -297,7 +298,7 @@ func (d *DockerRunner) Run() error {
 	// in parallel start the services that need to be overriten and ran on host
 	go func() {
 		for _, svc := range d.svcManager.services {
-			if svc.override != "" {
+			if d.isOverride(svc.name) {
 				d.runOnHost(svc)
 			}
 		}

@@ -23,8 +23,8 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (o *OpRecipe) Apply(artifacts *Artifacts) *serviceManager {
-	svcManager := newServiceManager(artifacts.Out)
+func (o *OpRecipe) Apply(artifacts *Artifacts) *Manifest {
+	svcManager := NewManifest(artifacts.Out)
 	svcManager.AddService("el", &RethEL{})
 	svcManager.AddService("beacon", &LighthouseBeaconNode{
 		ExecutionNode: "el",
@@ -46,6 +46,6 @@ func (o *OpRecipe) Apply(artifacts *Artifacts) *serviceManager {
 	return svcManager
 }
 
-func (o *OpRecipe) Watchdog(manifest *serviceManager) error {
+func (o *OpRecipe) Watchdog(manifest *Manifest) error {
 	return nil
 }

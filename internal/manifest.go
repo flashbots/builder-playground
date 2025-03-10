@@ -1,19 +1,11 @@
 package internal
 
 import (
-	"encoding/hex"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"text/template"
 
-	"github.com/prysmaticlabs/prysm/v5/config/params"
 	flag "github.com/spf13/pflag"
 )
 
@@ -21,50 +13,33 @@ type Recipe interface {
 	Name() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
-	Apply(artifacts *Artifacts) *serviceManager
-	Watchdog(manifest *serviceManager) error
+	Apply(artifacts *Artifacts) *Manifest
+	Watchdog(manifest *Manifest) error
 }
 
-type serviceManager struct {
+type Manifest struct {
 	// list of services to start
 	services []*service
 
-	out     *output
-	handles []*handle
-
-	stopping atomic.Bool
-
-	wg sync.WaitGroup
-
-	// channel for the handles to nofify when they are shutting down
-	closeCh chan struct{}
+	out *output
 }
 
-func newServiceManager(out *output) *serviceManager {
-	return &serviceManager{out: out, handles: []*handle{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5)}
-}
-
-func (s *serviceManager) emitError() {
-	select {
-	case s.closeCh <- struct{}{}:
-	default:
-	}
-}
-
-func (s *serviceManager) Build(ss *service) {
-	s.services = append(s.services, ss)
+func NewManifest(out *output) *Manifest {
+	return &Manifest{out: out}
 }
 
 type Service interface {
 	Run(service *service)
 }
 
-func (s *serviceManager) AddService(name string, srv Service) {
+func (s *Manifest) AddService(name string, srv Service) {
 	service := s.NewService(name)
 	srv.Run(service)
+
+	s.services = append(s.services, service)
 }
 
-func (s *serviceManager) GetService(name string) (*service, bool) {
+func (s *Manifest) GetService(name string) (*service, bool) {
 	for _, ss := range s.services {
 		if ss.name == name {
 			return ss, true
@@ -73,7 +48,7 @@ func (s *serviceManager) GetService(name string) (*service, bool) {
 	return nil, false
 }
 
-func (s *serviceManager) Validate() {
+func (s *Manifest) Validate() error {
 	// first, try to download all the artifacts
 	// figure out if all the port dependencies are met from the service description
 	servicesMap := make(map[string]*service)
@@ -85,7 +60,7 @@ func (s *serviceManager) Validate() {
 		for _, nodeRef := range ss.nodeRefs {
 			targetService, ok := servicesMap[nodeRef.Service]
 			if !ok {
-				panic(fmt.Sprintf("service %s depends on service %s, but it is not defined", ss.name, nodeRef.Service))
+				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.name, nodeRef.Service)
 			}
 
 			found := false
@@ -96,71 +71,11 @@ func (s *serviceManager) Validate() {
 				}
 			}
 			if !found {
-				fmt.Println(targetService.ports)
-				panic(fmt.Sprintf("service %s depends on service %s, but it does not expose port %s", ss.name, nodeRef.Service, nodeRef.PortLabel))
+				return fmt.Errorf("service %s depends on service %s, but it does not expose port %s", ss.name, nodeRef.Service, nodeRef.PortLabel)
 			}
 		}
 	}
-}
-
-func (s *serviceManager) runService(ss *service) {
-	if ss.srvMng == nil {
-		// this one was not created with Build so it is not a binary service, but a native one
-		return
-	}
-
-	fmt.Println("Running", ss.imagePath, ss.args)
-	cmd := exec.Command(ss.imagePath, ss.args...)
-
-	logOutput, err := s.out.LogOutput(ss.name)
-	if err != nil {
-		// this should not happen, log it
-		fmt.Println("Error creating log output for", ss.name)
-		logOutput = os.Stdout
-	}
-
-	// first thing to output is the command itself
-	fmt.Fprint(logOutput, strings.Join(ss.args, " ")+"\n\n")
-
-	cmd.Stdout = logOutput
-	cmd.Stderr = logOutput
-
-	s.wg.Add(1)
-	go func() {
-		if err := cmd.Run(); err != nil {
-			if !s.stopping.Load() {
-				fmt.Printf("Error running %s: %v\n", ss.name, err)
-			}
-		}
-		s.wg.Done()
-		s.emitError()
-	}()
-
-	s.handles = append(s.handles, &handle{
-		Process: cmd,
-		Service: ss,
-	})
-}
-
-type handle struct {
-	Process *exec.Cmd
-	Service *service
-}
-
-func (s *serviceManager) NotifyErrCh() <-chan struct{} {
-	return s.closeCh
-}
-
-func (s *serviceManager) StopAndWait() {
-	s.stopping.Store(true)
-
-	for _, h := range s.handles {
-		if h.Process != nil {
-			fmt.Printf("Stopping %s\n", h.Service.name)
-			h.Process.Process.Kill()
-		}
-	}
-	s.wg.Wait()
+	return nil
 }
 
 type port struct {
@@ -178,35 +93,24 @@ type service struct {
 	ports    []*port
 	nodeRefs []*NodeRef
 
-	srvMng *serviceManager
+	srvMng *Manifest
 
-	override string
-
-	// release specific configuration
-	// we call this image here but it can also represent a release binary
-	image      string
-	imagePath  string
 	tag        string
-	imageReal  string
+	image      string
 	entrypoint string
 }
 
-func (s *service) GetPort(name string) *port {
+func (s *service) GetPort(name string) (*port, bool) {
 	for _, p := range s.ports {
 		if p.name == name {
-			return p
+			return p, true
 		}
 	}
-	panic(fmt.Sprintf("BUG: port %s not found for service %s", name, s.name))
+	return nil, false
 }
 
-func (s *serviceManager) NewService(name string) *service {
+func (s *Manifest) NewService(name string) *service {
 	return &service{name: name, args: []string{}, srvMng: s, ports: []*port{}, nodeRefs: []*NodeRef{}}
-}
-
-func (s *service) WithImageReal(image string) *service {
-	s.imageReal = image
-	return s
 }
 
 func (s *service) WithImage(image string) *service {
@@ -296,10 +200,6 @@ func (s *service) If(cond bool, fn func(*service) *service) *service {
 	return s
 }
 
-func (s *service) Build() {
-	s.srvMng.Build(s)
-}
-
 func applyTemplate(templateStr string, input interface{}) (string, []port, []NodeRef) {
 	var portRef []port
 	var nodeRef []NodeRef
@@ -344,82 +244,7 @@ func applyTemplate(templateStr string, input interface{}) (string, []port, []Nod
 	return res, portRef, nodeRef
 }
 
-func convert(config *params.BeaconChainConfig) ([]byte, error) {
-	val := reflect.ValueOf(config).Elem()
-
-	vals := []string{}
-	for i := 0; i < val.NumField(); i++ {
-		// only encode the public fields with tag 'yaml'
-		tag := val.Type().Field(i).Tag.Get("yaml")
-		if tag == "" {
-			continue
-		}
-
-		// decode the type of the value
-		typ := val.Field(i).Type()
-
-		var resTyp string
-		if isByteArray(typ) || isByteSlice(typ) {
-			resTyp = "0x" + hex.EncodeToString(val.Field(i).Bytes())
-		} else {
-			// basic types
-			switch typ.Kind() {
-			case reflect.String:
-				resTyp = val.Field(i).String()
-			case reflect.Uint8, reflect.Uint64:
-				resTyp = fmt.Sprintf("%d", val.Field(i).Uint())
-			case reflect.Int:
-				resTyp = fmt.Sprintf("%d", val.Field(i).Int())
-			default:
-				panic(fmt.Sprintf("BUG: unsupported type, tag '%s', err: '%s'", tag, val.Field(i).Kind()))
-			}
-		}
-
-		vals = append(vals, fmt.Sprintf("%s: %s", tag, resTyp))
-	}
-
-	return []byte(strings.Join(vals, "\n")), nil
-}
-
-func isByteArray(t reflect.Type) bool {
-	return t.Kind() == reflect.Array && t.Elem().Kind() == reflect.Uint8
-}
-
-func isByteSlice(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
-}
-
-var prefundedAccounts = []string{
-	"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-	"0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-	"0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
-	"0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
-	"0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
-	"0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
-	"0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
-	"0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
-	"0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
-	"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
-}
-
-func getHomeDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("error getting user home directory: %w", err)
-	}
-
-	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(homeDir, ".playground")
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(customHomeDir, 0755); err != nil {
-		return "", fmt.Errorf("error creating output directory: %v", err)
-	}
-
-	return customHomeDir, nil
-}
-
-func (s *serviceManager) GenerateDotGraph() string {
+func (s *Manifest) GenerateDotGraph() string {
 	var b strings.Builder
 	b.WriteString("digraph G {\n")
 	b.WriteString("  rankdir=LR;\n")
@@ -465,7 +290,7 @@ func (s *serviceManager) GenerateDotGraph() string {
 	return b.String()
 }
 
-func saveDotGraph(svcManager *serviceManager, out *output) error {
+func saveDotGraph(svcManager *Manifest, out *output) error {
 	dotGraph := svcManager.GenerateDotGraph()
 	return out.WriteFile("services.dot", dotGraph)
 }

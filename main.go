@@ -93,10 +93,11 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
+	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
 			if err := recipe.Watchdog(svcManager); err != nil {
-				panic(err)
+				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
 		}()
 	}
@@ -107,6 +108,8 @@ func runIt(recipe internal.Recipe) error {
 	select {
 	case <-sig:
 		fmt.Println("Stopping...")
+	case err := <-watchdogErr:
+		return err
 	}
 
 	dockerRunner.Stop()

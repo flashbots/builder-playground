@@ -33,8 +33,8 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (l *L1Recipe) Apply(artifacts *Artifacts) *serviceManager {
-	svcManager := newServiceManager(artifacts.Out)
+func (l *L1Recipe) Apply(artifacts *Artifacts) *Manifest {
+	svcManager := NewManifest(artifacts.Out)
 
 	svcManager.AddService("el", &RethEL{})
 
@@ -70,12 +70,17 @@ func (l *L1Recipe) Apply(artifacts *Artifacts) *serviceManager {
 	return svcManager
 }
 
-func (l *L1Recipe) Watchdog(manifest *serviceManager) error {
+func (l *L1Recipe) Watchdog(manifest *Manifest) error {
 	beaconNode, ok := manifest.GetService("beacon")
 	if !ok {
 		return fmt.Errorf("beacon node not found")
 	}
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", beaconNode.GetPort("http").hostPort)
+
+	port, ok := beaconNode.GetPort("http")
+	if !ok {
+		return fmt.Errorf("beacon node does not expose port http")
+	}
+	beaconNodeURL := fmt.Sprintf("http://localhost:%d", port.hostPort)
 
 	go func() {
 		watchProposerPayloads(beaconNodeURL)
