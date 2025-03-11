@@ -394,7 +394,7 @@ func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 
 	yamlData, err := yaml.Marshal(compose)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal docker-compose: %w", err)
+		return nil, fmt.Errorf("failed to marshal docker compose: %w", err)
 	}
 
 	return yamlData, nil
@@ -489,14 +489,14 @@ func (d *DockerRunner) Run() error {
 
 	yamlData, err := d.GenerateDockerCompose()
 	if err != nil {
-		return fmt.Errorf("failed to generate docker-compose: %w", err)
+		return fmt.Errorf("failed to generate docker-compose.yaml: %w", err)
 	}
 
 	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
-		return fmt.Errorf("failed to write docker-compose: %w", err)
+		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
 	}
 
-	d.composeCmd = exec.Command("docker-compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
+	d.composeCmd = exec.Command("docker compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
 
 	var errOut bytes.Buffer
 	d.composeCmd.Stderr = &errOut
