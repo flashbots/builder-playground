@@ -13,6 +13,7 @@ type L1Recipe struct {
 	latestFork           bool
 	useRethForValidation bool
 	secondaryBuilderPort uint64
+	useNativeReth        bool
 }
 
 func (l *L1Recipe) Name() string {
@@ -28,6 +29,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&l.latestFork, "latest-fork", false, "use the latest fork")
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
 	flags.Uint64Var(&l.secondaryBuilderPort, "secondary-builder", 1234, "port to use for the secondary builder")
+	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
 	return flags
 }
 
@@ -41,7 +43,10 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 func (l *L1Recipe) Apply(artifacts *Artifacts) *Manifest {
 	svcManager := NewManifest(artifacts.Out)
 
-	svcManager.AddService("el", &RethEL{})
+	svcManager.AddService("el", &RethEL{
+		UseRethForValidation: l.useRethForValidation,
+		UseNativeReth:        l.useNativeReth,
+	})
 
 	var elService string
 	if l.secondaryBuilderPort != 0 {

@@ -9,6 +9,8 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
+const useHostExecutionLabel = "use-host-execution"
+
 type Recipe interface {
 	Name() string
 	Description() string
@@ -22,11 +24,13 @@ type Manifest struct {
 	// list of services to start
 	services []*service
 
+	overrides map[string]string
+
 	out *output
 }
 
 func NewManifest(out *output) *Manifest {
-	return &Manifest{out: out}
+	return &Manifest{out: out, overrides: make(map[string]string)}
 }
 
 type Service interface {
@@ -37,8 +41,14 @@ func (s *Manifest) Services() []*service {
 	return s.services
 }
 
+// ReleaseService is a service that can also be runned as an artifact in the host machine
+type ReleaseService interface {
+	ReleaseArtifact() *release
+}
+
 func (s *Manifest) AddService(name string, srv Service) {
 	service := s.NewService(name)
+	service.component = srv
 	srv.Run(service)
 
 	s.services = append(s.services, service)
@@ -88,6 +98,23 @@ func (s *Manifest) Validate() error {
 			}
 		}
 	}
+
+	// download any local release artifacts for the services that require them
+	for _, ss := range s.services {
+		if ss.labels[useHostExecutionLabel] == "true" {
+			// the service must implement the ReleaseService interface
+			releaseService, ok := ss.component.(ReleaseService)
+			if !ok {
+				return fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
+			}
+			releaseArtifact := releaseService.ReleaseArtifact()
+			bin, err := downloadRelease(s.out.homeDir, releaseArtifact)
+			if err != nil {
+				return fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
+			}
+			s.overrides[ss.Name] = bin
+		}
+	}
 	return nil
 }
 
@@ -103,12 +130,16 @@ type service struct {
 	Name string
 	args []string
 
+	labels map[string]string
+
 	ports    []*port
 	nodeRefs []*NodeRef
 
 	tag        string
 	image      string
 	entrypoint string
+
+	component Service
 }
 
 func (s *service) Ports() []*port {
@@ -130,6 +161,19 @@ func (s *service) GetPort(name string) (*port, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (s *service) UseHostExecution() *service {
+	s.WithLabel(useHostExecutionLabel, "true")
+	return s
+}
+
+func (s *service) WithLabel(key, value string) *service {
+	if s.labels == nil {
+		s.labels = make(map[string]string)
+	}
+	s.labels[key] = value
+	return s
 }
 
 func (s *Manifest) NewService(name string) *service {

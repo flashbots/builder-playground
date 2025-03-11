@@ -58,7 +58,7 @@ type taskUI struct {
 	style    lipgloss.Style
 }
 
-func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]string, interactive bool) (*DockerRunner, error) {
+func NewDockerRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*DockerRunner, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -66,14 +66,22 @@ func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]str
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
+	// merge the overrides with the svcManager.overrides
+	if overrides == nil {
+		overrides = make(map[string]string)
+	}
+	for k, v := range manifest.overrides {
+		overrides[k] = v
+	}
+
 	tasks := map[string]string{}
-	for _, svc := range svcManager.services {
+	for _, svc := range manifest.services {
 		tasks[svc.Name] = taskStatusPending
 	}
 
 	d := &DockerRunner{
 		out:           out,
-		svcManager:    svcManager,
+		svcManager:    manifest,
 		ctx:           ctx,
 		cancel:        cancel,
 		client:        client,
@@ -257,8 +265,16 @@ func (d *DockerRunner) getService(name string) *service {
 }
 
 func (d *DockerRunner) applyTemplate(s *service) []string {
-	input := map[string]interface{}{
-		"Dir": "/artifacts",
+	var input map[string]interface{}
+
+	if d.isOverride(s.Name) {
+		input = map[string]interface{}{
+			"Dir": d.out.dst,
+		}
+	} else {
+		input = map[string]interface{}{
+			"Dir": "/artifacts",
+		}
 	}
 
 	funcs := template.FuncMap{

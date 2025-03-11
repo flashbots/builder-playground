@@ -86,16 +86,18 @@ type Artifacts struct {
 }
 
 func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
+	homeDir, err := getHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	homeDir = filepath.Join(homeDir, "devnet")
+
 	if b.outputDir == "" {
 		// Use the $HOMEDIR/devnet as the default output
-		homeDir, err := getHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		b.outputDir = filepath.Join(homeDir, "devnet")
+		b.outputDir = homeDir
 	}
 
-	out := &output{dst: b.outputDir}
+	out := &output{dst: b.outputDir, homeDir: homeDir}
 
 	// check if the output directory exists
 	if out.Exists("") {
@@ -338,7 +340,8 @@ func Connect(service, port string) string {
 type output struct {
 	dst string
 
-	lock sync.Mutex
+	homeDir string
+	lock    sync.Mutex
 }
 
 func (o *output) AbsoluteDstPath() (string, error) {

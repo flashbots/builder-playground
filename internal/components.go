@@ -138,6 +138,25 @@ func (o *OpGeth) Run(service *service) {
 
 type RethEL struct {
 	UseRethForValidation bool
+	UseNativeReth        bool
+}
+
+func (r *RethEL) ReleaseArtifact() *release {
+	return &release{
+		Name:    "reth",
+		Org:     "paradigmxyz",
+		Version: "v1.2.0",
+		Arch: func(goos, goarch string) string {
+			if goos == "linux" {
+				return "x86_64-unknown-linux-gnu"
+			} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+				return "aarch64-apple-darwin"
+			} else if goos == "darwin" && goarch == "amd64" {
+				return "x86_64-apple-darwin"
+			}
+			return ""
+		},
+	}
 }
 
 func (r *RethEL) Run(svc *service) {
@@ -172,6 +191,11 @@ func (r *RethEL) Run(svc *service) {
 
 	if r.UseRethForValidation {
 		svc.WithArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
+	}
+
+	if r.UseNativeReth {
+		// we need to use this otherwise the db cannot be binded
+		svc.UseHostExecution()
 	}
 }
 
