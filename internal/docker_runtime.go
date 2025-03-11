@@ -181,7 +181,7 @@ func (d *DockerRunner) updateTaskStatus(name string, status string) {
 }
 
 func (d *DockerRunner) ExitErr() <-chan error {
-	return nil
+	return d.exitErr
 }
 
 func (d *DockerRunner) Stop() error {

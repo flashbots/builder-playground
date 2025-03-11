@@ -143,7 +143,7 @@ func runIt(recipe internal.Recipe) error {
 	case err := <-dockerRunner.ExitErr():
 		fmt.Println("Service failed:", err)
 	case err := <-watchdogErr:
-		return err
+		fmt.Println("Watchdog failed:", err)
 	}
 
 	if err := dockerRunner.Stop(); err != nil {

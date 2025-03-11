@@ -20,9 +20,9 @@ func (r *RollupBoost) Run(service *service) {
 		WithTag("0.4rc1").
 		WithArgs(
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
-			"--l2-jwt-path", "/output/jwtsecret",
+			"--l2-jwt-path", "{{.Dir}}/jwtsecret",
 			"--l2-url", Connect(r.ELNode, "authrpc"),
-			"--builder-jwt-path", "/output/jwtsecret", // TODO: Fix this
+			"--builder-jwt-path", "{{.Dir}}/jwtsecret",
 			"--builder-url", r.Builder,
 		)
 }
