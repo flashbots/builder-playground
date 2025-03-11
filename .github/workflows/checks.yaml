@@ -29,6 +29,9 @@ jobs:
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
 
+      - name: Build playground utils
+        run: ./scripts/ci-build-playground-utils.sh
+
       - name: Run playground
         run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 2m --watchdog
 

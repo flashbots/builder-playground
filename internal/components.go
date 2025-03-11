@@ -299,7 +299,7 @@ type ClProxy struct {
 
 func (c *ClProxy) Run(service *service) {
 	service.
-		WithImage("ghcr.io/flashbots/playground/utils").
+		WithImage("docker.io/flashbots/playground/utils").
 		WithTag("latest").
 		WithEntrypoint("cl-proxy").
 		WithArgs(
@@ -316,7 +316,7 @@ type MevBoostRelay struct {
 
 func (m *MevBoostRelay) Run(service *service) {
 	service.
-		WithImage("ghcr.io/flashbots/playground/utils").
+		WithImage("docker.io/flashbots/playground/utils").
 		WithTag("latest").
 		WithEntrypoint("mev-boost-relay").
 		WithArgs(
