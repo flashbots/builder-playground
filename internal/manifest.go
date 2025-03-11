@@ -93,8 +93,6 @@ type service struct {
 	ports    []*port
 	nodeRefs []*NodeRef
 
-	srvMng *Manifest
-
 	tag        string
 	image      string
 	entrypoint string
@@ -110,7 +108,7 @@ func (s *service) GetPort(name string) (*port, bool) {
 }
 
 func (s *Manifest) NewService(name string) *service {
-	return &service{name: name, args: []string{}, srvMng: s, ports: []*port{}, nodeRefs: []*NodeRef{}}
+	return &service{name: name, args: []string{}, ports: []*port{}, nodeRefs: []*NodeRef{}}
 }
 
 func (s *service) WithImage(image string) *service {
@@ -144,12 +142,10 @@ func (s *service) WithPort(name string, portNumber int) *service {
 }
 
 func (s *service) WithArgs(args ...string) *service {
-	// use template substitution to load constants
-	tmplVars := s.tmplVars()
 	for i, arg := range args {
 		var port []port
 		var nodeRef []NodeRef
-		args[i], port, nodeRef = applyTemplate(arg, tmplVars)
+		args[i], port, nodeRef = applyTemplate(arg)
 		for _, p := range port {
 			s.WithPort(p.name, p.port)
 		}
@@ -159,13 +155,6 @@ func (s *service) WithArgs(args ...string) *service {
 	}
 	s.args = append(s.args, args...)
 	return s
-}
-
-func (s *service) tmplVars() map[string]interface{} {
-	tmplVars := map[string]interface{}{
-		"Dir": s.srvMng.out.dst,
-	}
-	return tmplVars
 }
 
 // WithReplacementArgs finds the first occurrence of the first argument in the current arguments,
@@ -179,10 +168,9 @@ func (s *service) WithReplacementArgs(args ...string) *service {
 		return s
 	}
 	// use template substitution to load constants
-	tmplVars := s.tmplVars()
 	for i, arg := range args {
 		// skip refs since we do not do them yet on replacement args
-		args[i], _, _ = applyTemplate(arg, tmplVars)
+		args[i], _, _ = applyTemplate(arg)
 	}
 
 	if i := slices.Index(s.args, args[0]); i != -1 {
@@ -200,7 +188,13 @@ func (s *service) If(cond bool, fn func(*service) *service) *service {
 	return s
 }
 
-func applyTemplate(templateStr string, input interface{}) (string, []port, []NodeRef) {
+func applyTemplate(templateStr string) (string, []port, []NodeRef) {
+	// use template substitution to load constants
+	// pass-through the Dir template because it has to be resolved at the runtime
+	input := map[string]interface{}{
+		"Dir": "{{.Dir}}",
+	}
+
 	var portRef []port
 	var nodeRef []NodeRef
 	// ther can be multiple port and nodere because in the case of op-geth we pass a whole string as nested command args

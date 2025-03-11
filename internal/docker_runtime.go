@@ -217,6 +217,10 @@ func (d *DockerRunner) getService(name string) *service {
 }
 
 func (d *DockerRunner) applyTemplate(s *service) []string {
+	input := map[string]interface{}{
+		"Dir": "/artifacts",
+	}
+
 	funcs := template.FuncMap{
 		"Service": func(name string, portLabel string) string {
 			// find the service and the port that it resolves for that label
@@ -266,7 +270,7 @@ func (d *DockerRunner) applyTemplate(s *service) []string {
 		}
 
 		var out strings.Builder
-		if err := tpl.Execute(&out, nil); err != nil {
+		if err := tpl.Execute(&out, input); err != nil {
 			panic(fmt.Sprintf("BUG: failed to execute template, err: %s, arg: %s", err, arg))
 		}
 		argsResult = append(argsResult, out.String())
@@ -291,7 +295,7 @@ func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{}
 		"command": args,
 		// Add volume mount for the output directory
 		"volumes": []string{
-			fmt.Sprintf("%s:/output", outputFolder),
+			fmt.Sprintf("%s:/artifacts", outputFolder),
 		},
 		// Add the ethereum network
 		"networks": []string{"ethereum"},
@@ -340,14 +344,12 @@ func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 	}
 
 	for _, svc := range d.svcManager.services {
-		if svc.srvMng != nil { // Only include services that were created with NewService
-			// resolve the template again for the variables because things Connect need to be resolved now.
-			if d.isOverride(svc.name) {
-				// skip services that are going to be launched with an override
-				continue
-			}
-			services[svc.name] = d.ToDockerComposeService(svc)
+		// resolve the template again for the variables because things Connect need to be resolved now.
+		if d.isOverride(svc.name) {
+			// skip services that are going to be launched with an override
+			continue
 		}
+		services[svc.name] = d.ToDockerComposeService(svc)
 	}
 
 	yamlData, err := yaml.Marshal(compose)
