@@ -9,8 +9,14 @@ on:
 
 jobs:
   test:
-    name: E2E test
+    name: E2E test (${{ matrix.flags }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        flags:
+          - "l1"
+          - "opstack"
+          - "opstack --external-builder http://host.docker.internal:4444"
     steps:
       - name: Check out code
         uses: actions/checkout@v2
@@ -21,10 +27,7 @@ jobs:
           go-version: 1.24
 
       - name: Run playground
-        run: go run main.go --output /tmp/playground & > /tmp/playground.log 2>&1
-
-      - name: Validate that blocks are created
-        run: go run main.go watch-payloads --validate-payloads
+        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 2m --watchdog & > /tmp/playground.log 2>&1
 
       - name: Move playground logs
         if: ${{ failure() }}
@@ -34,6 +37,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
-          name: playground-logs
+          name: playground-logs-${{ matrix.flags }}
           path: /tmp/playground/logs
           retention-days: 5

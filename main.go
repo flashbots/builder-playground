@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ferranbt/builder-playground/internal"
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ var withOverrides []string
 var watchdog bool
 var dryRun bool
 var interactive bool
+var timeout time.Duration
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -64,6 +66,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
 		recipeCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", internal.MinimumGenesisDelay, "")
 		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
+		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -137,6 +140,11 @@ func runIt(recipe internal.Recipe) error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 
+	var timerCh <-chan time.Time
+	if timeout > 0 {
+		timerCh = time.After(timeout)
+	}
+
 	select {
 	case <-sig:
 		fmt.Println("Stopping...")
@@ -144,6 +152,8 @@ func runIt(recipe internal.Recipe) error {
 		fmt.Println("Service failed:", err)
 	case err := <-watchdogErr:
 		fmt.Println("Watchdog failed:", err)
+	case <-timerCh:
+		fmt.Println("Timeout reached")
 	}
 
 	if err := dockerRunner.Stop(); err != nil {
