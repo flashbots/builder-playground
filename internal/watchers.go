@@ -1,22 +1,23 @@
 package internal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 )
 
-// validateProposerPayloads validates that payload attribute events are being broadcasted by the beacon node
-// in the correct order without any missing slots.
-func validateProposerPayloads(beaconNodeURL string) error {
+func waitForChainAlive(logOutput io.Writer, beaconNodeURL string, timeout time.Duration) error {
 	// Test that blocks are being produced
-	log := mevRCommon.LogSetup(false, "info")
-	log.Logger.Out = io.Discard
+	log := mevRCommon.LogSetup(false, "info").WithField("context", "waitForChainAlive")
+	log.Logger.Out = logOutput
 
 	clt := beaconclient.NewProdBeaconInstance(log, beaconNodeURL, beaconNodeURL)
 
@@ -42,7 +43,7 @@ func validateProposerPayloads(beaconNodeURL string) error {
 		}
 
 		if !isReady() {
-			syncTimeoutCh := time.After(30 * time.Second)
+			syncTimeoutCh := time.After(timeout)
 			for {
 				if isReady() {
 					break
@@ -56,6 +57,22 @@ func validateProposerPayloads(beaconNodeURL string) error {
 			}
 		}
 	}
+
+	return nil
+}
+
+// validateProposerPayloads validates that payload attribute events are being broadcasted by the beacon node
+// in the correct order without any missing slots.
+func validateProposerPayloads(logOutput io.Writer, beaconNodeURL string) error {
+	// Test that blocks are being produced
+	log := mevRCommon.LogSetup(false, "info").WithField("context", "validateProposerPayloads")
+	log.Logger.Out = logOutput
+
+	clt := beaconclient.NewProdBeaconInstance(log, beaconNodeURL, beaconNodeURL)
+
+	// We run this after 'waitForChainAlive' to ensure that the beacon node is ready to receive payloads.
+	ch := make(chan beaconclient.PayloadAttributesEvent)
+	go clt.SubscribeToPayloadAttributesEvents(ch)
 
 	log.Infof("Chain is alive. Subscribing to head events")
 
@@ -85,7 +102,7 @@ func validateProposerPayloads(beaconNodeURL string) error {
 	}
 }
 
-func watchProposerPayloads(beaconNodeURL string) {
+func watchProposerPayloads(beaconNodeURL string) error {
 	getProposerPayloadDelivered := func() ([]*mevRCommon.BidTraceV2JSON, error) {
 		resp, err := http.Get(fmt.Sprintf("%s/relay/v1/data/bidtraces/proposer_payload_delivered", beaconNodeURL))
 		if err != nil {
@@ -142,4 +159,67 @@ LOOP:
 			lastSlot = val.Slot
 		}
 	}
+}
+
+// watchChainHead watches the chain head and ensures that it is advancing
+func watchChainHead(logOutput io.Writer, elURL string, blockTime time.Duration) error {
+	log := mevRCommon.LogSetup(false, "info").WithField("context", "watchChainHead").WithField("el", elURL)
+	log.Logger.Out = logOutput
+
+	// add some wiggle room to block time
+	blockTime = blockTime + 1*time.Second
+
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		return err
+	}
+
+	var latestBlock *uint64
+	clt := ethclient.NewClient(rpcClient)
+
+	timeout := time.NewTimer(blockTime)
+	defer timeout.Stop()
+
+	for {
+		select {
+		case <-time.After(500 * time.Millisecond):
+			num, err := clt.BlockNumber(context.Background())
+			if err != nil {
+				return err
+			}
+			if latestBlock != nil && num <= *latestBlock {
+				continue
+			}
+			latestBlock = &num
+
+			// Reset timeout since we saw a new block
+			if !timeout.Stop() {
+				<-timeout.C
+			}
+			timeout.Reset(blockTime)
+
+		case <-timeout.C:
+			return fmt.Errorf("chain head for %s not advancing", elURL)
+		}
+	}
+}
+
+type watchGroup struct {
+	errCh chan error
+}
+
+func newWatchGroup() *watchGroup {
+	return &watchGroup{
+		errCh: make(chan error, 1),
+	}
+}
+
+func (wg *watchGroup) watch(watch func() error) {
+	go func() {
+		wg.errCh <- watch()
+	}()
+}
+
+func (wg *watchGroup) wait() error {
+	return <-wg.errCh
 }

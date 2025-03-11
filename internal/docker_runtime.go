@@ -34,6 +34,12 @@ type DockerRunner struct {
 	// handles are the handles to the processes that are running on host machine
 	handles []*exec.Cmd
 
+	// exitError signals when one of the container fails
+	exitErr chan error
+
+	// signals whether we are running in interactive mode
+	interactive bool
+
 	// tasks are the tasks that are running in docker
 	tasksMtx     sync.Mutex
 	tasks        map[string]string
@@ -52,7 +58,7 @@ type taskUI struct {
 	style    lipgloss.Style
 }
 
-func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]string) (*DockerRunner, error) {
+func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]string, interactive bool) (*DockerRunner, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -62,7 +68,7 @@ func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]str
 
 	tasks := map[string]string{}
 	for _, svc := range svcManager.services {
-		tasks[svc.name] = taskStatusPending
+		tasks[svc.Name] = taskStatusPending
 	}
 
 	d := &DockerRunner{
@@ -76,12 +82,17 @@ func NewDockerRunner(out *output, svcManager *Manifest, overrides map[string]str
 		handles:       []*exec.Cmd{},
 		tasks:         tasks,
 		taskUpdateCh:  make(chan struct{}),
+		exitErr:       make(chan error, 2),
 	}
 
-	go d.printStatus()
-	select {
-	case d.taskUpdateCh <- struct{}{}:
-	default:
+	if interactive {
+		go d.printStatus()
+
+		// do an initial update to print the status
+		select {
+		case d.taskUpdateCh <- struct{}{}:
+		default:
+		}
 	}
 
 	return d, nil
@@ -94,7 +105,21 @@ func (d *DockerRunner) printStatus() {
 	// Get ordered service names from manifest
 	orderedServices := make([]string, 0, len(d.svcManager.services))
 	for _, svc := range d.svcManager.services {
-		orderedServices = append(orderedServices, svc.name)
+		orderedServices = append(orderedServices, svc.Name)
+	}
+
+	// Initialize UI state
+	ui := taskUI{
+		tasks:    make(map[string]string),
+		spinners: make(map[string]spinner.Model),
+		style:    lipgloss.NewStyle(),
+	}
+
+	// Initialize spinners for each service
+	for _, name := range orderedServices {
+		sp := spinner.New()
+		sp.Spinner = spinner.Dot
+		ui.spinners[name] = sp
 	}
 
 	for {
@@ -102,27 +127,34 @@ func (d *DockerRunner) printStatus() {
 		case <-d.taskUpdateCh:
 			d.tasksMtx.Lock()
 
-			fmt.Print("\033[u")
-			for i := 0; i < lineOffset; i++ {
-				fmt.Print("\033[K\n")
+			// Clear the previous lines and move cursor up
+			if lineOffset > 0 {
+				fmt.Printf("\033[%dA", lineOffset)
+				fmt.Print("\033[J")
 			}
-			fmt.Print("\033[u")
 
 			lineOffset = 0
 			// Use ordered services instead of ranging over map
 			for _, name := range orderedServices {
 				status := d.tasks[name]
-				sp := spinner.New()
-				sp.Spinner = spinner.Dot
+				var statusLine string
 
 				switch status {
 				case taskStatusStarted:
-					fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("%s [%s] Running", sp.View(), name)))
+					sp := ui.spinners[name]
+					sp.Tick()
+					ui.spinners[name] = sp
+					statusLine = ui.style.Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("%s [%s] Running", sp.View(), name))
 				case taskStatusDie:
-					fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("✗ [%s] Failed", name)))
+					statusLine = ui.style.Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("✗ [%s] Failed", name))
 				case taskStatusPending:
-					fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pending", sp.View(), name)))
+					sp := ui.spinners[name]
+					sp.Tick()
+					ui.spinners[name] = sp
+					statusLine = ui.style.Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pending", sp.View(), name))
 				}
+
+				fmt.Println(statusLine)
 				lineOffset++
 			}
 
@@ -138,10 +170,18 @@ func (d *DockerRunner) updateTaskStatus(name string, status string) {
 	defer d.tasksMtx.Unlock()
 	d.tasks[name] = status
 
+	if status == taskStatusDie {
+		d.exitErr <- fmt.Errorf("container %s failed", name)
+	}
+
 	select {
 	case d.taskUpdateCh <- struct{}{}:
 	default:
 	}
+}
+
+func (d *DockerRunner) ExitErr() <-chan error {
+	return nil
 }
 
 func (d *DockerRunner) Stop() error {
@@ -209,7 +249,7 @@ func (d *DockerRunner) reservePort(startPort int) int {
 
 func (d *DockerRunner) getService(name string) *service {
 	for _, svc := range d.svcManager.services {
-		if svc.name == name {
+		if svc.Name == name {
 			return svc
 		}
 	}
@@ -233,32 +273,32 @@ func (d *DockerRunner) applyTemplate(s *service) []string {
 				panic(fmt.Sprintf("BUG: port label %s not found for service %s", portLabel, name))
 			}
 
-			if d.isOverride(s.name) {
+			if d.isOverride(s.Name) {
 				// either if the target service is running inside docker or outside, it is exposed in localhost
 				// with the host port
-				return fmt.Sprintf("http://localhost:%d", port.hostPort)
+				return fmt.Sprintf("http://localhost:%d", port.HostPort)
 			} else {
 				// service is running inside docker
-				if d.isOverride(svc.name) {
+				if d.isOverride(svc.Name) {
 					// the service is going to be running with the host port in the host machine
 					// use host.docker.internal to connect to it.
-					return fmt.Sprintf("http://host.docker.internal:%d", port.hostPort)
+					return fmt.Sprintf("http://host.docker.internal:%d", port.HostPort)
 				}
 				// use the DNS discovery of docker compose to connect to the service and the docker port
-				return fmt.Sprintf("http://%s:%d", svc.name, port.port)
+				return fmt.Sprintf("http://%s:%d", svc.Name, port.Port)
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
-			if !d.isOverride(s.name) {
+			if !d.isOverride(s.Name) {
 				// running inside docker, return the port
 				return defaultPort
 			}
 			// return the host port
 			port, ok := s.GetPort(name)
 			if !ok {
-				panic(fmt.Sprintf("BUG: port %s not found for service %s", name, s.name))
+				panic(fmt.Sprintf("BUG: port %s not found for service %s", name, s.Name))
 			}
-			return port.hostPort
+			return port.HostPort
 		},
 	}
 
@@ -309,7 +349,7 @@ func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{}
 	if len(s.ports) > 0 {
 		ports := []string{}
 		for _, p := range s.ports {
-			ports = append(ports, fmt.Sprintf("%d:%d", p.hostPort, p.port))
+			ports = append(ports, fmt.Sprintf("%d:%d", p.HostPort, p.Port))
 		}
 		service["ports"] = ports
 	}
@@ -339,17 +379,17 @@ func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 	// for each of the ports, reserve a port on the host machine
 	for _, svc := range d.svcManager.services {
 		for _, port := range svc.ports {
-			port.hostPort = d.reservePort(port.port)
+			port.HostPort = d.reservePort(port.Port)
 		}
 	}
 
 	for _, svc := range d.svcManager.services {
 		// resolve the template again for the variables because things Connect need to be resolved now.
-		if d.isOverride(svc.name) {
+		if d.isOverride(svc.Name) {
 			// skip services that are going to be launched with an override
 			continue
 		}
-		services[svc.name] = d.ToDockerComposeService(svc)
+		services[svc.Name] = d.ToDockerComposeService(svc)
 	}
 
 	yamlData, err := yaml.Marshal(compose)
@@ -363,15 +403,13 @@ func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 func (d *DockerRunner) runOnHost(ss *service) {
 	// we have to apply the template to the args like we do in docker-compose services
 	args := d.applyTemplate(ss)
-	execPath := d.overrides[ss.name]
+	execPath := d.overrides[ss.Name]
 
-	fmt.Println("Running", execPath, args)
 	cmd := exec.Command(execPath, args...)
 
-	logOutput, err := d.out.LogOutput(ss.name)
+	logOutput, err := d.out.LogOutput(ss.Name)
 	if err != nil {
 		// this should not happen, log it
-		fmt.Println("Error creating log output for", ss.name)
 		logOutput = os.Stdout
 	}
 
@@ -383,7 +421,7 @@ func (d *DockerRunner) runOnHost(ss *service) {
 
 	go func() {
 		if err := cmd.Run(); err != nil {
-			panic(err)
+			d.exitErr <- fmt.Errorf("error running host service %s: %w", ss.Name, err)
 		}
 	}()
 
@@ -466,7 +504,7 @@ func (d *DockerRunner) Run() error {
 	// on a separate goroutine start the services that need to be overriten and run on host
 	go func() {
 		for _, svc := range d.svcManager.services {
-			if d.isOverride(svc.name) {
+			if d.isOverride(svc.Name) {
 				d.runOnHost(svc)
 			}
 		}

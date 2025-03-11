@@ -11,10 +11,11 @@ import (
 
 type Recipe interface {
 	Name() string
+	Description() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
 	Apply(artifacts *Artifacts) *Manifest
-	Watchdog(manifest *Manifest) error
+	Watchdog(manifest *Manifest, out *output) error
 }
 
 type Manifest struct {
@@ -32,6 +33,10 @@ type Service interface {
 	Run(service *service)
 }
 
+func (s *Manifest) Services() []*service {
+	return s.services
+}
+
 func (s *Manifest) AddService(name string, srv Service) {
 	service := s.NewService(name)
 	srv.Run(service)
@@ -39,9 +44,17 @@ func (s *Manifest) AddService(name string, srv Service) {
 	s.services = append(s.services, service)
 }
 
+func (s *Manifest) MustGetService(name string) *service {
+	service, ok := s.GetService(name)
+	if !ok {
+		panic(fmt.Sprintf("service %s not found", name))
+	}
+	return service
+}
+
 func (s *Manifest) GetService(name string) (*service, bool) {
 	for _, ss := range s.services {
-		if ss.name == name {
+		if ss.Name == name {
 			return ss, true
 		}
 	}
@@ -53,25 +66,25 @@ func (s *Manifest) Validate() error {
 	// figure out if all the port dependencies are met from the service description
 	servicesMap := make(map[string]*service)
 	for _, ss := range s.services {
-		servicesMap[ss.name] = ss
+		servicesMap[ss.Name] = ss
 	}
 
 	for _, ss := range s.services {
 		for _, nodeRef := range ss.nodeRefs {
 			targetService, ok := servicesMap[nodeRef.Service]
 			if !ok {
-				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.name, nodeRef.Service)
+				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.Name, nodeRef.Service)
 			}
 
 			found := false
 			for _, targetPort := range targetService.ports {
-				if targetPort.name == nodeRef.PortLabel {
+				if targetPort.Name == nodeRef.PortLabel {
 					found = true
 					break
 				}
 			}
 			if !found {
-				return fmt.Errorf("service %s depends on service %s, but it does not expose port %s", ss.name, nodeRef.Service, nodeRef.PortLabel)
+				return fmt.Errorf("service %s depends on service %s, but it does not expose port %s", ss.Name, nodeRef.Service, nodeRef.PortLabel)
 			}
 		}
 	}
@@ -79,15 +92,15 @@ func (s *Manifest) Validate() error {
 }
 
 type port struct {
-	name string
-	port int
+	Name string
+	Port int
 
 	// this is populated by the service manager
-	hostPort int
+	HostPort int
 }
 
 type service struct {
-	name string
+	Name string
 	args []string
 
 	ports    []*port
@@ -98,9 +111,21 @@ type service struct {
 	entrypoint string
 }
 
+func (s *service) Ports() []*port {
+	return s.ports
+}
+
+func (s *service) MustGetPort(name string) *port {
+	port, ok := s.GetPort(name)
+	if !ok {
+		panic(fmt.Sprintf("port %s not found", name))
+	}
+	return port
+}
+
 func (s *service) GetPort(name string) (*port, bool) {
 	for _, p := range s.ports {
-		if p.name == name {
+		if p.Name == name {
 			return p, true
 		}
 	}
@@ -108,7 +133,7 @@ func (s *service) GetPort(name string) (*port, bool) {
 }
 
 func (s *Manifest) NewService(name string) *service {
-	return &service{name: name, args: []string{}, ports: []*port{}, nodeRefs: []*NodeRef{}}
+	return &service{Name: name, args: []string{}, ports: []*port{}, nodeRefs: []*NodeRef{}}
 }
 
 func (s *service) WithImage(image string) *service {
@@ -130,14 +155,14 @@ func (s *service) WithPort(name string, portNumber int) *service {
 	// add the port if not already present with the same name.
 	// if preset with the same name, they must have same port number
 	for _, p := range s.ports {
-		if p.name == name {
-			if p.port != portNumber {
+		if p.Name == name {
+			if p.Port != portNumber {
 				panic(fmt.Sprintf("port %s already defined with different port number", name))
 			}
 			return s
 		}
 	}
-	s.ports = append(s.ports, &port{name: name, port: portNumber})
+	s.ports = append(s.ports, &port{Name: name, Port: portNumber})
 	return s
 }
 
@@ -147,7 +172,7 @@ func (s *service) WithArgs(args ...string) *service {
 		var nodeRef []NodeRef
 		args[i], port, nodeRef = applyTemplate(arg)
 		for _, p := range port {
-			s.WithPort(p.name, p.port)
+			s.WithPort(p.Name, p.Port)
 		}
 		for _, n := range nodeRef {
 			s.nodeRefs = append(s.nodeRefs, &n)
@@ -216,7 +241,7 @@ func applyTemplate(templateStr string) (string, []port, []NodeRef) {
 			return fmt.Sprintf(`{{Service "%s" "%s"}}`, name, portLabel)
 		},
 		"Port": func(name string, defaultPort int) string {
-			portRef = append(portRef, port{name: name, port: defaultPort})
+			portRef = append(portRef, port{Name: name, Port: defaultPort})
 			return fmt.Sprintf(`{{Port "%s" %d}}`, name, defaultPort)
 		},
 	}
@@ -247,29 +272,29 @@ func (s *Manifest) GenerateDotGraph() string {
 	// Create a map of services for easy lookup
 	servicesMap := make(map[string]*service)
 	for _, ss := range s.services {
-		servicesMap[ss.name] = ss
+		servicesMap[ss.Name] = ss
 	}
 
 	// Add nodes (services) with their ports as labels
 	for _, ss := range s.services {
 		var ports []string
 		for _, p := range ss.ports {
-			ports = append(ports, fmt.Sprintf("%s:%d", p.name, p.port))
+			ports = append(ports, fmt.Sprintf("%s:%d", p.Name, p.Port))
 		}
 		portLabel := ""
 		if len(ports) > 0 {
 			portLabel = "|{" + strings.Join(ports, "|") + "}"
 		}
 		// Replace hyphens with underscores for DOT compatibility
-		nodeName := strings.ReplaceAll(ss.name, "-", "_")
-		b.WriteString(fmt.Sprintf("  %s [label=\"%s%s\"];\n", nodeName, ss.name, portLabel))
+		nodeName := strings.ReplaceAll(ss.Name, "-", "_")
+		b.WriteString(fmt.Sprintf("  %s [label=\"%s%s\"];\n", nodeName, ss.Name, portLabel))
 	}
 
 	b.WriteString("\n")
 
 	// Add edges (connections between services)
 	for _, ss := range s.services {
-		sourceNode := strings.ReplaceAll(ss.name, "-", "_")
+		sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
 		for _, ref := range ss.nodeRefs {
 			targetNode := strings.ReplaceAll(ref.Service, "-", "_")
 			b.WriteString(fmt.Sprintf("  %s -> %s [label=\"%s\"];\n",

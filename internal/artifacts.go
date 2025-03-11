@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	_ "embed"
@@ -336,6 +337,8 @@ func Connect(service, port string) string {
 
 type output struct {
 	dst string
+
+	lock sync.Mutex
 }
 
 func (o *output) AbsoluteDstPath() (string, error) {
@@ -400,6 +403,10 @@ func (o *output) WriteBatch(data map[string]interface{}) error {
 }
 
 func (o *output) LogOutput(name string) (*os.File, error) {
+	// lock this because some services might be trying to access this in parallel
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
 	path := filepath.Join(o.dst, "logs", name+".log")
 
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {

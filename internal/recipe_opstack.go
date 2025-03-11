@@ -1,6 +1,9 @@
 package internal
 
 import (
+	"fmt"
+	"time"
+
 	flag "github.com/spf13/pflag"
 )
 
@@ -12,6 +15,10 @@ type OpRecipe struct {
 
 func (o *OpRecipe) Name() string {
 	return "opstack"
+}
+
+func (o *OpRecipe) Description() string {
+	return "Deploy an OP stack"
 }
 
 func (o *OpRecipe) Flags() *flag.FlagSet {
@@ -58,6 +65,35 @@ func (o *OpRecipe) Apply(artifacts *Artifacts) *Manifest {
 	return svcManager
 }
 
-func (o *OpRecipe) Watchdog(manifest *Manifest) error {
+func (o *OpRecipe) Watchdog(manifest *Manifest, out *output) error {
+	beaconNode := manifest.MustGetService("beacon")
+	beaconNodeEL := manifest.MustGetService("el")
+	opNodeEL := manifest.MustGetService("op-geth")
+
+	watchDogOut, err := out.LogOutput("watchdog")
+	if err != nil {
+		return err
+	}
+
+	beaconNodeURL := fmt.Sprintf("http://localhost:%d", beaconNode.MustGetPort("http").HostPort)
+	if err := waitForChainAlive(watchDogOut, beaconNodeURL, 50*time.Second); err != nil {
+		return err
+	}
+
+	watchGroup := newWatchGroup()
+
+	beaconNodeELURL := fmt.Sprintf("http://localhost:%d", beaconNodeEL.MustGetPort("http").HostPort)
+	watchGroup.watch(func() error {
+		return watchChainHead(watchDogOut, beaconNodeELURL, 12*time.Second)
+	})
+
+	opNodeELURL := fmt.Sprintf("http://localhost:%d", opNodeEL.MustGetPort("http").HostPort)
+	watchGroup.watch(func() error {
+		return watchChainHead(watchDogOut, opNodeELURL, 2*time.Second)
+	})
+
+	if err := watchGroup.wait(); err != nil {
+		return err
+	}
 	return nil
 }

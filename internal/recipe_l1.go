@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"time"
 
 	flag "github.com/spf13/pflag"
 )
@@ -16,6 +17,10 @@ type L1Recipe struct {
 
 func (l *L1Recipe) Name() string {
 	return "l1"
+}
+
+func (l *L1Recipe) Description() string {
+	return "Deploy a full L1 stack with mev-boost"
 }
 
 func (l *L1Recipe) Flags() *flag.FlagSet {
@@ -70,23 +75,33 @@ func (l *L1Recipe) Apply(artifacts *Artifacts) *Manifest {
 	return svcManager
 }
 
-func (l *L1Recipe) Watchdog(manifest *Manifest) error {
-	beaconNode, ok := manifest.GetService("beacon")
-	if !ok {
-		return fmt.Errorf("beacon node not found")
+func (l *L1Recipe) Watchdog(manifest *Manifest, out *output) error {
+	beaconNode := manifest.MustGetService("beacon")
+	beaconNodeEL := manifest.MustGetService("el")
+
+	watchDogOut, err := out.LogOutput("watchdog")
+	if err != nil {
+		return err
 	}
 
-	port, ok := beaconNode.GetPort("http")
-	if !ok {
-		return fmt.Errorf("beacon node does not expose port http")
+	beaconNodeURL := fmt.Sprintf("http://localhost:%d", beaconNode.MustGetPort("http").HostPort)
+	if err := waitForChainAlive(watchDogOut, beaconNodeURL, 30*time.Second); err != nil {
+		return err
 	}
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", port.hostPort)
+	beaconNodeELURL := fmt.Sprintf("http://localhost:%d", beaconNodeEL.MustGetPort("http").HostPort)
 
-	go func() {
-		watchProposerPayloads(beaconNodeURL)
-	}()
+	watchGroup := newWatchGroup()
+	watchGroup.watch(func() error {
+		return watchProposerPayloads(beaconNodeURL)
+	})
+	watchGroup.watch(func() error {
+		return validateProposerPayloads(watchDogOut, beaconNodeURL)
+	})
+	watchGroup.watch(func() error {
+		return watchChainHead(watchDogOut, beaconNodeELURL, 12*time.Second)
+	})
 
-	if err := validateProposerPayloads(beaconNodeURL); err != nil {
+	if err := watchGroup.wait(); err != nil {
 		return err
 	}
 	return nil
