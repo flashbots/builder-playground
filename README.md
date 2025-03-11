@@ -1,47 +1,128 @@
 # Builder Playground
 
-The builder playground is a tool to deploy an end-to-end environment to locally test an Ethereum L1 builder. It deploys:
+The builder playground is a tool to deploy an end-to-end environment to locally test EVM block builders.
+
+## Usage
+
+Clone the repository and use the `cook` command to deploy a specific recipe:
+
+```bash
+$ builder-playground cook <recipe>
+```
+
+Currently available recipes:
+
+### L1 Recipe
+
+Deploys a complete L1 environment with:
 
 - A beacon node + validator client ([lighthouse](https://github.com/sigp/lighthouse)).
 - An execution client ([reth](https://github.com/paradigmxyz/reth)).
 - An in-memory [mev-boost-relay](https://github.com/flashbots/mev-boost-relay).
 
-## Usage
-
-Clone the repository and run the following command:
-
 ```bash
-$ go run main.go
+$ builder-playground cook l1 [flags]
 ```
 
-The playground performs the following steps:
+Flags:
 
-1. It attempts to download the `lighthouse` and `reth` binaries from the GitHub releases page if they are not found locally.
-2. It generates the genesis artifacts for the chain.
-   - 100 validators with 32 ETH each.
-   - 10 prefunded accounts with 100 ETH each, generated with the mnemonic `test test test test test test test test test test test junk`.
-   - It enables the Deneb fork at startup.
-   - It creates a chain with ID `1337`
-3. It deploys the chain services and the relay.
-   - `Reth` node.
-   - `Lighthouse` beacon node.
-   - `Lighthouse` validator client.
-   - `Mev-boost-relay`.
+- `--latest-fork`: Enable the latest fork at startup
+- `--use-reth-for-validation`: Use Reth EL for block validation in mev-boost.
+- `--secondary-builder`: Port to use for a secondary builder (enables the internal cl-proxy proxy)
+
+### OpStack Recipe
+
+Deploys an L2 environment with:
+
+- Complete L1 setup (as above minus mev-boost)
+- A complete sequencer with op-node, op-geth and op-batcher
+
+```bash
+$ builder-playground cook opstack [flags]
+```
+
+Flags:
+
+- `--external-builder`: URL of an external builder to use (enables rollup-boost)
+
+## Common Options
+
+- `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.playground/devnet`
+- `--genesis-delay` (int): The delay in seconds before the genesis block is created. Defaults to `10` seconds
+- `--watchdog` (bool): Enable the watchdog service to monitor the specific chain
+- `--dry-run` (bool): Generates the artifacts and manifest but does not deploy anything (also enabled with the `--mise-en-place` flag)
 
 To stop the playground, press `Ctrl+C`.
 
-The `EL` instance is deployed with this deterministic enode address:
+## Internals
 
+### Execution Flow
+
+The playground executes in three main phases:
+
+1. **Artifact Generation**: Creates all necessary files and configurations (genesis files, keys, etc.)
+2. **Manifest Generation**: The recipe creates a manifest describing all services to be deployed, their ports, and configurations
+3. **Deployment**: Uses Docker Compose to deploy the services described in the manifest
+
+When running in dry-run mode (`--dry-run` flag), only the first two phases are executed. This is useful for alternative deployment targets - while the playground uses Docker Compose by default, the manifest could be used to deploy to other platforms like Kubernetes.
+
+### System Architecture
+
+The playground is structured in two main layers:
+
+#### Components
+
+Components are the basic building blocks of the system. Each component implements the `Service` interface:
+
+```go
+type Service interface {
+    Run(service *service)
+}
 ```
-enode://3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f@127.0.0.1:30303
+
+Components represent individual compute resources like:
+
+- Execution clients (Reth)
+- Consensus clients (Lighthouse)
+- Sidecar applications (MEV-Boost Relay)
+
+Each component, given its input parameters, outputs a Docker container description with its specific configuration.
+
+#### Recipes
+
+Recipes combine components in specific ways to create complete environments. They implement this interface:
+
+```go
+type Recipe interface {
+   Apply(artifacts *Artifacts) *Manifest
+}
 ```
 
-Options:
+The key output of a recipe is a `Manifest`, which represents a complete description of the environment to be deployed. A Manifest contains:
 
-- `--output` (string): The directory where the chain data and artifacts are stored. It defaults to `$HOME/.playground/devnet`.
-- `--continue` (bool): Whether to restart the chain from a previous run if the output folder is not empty. It defaults to `false`.
-- `--use-bin-path` (bool): Whether to use the binaries from the local path instead of downloading them. It defaults to `false`.
-- `--genesis-delay` (int): The delay in seconds before the genesis block is created. It is used to account for the delay between the creation of the artifacts and the running of the services. It defaults to `10` seconds.
-- `--electra`: (bool): If enabled, it enables the Electra fork at startup. It defaults to `false`.
+- A list of services to deploy
+- Their interconnections and dependencies
+- Port mappings and configurations
+- Volume mounts and environment variables
 
-Unless the `--continue` flag is set, the playground will delete the output directory and start a new chain from scratch on every run.
+While the current recipes (L1 and OpStack) are relatively simple, this architecture allows for more complex setups. For example, you could create recipes for:
+
+- Multiple execution clients with a shared bootnode
+- Testing specific MEV scenarios
+- Interop L2 testing environments
+
+The separation between components and recipes makes it easy to create new environments by reusing and combining existing components in different ways. The Manifest provides an abstraction between the recipe's description of what should be deployed and how it actually gets deployed (Docker Compose, Kubernetes, etc.).
+
+## Design Philosophy
+
+The Builder Playground is focused exclusively on block building testing and development. Unlike general-purpose tools like Kurtosis that support any Ethereum setup, we take an opinionated approach optimized for block building workflows.
+
+We deliberately limit configuration options and client diversity to keep the tool simple and maintainable. This focused approach allows us to provide a smooth developer experience for block building testing scenarios while keeping the codebase simple and maintainable.
+
+This means we make specific choices:
+
+- Fixed client implementations (Lighthouse, Reth)
+- Recipe-based rather than modular configurations
+- Pre-backed configurations
+
+For use cases outside our scope, consider using a more general-purpose tool like Kurtosis.
