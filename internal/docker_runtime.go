@@ -364,7 +364,6 @@ func (d *DockerRunner) isOverride(name string) bool {
 
 func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 	compose := map[string]interface{}{
-		"version":  "3.8",
 		"services": map[string]interface{}{},
 		// Add networks configuration
 		"networks": map[string]interface{}{
