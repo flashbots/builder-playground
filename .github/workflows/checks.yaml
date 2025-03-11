@@ -27,7 +27,7 @@ jobs:
           go-version: 1.24
 
       - name: Run playground
-        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 2m --watchdog & > /tmp/playground.log 2>&1
+        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 2m --watchdog
 
       - name: Move playground logs
         if: ${{ failure() }}
