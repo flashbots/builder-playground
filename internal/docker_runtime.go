@@ -496,7 +496,7 @@ func (d *DockerRunner) Run() error {
 		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
 	}
 
-	d.composeCmd = exec.Command("docker compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
+	d.composeCmd = exec.Command("docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
 
 	var errOut bytes.Buffer
 	d.composeCmd.Stderr = &errOut
