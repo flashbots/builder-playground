@@ -90,11 +90,9 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	if err != nil {
 		return nil, err
 	}
-	homeDir = filepath.Join(homeDir, "devnet")
-
 	if b.outputDir == "" {
 		// Use the $HOMEDIR/devnet as the default output
-		b.outputDir = homeDir
+		b.outputDir = filepath.Join(homeDir, "devnet")
 	}
 
 	out := &output{dst: b.outputDir, homeDir: homeDir}
