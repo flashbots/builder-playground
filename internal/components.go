@@ -224,7 +224,6 @@ func (l *LighthouseBeaconNode) Run(svc *service) {
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
-			"--http-allow-sync-stalled",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 		)
 
