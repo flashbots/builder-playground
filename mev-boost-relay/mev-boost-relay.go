@@ -24,7 +24,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var defaultSecretKey = "5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
+var DefaultSecretKey = "5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
 
 type Config struct {
 	ApiListenAddr    string
@@ -33,17 +33,17 @@ type Config struct {
 	BeaconClientAddr string
 	LogOutput        io.Writer
 
-	UseRethForValidation bool
+	ValidationServerAddr string
 }
 
 func DefaultConfig() *Config {
 	return &Config{
 		ApiListenAddr:        "127.0.0.1",
 		ApiListenPort:        5555,
-		ApiSecretKey:         defaultSecretKey,
+		ApiSecretKey:         DefaultSecretKey,
 		BeaconClientAddr:     "http://localhost:3500",
 		LogOutput:            os.Stdout,
-		UseRethForValidation: false,
+		ValidationServerAddr: "",
 	}
 }
 
@@ -132,9 +132,9 @@ func New(config *Config) (*MevBoostRelay, error) {
 	housekeeperSrv := housekeeper.NewHousekeeper(housekeeperOpts)
 
 	var blockSimURL string
-	if config.UseRethForValidation {
-		log.Info("Using reth for block validation")
-		blockSimURL = "http://localhost:8545"
+	if config.ValidationServerAddr != "" {
+		log.Infof("Using remote block validation server: %s", config.ValidationServerAddr)
+		blockSimURL = config.ValidationServerAddr
 	} else {
 		// start a mock block validation service that always
 		// returns the blocks as valids.
@@ -149,11 +149,11 @@ func New(config *Config) (*MevBoostRelay, error) {
 	// decode the secret key
 	envSkBytes, err := hex.DecodeString(strings.TrimPrefix(config.ApiSecretKey, "0x"))
 	if err != nil {
-		return nil, fmt.Errorf("incorrect secret key provided")
+		return nil, fmt.Errorf("incorrect secret key provided '%s': %w", config.ApiSecretKey, err)
 	}
 	secretKey, err := bls.SecretKeyFromBytes(envSkBytes[:])
 	if err != nil {
-		return nil, fmt.Errorf("incorrect builder API secret key provided")
+		return nil, fmt.Errorf("incorrect builder API secret key provided '%s': %w", config.ApiSecretKey, err)
 	}
 
 	apiOpts := api.RelayAPIOpts{

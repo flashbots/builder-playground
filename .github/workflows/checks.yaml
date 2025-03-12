@@ -9,8 +9,15 @@ on:
 
 jobs:
   test:
-    name: E2E test
+    name: E2E test (${{ matrix.flags }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        flags:
+          - "l1"
+          - "l1 --use-native-reth"
+          - "opstack"
+          - "opstack --external-builder http://host.docker.internal:4444"
     steps:
       - name: Check out code
         uses: actions/checkout@v2
@@ -20,11 +27,14 @@ jobs:
         with:
           go-version: 1.24
 
-      - name: Run playground
-        run: go run main.go --output /tmp/playground & > /tmp/playground.log 2>&1
+      - name: Install docker compose
+        run: ./scripts/ci-setup-docker-compose.sh
 
-      - name: Validate that blocks are created
-        run: go run main.go watch-payloads --validate-payloads
+      - name: Build playground utils
+        run: ./scripts/ci-build-playground-utils.sh
+
+      - name: Run playground
+        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 2m --watchdog
 
       - name: Move playground logs
         if: ${{ failure() }}
@@ -34,23 +44,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
-          name: playground-logs
+          name: playground-logs-${{ matrix.flags }}
           path: /tmp/playground/logs
           retention-days: 5
-  artifacts:
-    name: Artifacts
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-13]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.24
-
-      - name: Download and test artifacts
-        run: go run main.go download-artifacts --validate
