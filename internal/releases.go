@@ -32,6 +32,11 @@ func downloadRelease(outputFolder string, artifact *release) (string, error) {
 		return outPath, nil
 	}
 
+	// create the output folder if it doesn't exist yet
+	if err := os.MkdirAll(outputFolder, 0755); err != nil {
+		return "", fmt.Errorf("error creating output folder: %v", err)
+	}
+
 	archVersion := artifact.Arch(goos, goarch)
 	if archVersion == "" {
 		// Case 2. The architecture is not supported.
