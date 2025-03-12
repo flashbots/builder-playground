@@ -9,7 +9,10 @@ import (
 
 var _ Recipe = &OpRecipe{}
 
+// OpRecipe is a recipe that deploys an OP stack
 type OpRecipe struct {
+	// externalBuilder is the URL of the external builder to use. If enabled, the recipe deploys
+	// rollup-boost on the sequencer and uses this URL as the external builder.
 	externalBuilder string
 }
 

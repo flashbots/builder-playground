@@ -16,7 +16,6 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
-	golang.org/x/mod v0.22.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 

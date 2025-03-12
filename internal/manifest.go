@@ -2,7 +2,6 @@ package internal
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"text/template"
 
@@ -20,10 +19,13 @@ type Recipe interface {
 	Watchdog(manifest *Manifest, out *output) error
 }
 
+// Manifest describes a list of services and their dependencies
 type Manifest struct {
-	// list of services to start
+	// list of services
 	services []*service
 
+	// overrides is a map of service name to the path of the executable to run
+	// on the host machine instead of a container.
 	overrides map[string]string
 
 	out *output
@@ -71,29 +73,18 @@ func (s *Manifest) GetService(name string) (*service, bool) {
 	return nil, false
 }
 
+// Validate validates the manifest
+// - checks if all the port dependencies are met from the service description
+// - downloads any local release artifacts for the services that require host execution
 func (s *Manifest) Validate() error {
-	// first, try to download all the artifacts
-	// figure out if all the port dependencies are met from the service description
-	servicesMap := make(map[string]*service)
-	for _, ss := range s.services {
-		servicesMap[ss.Name] = ss
-	}
-
 	for _, ss := range s.services {
 		for _, nodeRef := range ss.nodeRefs {
-			targetService, ok := servicesMap[nodeRef.Service]
+			targetService, ok := s.GetService(nodeRef.Service)
 			if !ok {
 				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.Name, nodeRef.Service)
 			}
 
-			found := false
-			for _, targetPort := range targetService.ports {
-				if targetPort.Name == nodeRef.PortLabel {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if _, ok := targetService.GetPort(nodeRef.PortLabel); !ok {
 				return fmt.Errorf("service %s depends on service %s, but it does not expose port %s", ss.Name, nodeRef.Service, nodeRef.PortLabel)
 			}
 		}
@@ -102,7 +93,8 @@ func (s *Manifest) Validate() error {
 	// download any local release artifacts for the services that require them
 	for _, ss := range s.services {
 		if ss.labels[useHostExecutionLabel] == "true" {
-			// the service must implement the ReleaseService interface
+			// If the service wants to run on the host, it must implement the ReleaseService interface
+			// which provides functions to download the release artifact.
 			releaseService, ok := ss.component.(ReleaseService)
 			if !ok {
 				return fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
@@ -118,12 +110,24 @@ func (s *Manifest) Validate() error {
 	return nil
 }
 
-type port struct {
+// Port describes a port that a service exposes
+type Port struct {
+	// Name is the name of the port
 	Name string
+
+	// Port is the port number
 	Port int
 
-	// this is populated by the service manager
+	// HostPort is the port number assigned on the host machine for this
+	// container port. It is populated by the local runner
+	// TODO: We might want to move this to the runner itself.
 	HostPort int
+}
+
+// NodeRef describes a reference from one service to another
+type NodeRef struct {
+	Service   string
+	PortLabel string
 }
 
 type service struct {
@@ -132,7 +136,7 @@ type service struct {
 
 	labels map[string]string
 
-	ports    []*port
+	ports    []*Port
 	nodeRefs []*NodeRef
 
 	tag        string
@@ -142,11 +146,11 @@ type service struct {
 	component Service
 }
 
-func (s *service) Ports() []*port {
+func (s *service) Ports() []*Port {
 	return s.ports
 }
 
-func (s *service) MustGetPort(name string) *port {
+func (s *service) MustGetPort(name string) *Port {
 	port, ok := s.GetPort(name)
 	if !ok {
 		panic(fmt.Sprintf("port %s not found", name))
@@ -154,7 +158,7 @@ func (s *service) MustGetPort(name string) *port {
 	return port
 }
 
-func (s *service) GetPort(name string) (*port, bool) {
+func (s *service) GetPort(name string) (*Port, bool) {
 	for _, p := range s.ports {
 		if p.Name == name {
 			return p, true
@@ -177,7 +181,7 @@ func (s *service) WithLabel(key, value string) *service {
 }
 
 func (s *Manifest) NewService(name string) *service {
-	return &service{Name: name, args: []string{}, ports: []*port{}, nodeRefs: []*NodeRef{}}
+	return &service{Name: name, args: []string{}, ports: []*Port{}, nodeRefs: []*NodeRef{}}
 }
 
 func (s *service) WithImage(image string) *service {
@@ -206,13 +210,13 @@ func (s *service) WithPort(name string, portNumber int) *service {
 			return s
 		}
 	}
-	s.ports = append(s.ports, &port{Name: name, Port: portNumber})
+	s.ports = append(s.ports, &Port{Name: name, Port: portNumber})
 	return s
 }
 
 func (s *service) WithArgs(args ...string) *service {
 	for i, arg := range args {
-		var port []port
+		var port []Port
 		var nodeRef []NodeRef
 		args[i], port, nodeRef = applyTemplate(arg)
 		for _, p := range port {
@@ -226,45 +230,14 @@ func (s *service) WithArgs(args ...string) *service {
 	return s
 }
 
-// WithReplacementArgs finds the first occurrence of the first argument in the current arguments,
-// and replaces it and len(args) - 1 more arguments with the new arguments.
-//
-// For example:
-//
-// s.WithArgs("a", "b", "c").WithReplacementArgs("b", "d") will result in ["a", "b", "d"]
-func (s *service) WithReplacementArgs(args ...string) *service {
-	if len(args) == 0 {
-		return s
-	}
-	// use template substitution to load constants
-	for i, arg := range args {
-		// skip refs since we do not do them yet on replacement args
-		args[i], _, _ = applyTemplate(arg)
-	}
-
-	if i := slices.Index(s.args, args[0]); i != -1 {
-		s.args = slices.Replace(s.args, i, i+len(args), args...)
-	} else {
-		s.args = append(s.args, args...)
-	}
-	return s
-}
-
-func (s *service) If(cond bool, fn func(*service) *service) *service {
-	if cond {
-		return fn(s)
-	}
-	return s
-}
-
-func applyTemplate(templateStr string) (string, []port, []NodeRef) {
+func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 	// use template substitution to load constants
 	// pass-through the Dir template because it has to be resolved at the runtime
 	input := map[string]interface{}{
 		"Dir": "{{.Dir}}",
 	}
 
-	var portRef []port
+	var portRef []Port
 	var nodeRef []NodeRef
 	// ther can be multiple port and nodere because in the case of op-geth we pass a whole string as nested command args
 
@@ -285,7 +258,7 @@ func applyTemplate(templateStr string) (string, []port, []NodeRef) {
 			return fmt.Sprintf(`{{Service "%s" "%s"}}`, name, portLabel)
 		},
 		"Port": func(name string, defaultPort int) string {
-			portRef = append(portRef, port{Name: name, Port: defaultPort})
+			portRef = append(portRef, Port{Name: name, Port: defaultPort})
 			return fmt.Sprintf(`{{Port "%s" %d}}`, name, defaultPort)
 		},
 	}

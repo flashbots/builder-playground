@@ -22,25 +22,38 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type DockerRunner struct {
-	out           *output
-	svcManager    *Manifest
-	composeCmd    *exec.Cmd
-	ctx           context.Context
-	cancel        context.CancelFunc
-	client        *client.Client
+const networkName = "ethplayground"
+
+// LocalRunner is a component that runs the services from the manifest on the local host machine.
+// By default, it uses docker and docker compose to run all the services.
+// But, some services (if they are configured to do so) can be run on the host machine instead.
+// When running inside docker, each service will use the port numbers they define in the component description.
+// Besides, they will also bind to an available public port on the host machine.
+// If the service runs on the host, it will use the host port numbers instead directly.
+type LocalRunner struct {
+	out      *output
+	manifest *Manifest
+	client   *client.Client
+
+	// reservedPorts is a map of port numbers reserved for each service to avoid conflicts
+	// since we reserve ports for all the services before they are used
 	reservedPorts map[int]bool
-	overrides     map[string]string
-	// handles are the handles to the processes that are running on host machine
+
+	// overrides is a map of service name to the path of the executable to run
+	// on the host machine instead of a container.
+	overrides map[string]string
+
+	// handles stores the references to the processes that are running on host machine
+	// they are executed sequentially so we do not need to lock the handles
 	handles []*exec.Cmd
 
-	// exitError signals when one of the container fails
+	// exitError signals when one of the services fails
 	exitErr chan error
 
 	// signals whether we are running in interactive mode
 	interactive bool
 
-	// tasks are the tasks that are running in docker
+	// tasks tracks the status of each service
 	tasksMtx     sync.Mutex
 	tasks        map[string]string
 	taskUpdateCh chan struct{}
@@ -58,15 +71,13 @@ type taskUI struct {
 	style    lipgloss.Style
 }
 
-func NewDockerRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*DockerRunner, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*LocalRunner, error) {
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	// merge the overrides with the svcManager.overrides
+	// merge the overrides with the manifest overrides
 	if overrides == nil {
 		overrides = make(map[string]string)
 	}
@@ -79,11 +90,9 @@ func NewDockerRunner(out *output, manifest *Manifest, overrides map[string]strin
 		tasks[svc.Name] = taskStatusPending
 	}
 
-	d := &DockerRunner{
+	d := &LocalRunner{
 		out:           out,
-		svcManager:    manifest,
-		ctx:           ctx,
-		cancel:        cancel,
+		manifest:      manifest,
 		client:        client,
 		reservedPorts: map[int]bool{},
 		overrides:     overrides,
@@ -96,7 +105,6 @@ func NewDockerRunner(out *output, manifest *Manifest, overrides map[string]strin
 	if interactive {
 		go d.printStatus()
 
-		// do an initial update to print the status
 		select {
 		case d.taskUpdateCh <- struct{}{}:
 		default:
@@ -106,13 +114,13 @@ func NewDockerRunner(out *output, manifest *Manifest, overrides map[string]strin
 	return d, nil
 }
 
-func (d *DockerRunner) printStatus() {
+func (d *LocalRunner) printStatus() {
 	fmt.Print("\033[s")
 	lineOffset := 0
 
 	// Get ordered service names from manifest
-	orderedServices := make([]string, 0, len(d.svcManager.services))
-	for _, svc := range d.svcManager.services {
+	orderedServices := make([]string, 0, len(d.manifest.services))
+	for _, svc := range d.manifest.services {
 		orderedServices = append(orderedServices, svc.Name)
 	}
 
@@ -167,13 +175,11 @@ func (d *DockerRunner) printStatus() {
 			}
 
 			d.tasksMtx.Unlock()
-		case <-d.ctx.Done():
-			return
 		}
 	}
 }
 
-func (d *DockerRunner) updateTaskStatus(name string, status string) {
+func (d *LocalRunner) updateTaskStatus(name string, status string) {
 	d.tasksMtx.Lock()
 	defer d.tasksMtx.Unlock()
 	d.tasks[name] = status
@@ -188,13 +194,12 @@ func (d *DockerRunner) updateTaskStatus(name string, status string) {
 	}
 }
 
-func (d *DockerRunner) ExitErr() <-chan error {
+func (d *LocalRunner) ExitErr() <-chan error {
 	return d.exitErr
 }
 
-func (d *DockerRunner) Stop() error {
-	// try to stop all the containers from the container list for playground
-	containers, err := d.client.ContainerList(d.ctx, container.ListOptions{
+func (d *LocalRunner) Stop() error {
+	containers, err := d.client.ContainerList(context.Background(), container.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
 	})
 	if err != nil {
@@ -238,7 +243,10 @@ func (d *DockerRunner) Stop() error {
 	return nil
 }
 
-func (d *DockerRunner) reservePort(startPort int) int {
+// reservePort finds the first available port from the startPort and reserves it
+// Note that we have to keep track of the port in 'reservedPorts' because
+// the port allocation happens before the services uses it and binds to it.
+func (d *LocalRunner) reservePort(startPort int) int {
 	for i := startPort; i < startPort+1000; i++ {
 		if _, ok := d.reservedPorts[i]; ok {
 			continue
@@ -255,8 +263,8 @@ func (d *DockerRunner) reservePort(startPort int) int {
 	panic("BUG: could not reserve a port")
 }
 
-func (d *DockerRunner) getService(name string) *service {
-	for _, svc := range d.svcManager.services {
+func (d *LocalRunner) getService(name string) *service {
+	for _, svc := range d.manifest.services {
 		if svc.Name == name {
 			return svc
 		}
@@ -264,10 +272,15 @@ func (d *DockerRunner) getService(name string) *service {
 	return nil
 }
 
-func (d *DockerRunner) applyTemplate(s *service) []string {
+// applyTemplate resolves the templates from the manifest (Dir, Port, Connect) into
+// the actual values for this specific docker execution.
+func (d *LocalRunner) applyTemplate(s *service) ([]string, error) {
 	var input map[string]interface{}
 
-	if d.isOverride(s.Name) {
+	// For {{.Dir}}:
+	// - Service runs on host: bind to the output folder
+	// - Service runs inside docker: bind to /artifacts
+	if d.isHostService(s.Name) {
 		input = map[string]interface{}{
 			"Dir": d.out.dst,
 		}
@@ -279,42 +292,38 @@ func (d *DockerRunner) applyTemplate(s *service) []string {
 
 	funcs := template.FuncMap{
 		"Service": func(name string, portLabel string) string {
-			// find the service and the port that it resolves for that label
-			svc := d.getService(name)
-			if svc == nil {
-				panic(fmt.Sprintf("BUG: service %s not found", name))
-			}
-			port, ok := svc.GetPort(portLabel)
-			if !ok {
-				panic(fmt.Sprintf("BUG: port label %s not found for service %s", portLabel, name))
-			}
+			// For {{Service "name" "portLabel"}}:
+			// - Service runs on host:
+			//   A: target is inside docker: access with localhost:hostPort
+			//   B: target is on the host: access with localhost:hostPort
+			// - Service runs inside docker:
+			//   C: target is inside docker: access it with DNS service:port
+			//   D: target is on the host: access it with host.docker.internal:hostPort
 
-			if d.isOverride(s.Name) {
-				// either if the target service is running inside docker or outside, it is exposed in localhost
-				// with the host port
+			// find the service and the port that it resolves for that label
+			svc := d.manifest.MustGetService(name)
+			port := svc.MustGetPort(portLabel)
+
+			if d.isHostService(s.Name) {
+				// A and B
 				return fmt.Sprintf("http://localhost:%d", port.HostPort)
 			} else {
-				// service is running inside docker
-				if d.isOverride(svc.Name) {
-					// the service is going to be running with the host port in the host machine
-					// use host.docker.internal to connect to it.
+				if d.isHostService(svc.Name) {
+					// D
 					return fmt.Sprintf("http://host.docker.internal:%d", port.HostPort)
 				}
-				// use the DNS discovery of docker compose to connect to the service and the docker port
+				// C
 				return fmt.Sprintf("http://%s:%d", svc.Name, port.Port)
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
-			if !d.isOverride(s.Name) {
-				// running inside docker, return the port
+			// For {{Port "name" "defaultPort"}}:
+			// - Service runs on host: return the host port
+			// - Service runs inside docker: return the docker port
+			if d.isHostService(s.Name) {
 				return defaultPort
 			}
-			// return the host port
-			port, ok := s.GetPort(name)
-			if !ok {
-				panic(fmt.Sprintf("BUG: port %s not found for service %s", name, s.Name))
-			}
-			return port.HostPort
+			return s.MustGetPort(name).HostPort
 		},
 	}
 
@@ -322,28 +331,33 @@ func (d *DockerRunner) applyTemplate(s *service) []string {
 	for _, arg := range s.args {
 		tpl, err := template.New("").Funcs(funcs).Parse(arg)
 		if err != nil {
-			panic(fmt.Sprintf("BUG: failed to parse template, err: %s, arg: %s", err, arg))
+			return nil, err
 		}
 
 		var out strings.Builder
 		if err := tpl.Execute(&out, input); err != nil {
-			panic(fmt.Sprintf("BUG: failed to execute template, err: %s, arg: %s", err, arg))
+			return nil, err
 		}
 		argsResult = append(argsResult, out.String())
 	}
 
-	return argsResult
+	return argsResult, nil
 }
 
-func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{} {
+func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}, error) {
 	// apply the template again on the arguments to figure out the connections
 	// at this point all of them are valid, we just have to resolve them again. We assume for now
 	// everyone is going to be on docker at the same network.
-	args := d.applyTemplate(s)
+	args, err := d.applyTemplate(s)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply template, err: %w", err)
+	}
 
+	// The containers have access to the full set of artifacts on the /artifacts folder
+	// so, we have to bind it as a volume on the container.
 	outputFolder, err := d.out.AbsoluteDstPath()
 	if err != nil {
-		panic(fmt.Sprintf("BUG: failed to get absolute path for output folder: %s", err))
+		return nil, fmt.Errorf("failed to get absolute path for output folder: %w", err)
 	}
 
 	service := map[string]interface{}{
@@ -354,8 +368,10 @@ func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{}
 			fmt.Sprintf("%s:/artifacts", outputFolder),
 		},
 		// Add the ethereum network
-		"networks": []string{"ethereum"},
-		"labels":   map[string]string{"playground": "true"},
+		"networks": []string{networkName},
+		// It is important to use the playground label to identify the containers
+		// during the cleanup process
+		"labels": map[string]string{"playground": "true"},
 	}
 
 	if s.entrypoint != "" {
@@ -370,42 +386,48 @@ func (d *DockerRunner) ToDockerComposeService(s *service) map[string]interface{}
 		service["ports"] = ports
 	}
 
-	return service
+	return service, nil
 }
 
-func (d *DockerRunner) isOverride(name string) bool {
+func (d *LocalRunner) isHostService(name string) bool {
 	_, ok := d.overrides[name]
 	return ok
 }
 
-func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
+func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	compose := map[string]interface{}{
-		"services": map[string]interface{}{},
-		// Add networks configuration
+		// We create a new network to be used by all the services so that
+		// we can do DNS discovery between them.
 		"networks": map[string]interface{}{
-			"ethereum": map[string]interface{}{
-				"name": "ethereum",
+			networkName: map[string]interface{}{
+				"name": networkName,
 			},
 		},
 	}
 
-	services := compose["services"].(map[string]interface{})
+	services := map[string]interface{}{}
 
-	// for each of the ports, reserve a port on the host machine
-	for _, svc := range d.svcManager.services {
+	// for each service, reserve a port on the host machine. We use this ports
+	// both to have access to the services from localhost but also to do communication
+	// between services running inside docker and the ones running on the host machine.
+	for _, svc := range d.manifest.services {
 		for _, port := range svc.ports {
 			port.HostPort = d.reservePort(port.Port)
 		}
 	}
 
-	for _, svc := range d.svcManager.services {
-		// resolve the template again for the variables because things Connect need to be resolved now.
-		if d.isOverride(svc.Name) {
-			// skip services that are going to be launched with an override
+	for _, svc := range d.manifest.services {
+		if d.isHostService(svc.Name) {
+			// skip services that are going to be launched on host
 			continue
 		}
-		services[svc.Name] = d.ToDockerComposeService(svc)
+		var err error
+		if services[svc.Name], err = d.toDockerComposeService(svc); err != nil {
+			return nil, fmt.Errorf("failed to convert service %s to docker compose service: %w", svc.Name, err)
+		}
 	}
+
+	compose["services"] = services
 
 	yamlData, err := yaml.Marshal(compose)
 	if err != nil {
@@ -415,11 +437,14 @@ func (d *DockerRunner) GenerateDockerCompose() ([]byte, error) {
 	return yamlData, nil
 }
 
-func (d *DockerRunner) runOnHost(ss *service) {
-	// we have to apply the template to the args like we do in docker-compose services
-	args := d.applyTemplate(ss)
-	execPath := d.overrides[ss.Name]
+// runOnHost runs the service on the host machine
+func (d *LocalRunner) runOnHost(ss *service) error {
+	args, err := d.applyTemplate(ss)
+	if err != nil {
+		return fmt.Errorf("failed to apply template, err: %w", err)
+	}
 
+	execPath := d.overrides[ss.Name]
 	cmd := exec.Command(execPath, args...)
 
 	logOutput, err := d.out.LogOutput(ss.Name)
@@ -428,8 +453,8 @@ func (d *DockerRunner) runOnHost(ss *service) {
 		logOutput = os.Stdout
 	}
 
-	// first thing to output is the command itself
-	fmt.Fprint(logOutput, strings.Join(ss.args, " ")+"\n\n")
+	// Output the command itself to the log output for debugging purposes
+	fmt.Fprint(logOutput, strings.Join(args, " ")+"\n\n")
 
 	cmd.Stdout = logOutput
 	cmd.Stderr = logOutput
@@ -440,10 +465,13 @@ func (d *DockerRunner) runOnHost(ss *service) {
 		}
 	}()
 
+	// we do not need to lock this array because we run the host services sequentially
 	d.handles = append(d.handles, cmd)
+	return nil
 }
 
-func (d *DockerRunner) trackLogs(serviceName string, containerID string) error {
+// trackLogs tracks the logs of a container and writes them to the log output
+func (d *LocalRunner) trackLogs(serviceName string, containerID string) error {
 	log_output, err := d.out.LogOutput(serviceName)
 	if err != nil {
 		return fmt.Errorf("error getting log output: %w", err)
@@ -465,7 +493,7 @@ func (d *DockerRunner) trackLogs(serviceName string, containerID string) error {
 	return nil
 }
 
-func (d *DockerRunner) trackContainerStatusAndLogs() {
+func (d *LocalRunner) trackContainerStatusAndLogs() {
 	eventCh, errCh := d.client.Events(context.Background(), events.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
 	})
@@ -492,17 +520,14 @@ func (d *DockerRunner) trackContainerStatusAndLogs() {
 
 		case err := <-errCh:
 			log.Warn("error tracking events", "error", err)
-
-		case <-d.ctx.Done():
-			return
 		}
 	}
 }
 
-func (d *DockerRunner) Run() error {
+func (d *LocalRunner) Run() error {
 	go d.trackContainerStatusAndLogs()
 
-	yamlData, err := d.GenerateDockerCompose()
+	yamlData, err := d.generateDockerCompose()
 	if err != nil {
 		return fmt.Errorf("failed to generate docker-compose.yaml: %w", err)
 	}
@@ -511,22 +536,33 @@ func (d *DockerRunner) Run() error {
 		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
 	}
 
-	d.composeCmd = exec.Command("docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
+	// First start the services that are running in docker-compose
+	cmd := exec.Command("docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
 
 	var errOut bytes.Buffer
-	d.composeCmd.Stderr = &errOut
+	cmd.Stderr = &errOut
 
-	// on a separate goroutine start the services that need to be overriten and run on host
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
+	}
+
+	// Second, start the services that are running on the host machine
+	errCh := make(chan error)
 	go func() {
-		for _, svc := range d.svcManager.services {
-			if d.isOverride(svc.Name) {
-				d.runOnHost(svc)
+		for _, svc := range d.manifest.services {
+			if d.isHostService(svc.Name) {
+				if err := d.runOnHost(svc); err != nil {
+					errCh <- err
+				}
 			}
 		}
+		close(errCh)
 	}()
 
-	if err := d.composeCmd.Run(); err != nil {
-		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

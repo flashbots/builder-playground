@@ -15,6 +15,7 @@ jobs:
       matrix:
         flags:
           - "l1"
+          - "l1 --use-native-reth"
           - "opstack"
           - "opstack --external-builder http://host.docker.internal:4444"
     steps:

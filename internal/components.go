@@ -1,7 +1,5 @@
 package internal
 
-import "golang.org/x/mod/semver"
-
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 
 var (
@@ -48,12 +46,6 @@ func (o *OpBatcher) Run(service *service) {
 			"--num-confirmations=1",
 			"--private-key=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
 		)
-}
-
-// NodeRef is a connection reference from one service to another
-type NodeRef struct {
-	Service   string
-	PortLabel string
 }
 
 type OpNode struct {
@@ -205,42 +197,6 @@ type LighthouseBeaconNode struct {
 }
 
 func (l *LighthouseBeaconNode) Run(svc *service) {
-	/*
-		// TODO: Figure out how to do this
-			lightHouseVersion := func() string {
-				cmd := exec.Command(lighthouseBin, "--version")
-				out, err := cmd.Output()
-				if err != nil {
-					return "unknown"
-				}
-				// find the line of the form:
-				// Lighthouse v5.2.1-9e12c21
-				for _, line := range strings.Split(string(out), "\n") {
-					if strings.HasPrefix(line, "Lighthouse ") {
-						v := strings.TrimSpace(strings.TrimPrefix(line, "Lighthouse "))
-						if !strings.HasPrefix(v, "v") {
-							v = "v" + v
-						}
-						// Go semver considers - as a pre-release, so we need to remove it
-						v = strings.Split(v, "-")[0]
-						return semver.Canonical(v)
-					}
-				}
-				return "unknown"
-			}()
-
-			if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-				cmd := exec.Command("file", lighthouseBin)
-				out, _ := cmd.Output()
-				if strings.Contains(string(out), "x86_64") {
-					fmt.Println("WARNING: ", lighthouseBin, "is an x86_64 binary, using a self-compiled verison with `--use-bin-path` is recommended.")
-				}
-			}
-	*/
-
-	lightHouseVersion := "v5.3"
-
-	// start the beacon node
 	svc.
 		WithImage("sigp/lighthouse").
 		WithTag("v7.0.0-beta.0").
@@ -268,21 +224,8 @@ func (l *LighthouseBeaconNode) Run(svc *service) {
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
-		).
-		If(
-			semver.Compare(lightHouseVersion, "v5.3") < 0,
-			func(s *service) *service {
-				// For versions <= v5.2.1, we want to run with --http-allow-sync-stalled
-				// However this flag is not available in newer versions
-				return s.WithArgs("--http-allow-sync-stalled")
-			},
-		).
-		If(
-			semver.Compare(lightHouseVersion, "v5.3") >= 0,
-			func(s *service) *service {
-				// For versions >= v5.3.0, ----suggested-fee-recipient is apparently now required for non-validator nodes as well
-				return s.WithArgs("--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990")
-			},
+			"--http-allow-sync-stalled",
+			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 		)
 
 	if l.MevBoostNode != "" {

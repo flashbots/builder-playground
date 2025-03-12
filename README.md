@@ -28,7 +28,7 @@ Flags:
 
 - `--latest-fork`: Enable the latest fork at startup
 - `--use-reth-for-validation`: Use Reth EL for block validation in mev-boost.
-- `--secondary-builder`: Port to use for a secondary builder (enables the internal cl-proxy proxy)
+- `--secondary-el`: Port to use for a secondary el (enables the internal cl-proxy proxy)
 - `--use-native-reth`: Run the Reth EL binary on the host instead of docker (recommended to bind to the Reth DB)
 
 ### OpStack Recipe

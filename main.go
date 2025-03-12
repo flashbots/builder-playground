@@ -102,7 +102,7 @@ func runIt(recipe internal.Recipe) error {
 		return nil
 	}
 
-	dockerRunner, err := internal.NewDockerRunner(artifacts.Out, svcManager, nil, interactive)
+	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, nil, interactive)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
