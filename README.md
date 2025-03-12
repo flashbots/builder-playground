@@ -1,5 +1,8 @@
 # Builder Playground
 
+[![Goreport status](https://goreportcard.com/badge/github.com/flashbots/builder-playground)](https://goreportcard.com/report/github.com/flashbots/builder-playground)
+[![Test status](https://github.com/flashbots/builder-playground/actions/workflows/checks.yaml/badge.svg?branch=main)](https://github.com/flashbots/builder-playground/actions?query=workflow%3A%22Checks%22)
+
 The builder playground is a tool to deploy an end-to-end environment to locally test EVM block builders.
 
 ## Usage
