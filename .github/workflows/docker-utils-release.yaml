@@ -30,7 +30,7 @@ jobs:
           context: .
           push: true
           tags: |
-            docker.io/flashbots/playground/utils:latest
-            docker.io/flashbots/playground/utils:${{ github.sha }}
+            docker.io/flashbots/playground-utils:latest
+            docker.io/flashbots/playground-utils:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
