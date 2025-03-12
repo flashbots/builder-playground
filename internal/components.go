@@ -171,7 +171,6 @@ func (r *RethEL) Run(svc *service) {
 			// http config
 			"--http",
 			"--http.addr", "0.0.0.0",
-			"--http.api", "admin,eth,net,web3",
 			"--http.port", `{{Port "http" 8545}}`,
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
@@ -183,6 +182,8 @@ func (r *RethEL) Run(svc *service) {
 
 	if r.UseRethForValidation {
 		svc.WithArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
+	} else {
+		svc.WithArgs("--http.api", "admin,eth,web3,net,rpc")
 	}
 
 	if r.UseNativeReth {
