@@ -4,9 +4,7 @@ name: docker-utils-release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
+  pull_request:
 
 jobs:
   docker:
@@ -23,14 +21,3 @@ jobs:
         with:
           username: ${{ secrets.FLASHBOTS_DOCKERHUB_USERNAME }}
           password: ${{ secrets.FLASHBOTS_DOCKERHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            docker.io/flashbots/playground-utils:latest
-            docker.io/flashbots/playground-utils:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
