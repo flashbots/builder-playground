@@ -321,9 +321,9 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, error) {
 			// - Service runs on host: return the host port
 			// - Service runs inside docker: return the docker port
 			if d.isHostService(s.Name) {
-				return defaultPort
+				return s.MustGetPort(name).HostPort
 			}
-			return s.MustGetPort(name).HostPort
+			return defaultPort
 		},
 	}
 

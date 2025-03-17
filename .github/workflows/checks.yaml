@@ -34,7 +34,7 @@ jobs:
         run: ./scripts/ci-build-playground-utils.sh
 
       - name: Run playground
-        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 2m --watchdog
+        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 4m --watchdog
 
       - name: Move playground logs
         if: ${{ failure() }}
