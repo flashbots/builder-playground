@@ -122,6 +122,7 @@ func (o *OpGeth) Run(service *service) {
 				"--authrpc.jwtsecret {{.Dir}}/jwtsecret "+
 				"--gcmode archive "+
 				"--state.scheme hash "+
+				"--port "+`{{Port "rpc" 30303}} `+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
