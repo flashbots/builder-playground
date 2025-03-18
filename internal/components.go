@@ -138,7 +138,7 @@ func (r *RethEL) ReleaseArtifact() *release {
 	return &release{
 		Name:    "reth",
 		Org:     "paradigmxyz",
-		Version: "v1.2.0",
+		Version: "v1.3.1",
 		Arch: func(goos, goarch string) string {
 			if goos == "linux" {
 				return "x86_64-unknown-linux-gnu"
@@ -156,7 +156,7 @@ func (r *RethEL) Run(svc *service) {
 	// start the reth el client
 	svc.
 		WithImage("ghcr.io/paradigmxyz/reth").
-		WithTag("v1.2.0").
+		WithTag("v1.3.1").
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",
@@ -172,6 +172,7 @@ func (r *RethEL) Run(svc *service) {
 			// http config
 			"--http",
 			"--http.addr", "0.0.0.0",
+			"--http.api", "admin,eth,web3,net,rpc,mev,flashbots",
 			"--http.port", `{{Port "http" 8545}}`,
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
@@ -180,12 +181,6 @@ func (r *RethEL) Run(svc *service) {
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
 			"-vvvv",
 		)
-
-	if r.UseRethForValidation {
-		svc.WithArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
-	} else {
-		svc.WithArgs("--http.api", "admin,eth,web3,net,rpc")
-	}
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
