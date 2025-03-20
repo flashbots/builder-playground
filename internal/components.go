@@ -90,6 +90,23 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 type OpGeth struct {
 }
 
+func logLevelToGethVerbosity(logLevel LogLevel) string {
+	switch logLevel {
+	case LevelTrace:
+		return "5"
+	case LevelDebug:
+		return "4"
+	case LevelInfo:
+		return "3"
+	case LevelWarn:
+		return "2"
+	case LevelError:
+		return "1"
+	default:
+		return "3"
+	}
+}
+
 func (o *OpGeth) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
@@ -100,7 +117,7 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 			"geth init --datadir {{.Dir}}/data_opgeth --state.scheme hash {{.Dir}}/l2-genesis.json && "+
 				"exec geth "+
 				"--datadir {{.Dir}}/data_opgeth "+
-				"--verbosity 3 "+
+				"--verbosity "+logLevelToGethVerbosity(ctx.LogLevel)+" "+
 				"--http "+
 				"--http.corsdomain \"*\" "+
 				"--http.vhosts \"*\" "+
