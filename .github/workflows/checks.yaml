@@ -37,13 +37,11 @@ jobs:
         run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground & > /tmp/playground.log 2>&1
 
       - name: Sleep
-        run: sleep 10
+        run: sleep 20
 
       - name: Query stuff
         run: |
           docker ps
-          docker compose ps
-          docker compose logs beacon
           curl -v http://localhost:3500/eth/v1/node/syncing
 
       - name: Copy playground logs
