@@ -38,7 +38,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("l1", flag.ContinueOnError)
 	flags.BoolVar(&l.latestFork, "latest-fork", false, "use the latest fork")
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
-	flags.Uint64Var(&l.secondaryELPort, "secondary-el", 1234, "port to use for the secondary builder")
+	flags.Uint64Var(&l.secondaryELPort, "secondary-el", 0, "port to use for the secondary builder")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
 	return flags
 }

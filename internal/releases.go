@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -40,17 +41,17 @@ func downloadRelease(outputFolder string, artifact *release) (string, error) {
 	archVersion := artifact.Arch(goos, goarch)
 	if archVersion == "" {
 		// Case 2. The architecture is not supported.
-		fmt.Printf("unsupported OS/Arch: %s/%s\n", goos, goarch)
+		log.Printf("unsupported OS/Arch: %s/%s\n", goos, goarch)
 		if _, err := exec.LookPath(artifact.Name); err != nil {
 			return "", fmt.Errorf("error looking up binary in PATH: %v", err)
 		} else {
 			outPath = artifact.Name
-			fmt.Printf("Using %s from PATH\n", artifact.Name)
+			log.Printf("Using %s from PATH\n", artifact.Name)
 		}
 	} else {
 		// Case 3. Download the binary from the release page
 		releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, archVersion)
-		fmt.Printf("Downloading %s: %s\n", outPath, releasesURL)
+		log.Printf("Downloading %s: %s\n", outPath, releasesURL)
 
 		if err := downloadArtifact(releasesURL, artifact.Name, outPath); err != nil {
 			return "", fmt.Errorf("error downloading artifact: %v", err)
