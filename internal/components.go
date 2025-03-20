@@ -169,6 +169,23 @@ func (r *RethEL) ReleaseArtifact() *release {
 	}
 }
 
+func logLevelToRethVerbosity(logLevel LogLevel) string {
+	switch logLevel {
+	case LevelTrace:
+		return "-vvvvv"
+	case LevelDebug:
+		return "-vvvv"
+	case LevelWarn:
+		return "-vv"
+	case LevelError:
+		return "-v"
+	case LevelInfo:
+		fallthrough
+	default:
+		return "-vvv"
+	}
+}
+
 func (r *RethEL) Run(svc *service, ctx *ExContext) {
 	// start the reth el client
 	svc.
@@ -196,7 +213,7 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
-			"-vvvv",
+			logLevelToRethVerbosity(ctx.LogLevel),
 		)
 
 	if r.UseNativeReth {
