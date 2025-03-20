@@ -1,5 +1,12 @@
 package internal
 
+import (
+	"context"
+	"fmt"
+	"io"
+	"time"
+)
+
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 
 var (
@@ -265,6 +272,17 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--builder-fallback-disable-checks",
 		)
 	}
+}
+
+var _ ServiceReady = &LighthouseBeaconNode{}
+
+func (l *LighthouseBeaconNode) Ready(logOutput io.Writer, service *service, ctx context.Context) error {
+	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+
+	if err := waitForChainAlive(logOutput, beaconNodeURL, 30*time.Second); err != nil {
+		return err
+	}
+	return nil
 }
 
 type LighthouseValidator struct {

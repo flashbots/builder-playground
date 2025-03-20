@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"text/template"
@@ -374,6 +375,16 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		"labels": map[string]string{"playground": "true"},
 	}
 
+	if runtime.GOOS == "linux" {
+		// We rely on host.docker.internal as the DNS address for the host inside
+		// the container. But, this is only available on Macos and Windows.
+		// On Linux, you can use the IP address 172.17.0.1 to access the host.
+		// Thus, if we are running on Linux, we need to add an extra host entry.
+		service["extra_hosts"] = map[string]string{
+			"host.docker.internal": "172.17.0.1",
+		}
+	}
+
 	if s.entrypoint != "" {
 		service["entrypoint"] = s.entrypoint
 	}
@@ -428,7 +439,6 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	}
 
 	compose["services"] = services
-
 	yamlData, err := yaml.Marshal(compose)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal docker compose: %w", err)

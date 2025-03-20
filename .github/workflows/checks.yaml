@@ -36,14 +36,14 @@ jobs:
       - name: Run playground
         run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 4m --watchdog
 
-      - name: Move playground logs
+      - name: Copy playground logs
         if: ${{ failure() }}
-        run: mv /tmp/playground.log /tmp/playground/logs
+        run: ./scripts/ci-copy-playground-logs.sh /tmp/playground /tmp/playground-logs
 
       - name: Archive playground logs
         uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
           name: playground-logs-${{ matrix.flags }}
-          path: /tmp/playground/logs
+          path: /tmp/playground-logs
           retention-days: 5
