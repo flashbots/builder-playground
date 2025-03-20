@@ -34,15 +34,7 @@ jobs:
         run: ./scripts/ci-build-playground-utils.sh
 
       - name: Run playground
-        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --dry-run
-
-      - name: Run docker compose
-        run: |
-          cd /tmp/playground
-          ls
-          docker compose up -d
-          docker compose ps
-          docker compose logs beacon
+        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 2m
 
       - name: Copy playground logs
         if: ${{ failure() }}

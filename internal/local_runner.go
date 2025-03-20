@@ -548,10 +548,18 @@ func (d *LocalRunner) Run() error {
 	cmd := exec.Command("docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
 
 	var errOut bytes.Buffer
+	var stdOut bytes.Buffer
+
 	cmd.Stderr = &errOut
+	cmd.Stdout = &stdOut
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
+	}
+
+	// move stdout to a file
+	if err := d.out.WriteFile("docker-compose.log", stdOut.Bytes()); err != nil {
+		return fmt.Errorf("failed to write docker-compose.log: %w", err)
 	}
 
 	// Second, start the services that are running on the host machine
