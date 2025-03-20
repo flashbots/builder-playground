@@ -190,6 +190,7 @@ func watchChainHead(logOutput io.Writer, elURL string, blockTime time.Duration) 
 			if latestBlock != nil && num <= *latestBlock {
 				continue
 			}
+			log.Infof("Chain head: %d", num)
 			latestBlock = &num
 
 			// Reset timeout since we saw a new block

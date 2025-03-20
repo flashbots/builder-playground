@@ -1,8 +1,11 @@
 package internal
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 	"text/template"
 
 	flag "github.com/spf13/pflag"
@@ -72,6 +75,43 @@ type ExContext struct {
 
 type Service interface {
 	Run(service *service, ctx *ExContext)
+}
+
+type ServiceReady interface {
+	Ready(out io.Writer, service *service, ctx context.Context) error
+}
+
+func WaitForReady(manifest *Manifest) error {
+	var wg sync.WaitGroup
+	readyErr := make(chan error, len(manifest.Services()))
+
+	output, err := manifest.out.LogOutput("ready")
+	if err != nil {
+		return fmt.Errorf("failed to create log output: %w", err)
+	}
+
+	for _, s := range manifest.Services() {
+		if readyFn, ok := s.component.(ServiceReady); ok {
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+
+				if err := readyFn.Ready(output, s, context.Background()); err != nil {
+					readyErr <- fmt.Errorf("service %s failed to start: %w", s.Name, err)
+				}
+			}()
+		}
+	}
+	wg.Wait()
+
+	close(readyErr)
+	for err := range readyErr {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Manifest) Services() []*service {

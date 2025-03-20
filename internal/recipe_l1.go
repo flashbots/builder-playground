@@ -100,9 +100,6 @@ func (l *L1Recipe) Watchdog(manifest *Manifest, out *output) error {
 	}
 
 	beaconNodeURL := fmt.Sprintf("http://localhost:%d", beaconNode.MustGetPort("http").HostPort)
-	if err := waitForChainAlive(watchDogOut, beaconNodeURL, 30*time.Second); err != nil {
-		return err
-	}
 	beaconNodeELURL := fmt.Sprintf("http://localhost:%d", beaconNodeEL.MustGetPort("http").HostPort)
 
 	watchGroup := newWatchGroup()
