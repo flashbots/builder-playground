@@ -72,7 +72,12 @@ type taskUI struct {
 	style    lipgloss.Style
 }
 
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) *LocalRunner {
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*LocalRunner, error) {
+	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
+	}
+
 	// merge the overrides with the manifest overrides
 	if overrides == nil {
 		overrides = make(map[string]string)
@@ -89,6 +94,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	d := &LocalRunner{
 		out:           out,
 		manifest:      manifest,
+		client:        client,
 		reservedPorts: map[int]bool{},
 		overrides:     overrides,
 		handles:       []*exec.Cmd{},
@@ -106,7 +112,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		}
 	}
 
-	return d
+	return d, nil
 }
 
 func (d *LocalRunner) printStatus() {
@@ -399,8 +405,7 @@ func (d *LocalRunner) isHostService(name string) bool {
 	return ok
 }
 
-func (d *LocalRunner) GenerateDockerCompose(write bool) ([]byte, error) {
-	fmt.Println("two")
+func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	compose := map[string]interface{}{
 		// We create a new network to be used by all the services so that
 		// we can do DNS discovery between them.
@@ -413,7 +418,6 @@ func (d *LocalRunner) GenerateDockerCompose(write bool) ([]byte, error) {
 
 	services := map[string]interface{}{}
 
-	fmt.Println("three")
 	// for each service, reserve a port on the host machine. We use this ports
 	// both to have access to the services from localhost but also to do communication
 	// between services running inside docker and the ones running on the host machine.
@@ -423,16 +427,11 @@ func (d *LocalRunner) GenerateDockerCompose(write bool) ([]byte, error) {
 		}
 	}
 
-	fmt.Println("four")
-
 	for _, svc := range d.manifest.services {
-		fmt.Println("five", svc.Name)
 		if d.isHostService(svc.Name) {
-			fmt.Println("five")
 			// skip services that are going to be launched on host
 			continue
 		}
-		fmt.Println("six")
 		var err error
 		if services[svc.Name], err = d.toDockerComposeService(svc); err != nil {
 			return nil, fmt.Errorf("failed to convert service %s to docker compose service: %w", svc.Name, err)
@@ -440,16 +439,9 @@ func (d *LocalRunner) GenerateDockerCompose(write bool) ([]byte, error) {
 	}
 
 	compose["services"] = services
-	fmt.Println("seven")
 	yamlData, err := yaml.Marshal(compose)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal docker compose: %w", err)
-	}
-
-	if write {
-		if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
-			return nil, fmt.Errorf("failed to write docker-compose.yaml: %w", err)
-		}
 	}
 
 	return yamlData, nil
@@ -543,34 +535,25 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 }
 
 func (d *LocalRunner) Run() error {
-	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return fmt.Errorf("failed to create docker client: %w", err)
-	}
-	d.client = client
-
 	go d.trackContainerStatusAndLogs()
 
-	if _, err := d.GenerateDockerCompose(true); err != nil {
+	yamlData, err := d.generateDockerCompose()
+	if err != nil {
 		return fmt.Errorf("failed to generate docker-compose.yaml: %w", err)
+	}
+
+	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
+		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
 	}
 
 	// First start the services that are running in docker-compose
 	cmd := exec.Command("docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
 
 	var errOut bytes.Buffer
-	var stdOut bytes.Buffer
-
 	cmd.Stderr = &errOut
-	cmd.Stdout = &stdOut
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
-	}
-
-	// move stdout to a file
-	if err := d.out.WriteFile("docker-compose.log", stdOut.Bytes()); err != nil {
-		return fmt.Errorf("failed to write docker-compose.log: %w", err)
 	}
 
 	// Second, start the services that are running on the host machine

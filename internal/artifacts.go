@@ -421,7 +421,6 @@ func (o *output) LogOutput(name string) (*os.File, error) {
 }
 
 func (o *output) WriteFile(dst string, data interface{}) error {
-	fmt.Println("writing file", dst)
 	dst = filepath.Join(o.dst, dst)
 
 	var dataRaw []byte
