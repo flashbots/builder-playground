@@ -146,9 +146,11 @@ func runIt(recipe internal.Recipe) error {
 
 	watchdogErr := make(chan error, 1)
 	if watchdog {
-		if err := internal.RunWatchdog(svcManager); err != nil {
-			watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
-		}
+		go func() {
+			if err := internal.RunWatchdog(svcManager); err != nil {
+				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
+			}
+		}()
 	}
 
 	sig := make(chan os.Signal, 1)
