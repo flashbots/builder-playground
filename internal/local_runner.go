@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"text/template"
@@ -57,6 +58,10 @@ type LocalRunner struct {
 	tasksMtx     sync.Mutex
 	tasks        map[string]string
 	taskUpdateCh chan struct{}
+
+	// gatewayAddr is the address of the ip of the host machine
+	// inside the docker container.
+	gatewayAddr string
 }
 
 var (
@@ -85,6 +90,12 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		tasks[svc.Name] = taskStatusPending
 	}
 
+	// detect if you are in linux or macos
+	gatewayAddr := "host.docker.internal"
+	if runtime.GOOS == "linux" {
+		gatewayAddr = "172.17.0.1"
+	}
+
 	d := &LocalRunner{
 		out:           out,
 		manifest:      manifest,
@@ -94,6 +105,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		tasks:         tasks,
 		taskUpdateCh:  make(chan struct{}),
 		exitErr:       make(chan error, 2),
+		gatewayAddr:   gatewayAddr,
 	}
 
 	if interactive {
@@ -292,7 +304,7 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, error) {
 			//   B: target is on the host: access with localhost:hostPort
 			// - Service runs inside docker:
 			//   C: target is inside docker: access it with DNS service:port
-			//   D: target is on the host: access it with host.docker.internal:hostPort
+			//   D: target is on the host: access it with <gatewayAddr>:hostPort
 
 			// find the service and the port that it resolves for that label
 			svc := d.manifest.MustGetService(name)
@@ -304,7 +316,7 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, error) {
 			} else {
 				if d.isHostService(svc.Name) {
 					// D
-					return fmt.Sprintf("http://host.docker.internal:%d", port.HostPort)
+					return fmt.Sprintf("http://%s:%d", d.gatewayAddr, port.HostPort)
 				}
 				// C
 				return fmt.Sprintf("http://%s:%d", svc.Name, port.Port)
