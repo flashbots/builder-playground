@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"sort"
@@ -20,6 +21,7 @@ var watchdog bool
 var dryRun bool
 var interactive bool
 var timeout time.Duration
+var logLevelFlag string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -67,6 +69,7 @@ func main() {
 		recipeCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", internal.MinimumGenesisDelay, "")
 		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
 		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
+		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -79,6 +82,13 @@ func main() {
 }
 
 func runIt(recipe internal.Recipe) error {
+	var logLevel internal.LogLevel
+	if err := logLevel.Unmarshal(logLevelFlag); err != nil {
+		return fmt.Errorf("failed to parse log level: %w", err)
+	}
+
+	log.Printf("Log level: %s\n", logLevel)
+
 	builder := recipe.Artifacts()
 	builder.OutputDir(outputFlag)
 	builder.GenesisDelay(genesisDelayFlag)
@@ -87,7 +97,7 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(artifacts)
+	svcManager := recipe.Apply(&internal.ExContext{LogLevel: logLevel}, artifacts)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}

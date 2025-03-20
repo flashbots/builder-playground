@@ -12,7 +12,7 @@ type RollupBoost struct {
 	Builder string
 }
 
-func (r *RollupBoost) Run(service *service) {
+func (r *RollupBoost) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("0.4rc1").
@@ -31,7 +31,7 @@ type OpBatcher struct {
 	RollupNode string
 }
 
-func (o *OpBatcher) Run(service *service) {
+func (o *OpBatcher) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
 		WithTag("v1.11.1").
@@ -54,7 +54,7 @@ type OpNode struct {
 	L2Node   string
 }
 
-func (o *OpNode) Run(service *service) {
+func (o *OpNode) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.11.0").
@@ -90,7 +90,24 @@ func (o *OpNode) Run(service *service) {
 type OpGeth struct {
 }
 
-func (o *OpGeth) Run(service *service) {
+func logLevelToGethVerbosity(logLevel LogLevel) string {
+	switch logLevel {
+	case LevelTrace:
+		return "5"
+	case LevelDebug:
+		return "4"
+	case LevelInfo:
+		return "3"
+	case LevelWarn:
+		return "2"
+	case LevelError:
+		return "1"
+	default:
+		return "3"
+	}
+}
+
+func (o *OpGeth) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101500.0").
@@ -100,7 +117,7 @@ func (o *OpGeth) Run(service *service) {
 			"geth init --datadir {{.Dir}}/data_opgeth --state.scheme hash {{.Dir}}/l2-genesis.json && "+
 				"exec geth "+
 				"--datadir {{.Dir}}/data_opgeth "+
-				"--verbosity 3 "+
+				"--verbosity "+logLevelToGethVerbosity(ctx.LogLevel)+" "+
 				"--http "+
 				"--http.corsdomain \"*\" "+
 				"--http.vhosts \"*\" "+
@@ -152,7 +169,24 @@ func (r *RethEL) ReleaseArtifact() *release {
 	}
 }
 
-func (r *RethEL) Run(svc *service) {
+func logLevelToRethVerbosity(logLevel LogLevel) string {
+	switch logLevel {
+	case LevelTrace:
+		return "-vvvvv"
+	case LevelDebug:
+		return "-vvvv"
+	case LevelWarn:
+		return "-vv"
+	case LevelError:
+		return "-v"
+	case LevelInfo:
+		fallthrough
+	default:
+		return "-vvv"
+	}
+}
+
+func (r *RethEL) Run(svc *service, ctx *ExContext) {
 	// start the reth el client
 	svc.
 		WithImage("ghcr.io/paradigmxyz/reth").
@@ -179,7 +213,7 @@ func (r *RethEL) Run(svc *service) {
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
-			"-vvvv",
+			logLevelToRethVerbosity(ctx.LogLevel),
 		)
 
 	if r.UseNativeReth {
@@ -193,7 +227,7 @@ type LighthouseBeaconNode struct {
 	MevBoostNode  string
 }
 
-func (l *LighthouseBeaconNode) Run(svc *service) {
+func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 	svc.
 		WithImage("sigp/lighthouse").
 		WithTag("v7.0.0-beta.0").
@@ -237,7 +271,7 @@ type LighthouseValidator struct {
 	BeaconNode string
 }
 
-func (l *LighthouseValidator) Run(service *service) {
+func (l *LighthouseValidator) Run(service *service, ctx *ExContext) {
 	// start validator client
 	service.
 		WithImage("sigp/lighthouse").
@@ -260,7 +294,7 @@ type ClProxy struct {
 	SecondaryBuilder string
 }
 
-func (c *ClProxy) Run(service *service) {
+func (c *ClProxy) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
@@ -277,7 +311,7 @@ type MevBoostRelay struct {
 	ValidationServer string
 }
 
-func (m *MevBoostRelay) Run(service *service) {
+func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").

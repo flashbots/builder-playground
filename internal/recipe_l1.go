@@ -50,8 +50,8 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (l *L1Recipe) Apply(artifacts *Artifacts) *Manifest {
-	svcManager := NewManifest(artifacts.Out)
+func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+	svcManager := NewManifest(ctx, artifacts.Out)
 
 	svcManager.AddService("el", &RethEL{
 		UseRethForValidation: l.useRethForValidation,
