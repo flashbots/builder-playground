@@ -113,7 +113,7 @@ func runIt(recipe internal.Recipe) error {
 	if dryRun {
 		fmt.Println("one")
 		// Generate docker compose anyway
-		if _, err := dockerRunner.GenerateDockerCompose(); err != nil {
+		if _, err := dockerRunner.GenerateDockerCompose(true); err != nil {
 			return fmt.Errorf("failed to generate docker compose: %w", err)
 		}
 		return nil
