@@ -39,6 +39,7 @@ jobs:
       - name: Run docker compose
         run: |
           cd /tmp/playground
+          ls
           docker compose up -d
           docker compose ps
           docker compose logs beacon
