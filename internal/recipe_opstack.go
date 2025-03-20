@@ -35,8 +35,8 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (o *OpRecipe) Apply(artifacts *Artifacts) *Manifest {
-	svcManager := NewManifest(artifacts.Out)
+func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+	svcManager := NewManifest(ctx, artifacts.Out)
 	svcManager.AddService("el", &RethEL{})
 	svcManager.AddService("beacon", &LighthouseBeaconNode{
 		ExecutionNode: "el",

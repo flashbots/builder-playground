@@ -55,6 +55,7 @@ Flags:
 - `--genesis-delay` (int): The delay in seconds before the genesis block is created. Defaults to `10` seconds
 - `--watchdog` (bool): Enable the watchdog service to monitor the specific chain
 - `--dry-run` (bool): Generates the artifacts and manifest but does not deploy anything (also enabled with the `--mise-en-place` flag)
+- `--log-level` (string): Log level to use (debug, info, warn, error, fatal). Defaults to `info`.
 
 To stop the playground, press `Ctrl+C`.
 

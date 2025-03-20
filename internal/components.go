@@ -12,7 +12,7 @@ type RollupBoost struct {
 	Builder string
 }
 
-func (r *RollupBoost) Run(service *service) {
+func (r *RollupBoost) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("0.4rc1").
@@ -31,7 +31,7 @@ type OpBatcher struct {
 	RollupNode string
 }
 
-func (o *OpBatcher) Run(service *service) {
+func (o *OpBatcher) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
 		WithTag("v1.11.1").
@@ -54,7 +54,7 @@ type OpNode struct {
 	L2Node   string
 }
 
-func (o *OpNode) Run(service *service) {
+func (o *OpNode) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.11.0").
@@ -90,7 +90,7 @@ func (o *OpNode) Run(service *service) {
 type OpGeth struct {
 }
 
-func (o *OpGeth) Run(service *service) {
+func (o *OpGeth) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101500.0").
@@ -152,7 +152,7 @@ func (r *RethEL) ReleaseArtifact() *release {
 	}
 }
 
-func (r *RethEL) Run(svc *service) {
+func (r *RethEL) Run(svc *service, ctx *ExContext) {
 	// start the reth el client
 	svc.
 		WithImage("ghcr.io/paradigmxyz/reth").
@@ -193,7 +193,7 @@ type LighthouseBeaconNode struct {
 	MevBoostNode  string
 }
 
-func (l *LighthouseBeaconNode) Run(svc *service) {
+func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 	svc.
 		WithImage("sigp/lighthouse").
 		WithTag("v7.0.0-beta.0").
@@ -237,7 +237,7 @@ type LighthouseValidator struct {
 	BeaconNode string
 }
 
-func (l *LighthouseValidator) Run(service *service) {
+func (l *LighthouseValidator) Run(service *service, ctx *ExContext) {
 	// start validator client
 	service.
 		WithImage("sigp/lighthouse").
@@ -260,7 +260,7 @@ type ClProxy struct {
 	SecondaryBuilder string
 }
 
-func (c *ClProxy) Run(service *service) {
+func (c *ClProxy) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
@@ -277,7 +277,7 @@ type MevBoostRelay struct {
 	ValidationServer string
 }
 
-func (m *MevBoostRelay) Run(service *service) {
+func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").

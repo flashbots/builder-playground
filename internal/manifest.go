@@ -15,12 +15,14 @@ type Recipe interface {
 	Description() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
-	Apply(artifacts *Artifacts) *Manifest
+	Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
 	Watchdog(manifest *Manifest, out *output) error
 }
 
 // Manifest describes a list of services and their dependencies
 type Manifest struct {
+	ctx *ExContext
+
 	// list of services
 	services []*service
 
@@ -31,12 +33,45 @@ type Manifest struct {
 	out *output
 }
 
-func NewManifest(out *output) *Manifest {
-	return &Manifest{out: out, overrides: make(map[string]string)}
+func NewManifest(ctx *ExContext, out *output) *Manifest {
+	return &Manifest{ctx: ctx, out: out, overrides: make(map[string]string)}
+}
+
+type LogLevel string
+
+var (
+	LevelDebug LogLevel = "debug"
+	LevelInfo  LogLevel = "info"
+	LevelWarn  LogLevel = "warn"
+	LevelError LogLevel = "error"
+	LevelTrace LogLevel = "trace"
+)
+
+func (l *LogLevel) Unmarshal(s string) error {
+	switch s {
+	case "debug":
+		*l = LevelDebug
+	case "info":
+		*l = LevelInfo
+	case "trace":
+		*l = LevelTrace
+	case "warn":
+		*l = LevelWarn
+	case "error":
+		*l = LevelError
+	default:
+		return fmt.Errorf("invalid log level: %s", s)
+	}
+	return nil
+}
+
+// Execution context
+type ExContext struct {
+	LogLevel LogLevel
 }
 
 type Service interface {
-	Run(service *service)
+	Run(service *service, ctx *ExContext)
 }
 
 func (s *Manifest) Services() []*service {
@@ -51,7 +86,7 @@ type ReleaseService interface {
 func (s *Manifest) AddService(name string, srv Service) {
 	service := s.NewService(name)
 	service.component = srv
-	srv.Run(service)
+	srv.Run(service, s.ctx)
 
 	s.services = append(s.services, service)
 }
