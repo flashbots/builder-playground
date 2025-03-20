@@ -19,7 +19,6 @@ type Recipe interface {
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
 	Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
-	Watchdog(manifest *Manifest, out *output) error
 }
 
 // Manifest describes a list of services and their dependencies
@@ -107,6 +106,42 @@ func WaitForReady(manifest *Manifest) error {
 
 	close(readyErr)
 	for err := range readyErr {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type ServiceWatchdog interface {
+	Watchdog(out io.Writer, service *service, ctx context.Context) error
+}
+
+func RunWatchdog(manifest *Manifest) error {
+	var wg sync.WaitGroup
+	watchdogErr := make(chan error, len(manifest.Services()))
+
+	output, err := manifest.out.LogOutput("watchdog")
+	if err != nil {
+		return fmt.Errorf("failed to create log output: %w", err)
+	}
+
+	for _, s := range manifest.Services() {
+		if watchdogFn, ok := s.component.(ServiceWatchdog); ok {
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+				if err := watchdogFn.Watchdog(output, s, context.Background()); err != nil {
+					watchdogErr <- fmt.Errorf("service %s watchdog failed: %w", s.Name, err)
+				}
+			}()
+		}
+	}
+	wg.Wait()
+
+	close(watchdogErr)
+	for err := range watchdogErr {
 		if err != nil {
 			return err
 		}

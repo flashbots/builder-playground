@@ -2,7 +2,6 @@ package internal
 
 import (
 	"fmt"
-	"time"
 
 	flag "github.com/spf13/pflag"
 )
@@ -88,33 +87,4 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		ValidationServer: mevBoostValidationServer,
 	})
 	return svcManager
-}
-
-func (l *L1Recipe) Watchdog(manifest *Manifest, out *output) error {
-	beaconNode := manifest.MustGetService("beacon")
-	beaconNodeEL := manifest.MustGetService("el")
-
-	watchDogOut, err := out.LogOutput("watchdog")
-	if err != nil {
-		return err
-	}
-
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", beaconNode.MustGetPort("http").HostPort)
-	beaconNodeELURL := fmt.Sprintf("http://localhost:%d", beaconNodeEL.MustGetPort("http").HostPort)
-
-	watchGroup := newWatchGroup()
-	watchGroup.watch(func() error {
-		return watchProposerPayloads(beaconNodeURL)
-	})
-	watchGroup.watch(func() error {
-		return validateProposerPayloads(watchDogOut, beaconNodeURL)
-	})
-	watchGroup.watch(func() error {
-		return watchChainHead(watchDogOut, beaconNodeELURL, 12*time.Second)
-	})
-
-	if err := watchGroup.wait(); err != nil {
-		return err
-	}
-	return nil
 }

@@ -153,6 +153,13 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 		)
 }
 
+var _ ServiceWatchdog = &OpGeth{}
+
+func (o *OpGeth) Watchdog(out io.Writer, service *service, ctx context.Context) error {
+	rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+	return watchChainHead(out, rethURL, 2*time.Second)
+}
+
 type RethEL struct {
 	UseRethForValidation bool
 	UseNativeReth        bool
@@ -227,6 +234,13 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 		// we need to use this otherwise the db cannot be binded
 		svc.UseHostExecution()
 	}
+}
+
+var _ ServiceWatchdog = &RethEL{}
+
+func (r *RethEL) Watchdog(out io.Writer, service *service, ctx context.Context) error {
+	rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+	return watchChainHead(out, rethURL, 12*time.Second)
 }
 
 type LighthouseBeaconNode struct {
@@ -343,4 +357,20 @@ func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 	if m.ValidationServer != "" {
 		service.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
 	}
+}
+
+var _ ServiceWatchdog = &MevBoostRelay{}
+
+func (m *MevBoostRelay) Watchdog(out io.Writer, service *service, ctx context.Context) error {
+	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+
+	watchGroup := newWatchGroup()
+	watchGroup.watch(func() error {
+		return watchProposerPayloads(beaconNodeURL)
+	})
+	watchGroup.watch(func() error {
+		return validateProposerPayloads(out, beaconNodeURL)
+	})
+
+	return watchGroup.wait()
 }
