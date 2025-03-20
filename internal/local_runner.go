@@ -71,12 +71,7 @@ type taskUI struct {
 	style    lipgloss.Style
 }
 
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*LocalRunner, error) {
-	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
-	}
-
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) *LocalRunner {
 	// merge the overrides with the manifest overrides
 	if overrides == nil {
 		overrides = make(map[string]string)
@@ -93,7 +88,6 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	d := &LocalRunner{
 		out:           out,
 		manifest:      manifest,
-		client:        client,
 		reservedPorts: map[int]bool{},
 		overrides:     overrides,
 		handles:       []*exec.Cmd{},
@@ -111,7 +105,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		}
 	}
 
-	return d, nil
+	return d
 }
 
 func (d *LocalRunner) printStatus() {
@@ -394,7 +388,7 @@ func (d *LocalRunner) isHostService(name string) bool {
 	return ok
 }
 
-func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
+func (d *LocalRunner) GenerateDockerCompose() ([]byte, error) {
 	compose := map[string]interface{}{
 		// We create a new network to be used by all the services so that
 		// we can do DNS discovery between them.
@@ -525,9 +519,15 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 }
 
 func (d *LocalRunner) Run() error {
+	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("failed to create docker client: %w", err)
+	}
+	d.client = client
+
 	go d.trackContainerStatusAndLogs()
 
-	yamlData, err := d.generateDockerCompose()
+	yamlData, err := d.GenerateDockerCompose()
 	if err != nil {
 		return fmt.Errorf("failed to generate docker-compose.yaml: %w", err)
 	}

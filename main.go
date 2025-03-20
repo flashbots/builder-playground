@@ -108,13 +108,14 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
-	if dryRun {
-		return nil
-	}
+	dockerRunner := internal.NewLocalRunner(artifacts.Out, svcManager, nil, interactive)
 
-	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, nil, interactive)
-	if err != nil {
-		return fmt.Errorf("failed to create docker runner: %w", err)
+	if dryRun {
+		// Generate docker compose anyway
+		if _, err := dockerRunner.GenerateDockerCompose(); err != nil {
+			return fmt.Errorf("failed to generate docker compose: %w", err)
+		}
+		return nil
 	}
 
 	if err := dockerRunner.Run(); err != nil {
