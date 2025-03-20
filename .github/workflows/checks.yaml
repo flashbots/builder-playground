@@ -34,15 +34,14 @@ jobs:
         run: ./scripts/ci-build-playground-utils.sh
 
       - name: Run playground
-        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground & > /tmp/playground.log 2>&1
+        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --dry-run
 
-      - name: Sleep
-        run: sleep 20
-
-      - name: Query stuff
+      - name: Run docker compose
         run: |
-          docker ps
-          curl -v http://localhost:3500/eth/v1/node/syncing
+          cd /tmp/playground
+          docker compose up -d
+          docker compose ps
+          docker compose logs beacon
 
       - name: Copy playground logs
         if: ${{ failure() }}
