@@ -388,7 +388,8 @@ func (d *LocalRunner) isHostService(name string) bool {
 	return ok
 }
 
-func (d *LocalRunner) GenerateDockerCompose() ([]byte, error) {
+func (d *LocalRunner) GenerateDockerCompose(write bool) ([]byte, error) {
+	fmt.Println("two")
 	compose := map[string]interface{}{
 		// We create a new network to be used by all the services so that
 		// we can do DNS discovery between them.
@@ -401,6 +402,7 @@ func (d *LocalRunner) GenerateDockerCompose() ([]byte, error) {
 
 	services := map[string]interface{}{}
 
+	fmt.Println("three")
 	// for each service, reserve a port on the host machine. We use this ports
 	// both to have access to the services from localhost but also to do communication
 	// between services running inside docker and the ones running on the host machine.
@@ -410,11 +412,16 @@ func (d *LocalRunner) GenerateDockerCompose() ([]byte, error) {
 		}
 	}
 
+	fmt.Println("four")
+
 	for _, svc := range d.manifest.services {
+		fmt.Println("five", svc.Name)
 		if d.isHostService(svc.Name) {
+			fmt.Println("five")
 			// skip services that are going to be launched on host
 			continue
 		}
+		fmt.Println("six")
 		var err error
 		if services[svc.Name], err = d.toDockerComposeService(svc); err != nil {
 			return nil, fmt.Errorf("failed to convert service %s to docker compose service: %w", svc.Name, err)
@@ -422,10 +429,16 @@ func (d *LocalRunner) GenerateDockerCompose() ([]byte, error) {
 	}
 
 	compose["services"] = services
-
+	fmt.Println("seven")
 	yamlData, err := yaml.Marshal(compose)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal docker compose: %w", err)
+	}
+
+	if write {
+		if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
+			return nil, fmt.Errorf("failed to write docker-compose.yaml: %w", err)
+		}
 	}
 
 	return yamlData, nil
@@ -527,13 +540,8 @@ func (d *LocalRunner) Run() error {
 
 	go d.trackContainerStatusAndLogs()
 
-	yamlData, err := d.GenerateDockerCompose()
-	if err != nil {
+	if _, err := d.GenerateDockerCompose(true); err != nil {
 		return fmt.Errorf("failed to generate docker-compose.yaml: %w", err)
-	}
-
-	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
-		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
 	}
 
 	// First start the services that are running in docker-compose

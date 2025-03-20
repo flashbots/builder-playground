@@ -111,6 +111,7 @@ func runIt(recipe internal.Recipe) error {
 	dockerRunner := internal.NewLocalRunner(artifacts.Out, svcManager, nil, interactive)
 
 	if dryRun {
+		fmt.Println("one")
 		// Generate docker compose anyway
 		if _, err := dockerRunner.GenerateDockerCompose(); err != nil {
 			return fmt.Errorf("failed to generate docker compose: %w", err)
