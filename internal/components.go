@@ -38,7 +38,7 @@ func (o *OpBatcher) Run(service *service) {
 		WithEntrypoint("op-batcher").
 		WithArgs(
 			"--l1-eth-rpc", Connect(o.L1Node, "http"),
-			"--l2-eth-rpc", Connect(o.L1Node, "http"),
+			"--l2-eth-rpc", Connect(o.L2Node, "http"),
 			"--rollup-rpc", Connect(o.RollupNode, "http"),
 			"--max-channel-duration=2",
 			"--sub-safety-margin=4",
