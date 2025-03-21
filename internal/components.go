@@ -9,11 +9,6 @@ import (
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 
-var (
-	defaultRethDiscoveryPrivKey    = "a11ac89899cd86e36b6fb881ec1255b8a92a688790b7d950f8b7d8dd626671fb"
-	defaultRethDiscoveryPrivKeyLoc = "/tmp/tmp-reth-disc.txt"
-)
-
 type RollupBoost struct {
 	ELNode  string
 	Builder string
@@ -95,6 +90,7 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 }
 
 type OpGeth struct {
+	UseDeterministicP2PKey bool
 }
 
 func logLevelToGethVerbosity(logLevel LogLevel) string {
@@ -115,6 +111,11 @@ func logLevelToGethVerbosity(logLevel LogLevel) string {
 }
 
 func (o *OpGeth) Run(service *service, ctx *ExContext) {
+	var nodeKeyFlag string
+	if o.UseDeterministicP2PKey {
+		nodeKeyFlag = "--nodekey {{.Dir}}/deterministic_p2p_key.txt "
+	}
+
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101500.0").
@@ -147,6 +148,7 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 				"--gcmode archive "+
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
+				nodeKeyFlag+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
@@ -212,8 +214,6 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--datadir", "{{.Dir}}/data_reth",
 			"--color", "never",
 			"--ipcpath", "{{.Dir}}/reth.ipc",
-			// p2p config. Use a default discovery key and disable public discovery and connections
-			"--p2p-secret-key", defaultRethDiscoveryPrivKeyLoc,
 			"--addr", "127.0.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",

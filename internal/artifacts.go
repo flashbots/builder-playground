@@ -35,6 +35,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+var (
+	defaultDiscoveryPrivKey = "a11ac89899cd86e36b6fb881ec1255b8a92a688790b7d950f8b7d8dd626671fb"
+)
+
 // minimumGenesisDelay is the minimum delay for the genesis time. This is required
 // because lighthouse takes some time to start and we need to make sure it is ready
 // otherwise, some blocks are missed.
@@ -224,6 +228,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		"testnet/deposit_contract_block.txt":  "0",
 		"testnet/genesis_validators_root.txt": hex.EncodeToString(state.GenesisValidatorsRoot()),
 		"data_validator/":                     &lighthouseKeystore{privKeys: priv},
+		"deterministic_p2p_key.txt":           defaultDiscoveryPrivKey,
 	})
 	if err != nil {
 		return nil, err
