@@ -88,3 +88,7 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	})
 	return svcManager
 }
+
+func (l *L1Recipe) Output(manifest *Manifest) map[string]interface{} {
+	return map[string]interface{}{}
+}

@@ -14,7 +14,7 @@ import (
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 )
 
-func waitForChainAlive(logOutput io.Writer, beaconNodeURL string, timeout time.Duration) error {
+func waitForChainAlive(ctx context.Context, logOutput io.Writer, beaconNodeURL string, timeout time.Duration) error {
 	// Test that blocks are being produced
 	log := mevRCommon.LogSetup(false, "info").WithField("context", "waitForChainAlive")
 	log.Logger.Out = logOutput
@@ -51,6 +51,8 @@ func waitForChainAlive(logOutput io.Writer, beaconNodeURL string, timeout time.D
 				select {
 				case <-syncTimeoutCh:
 					return fmt.Errorf("beacon client failed to start")
+				case <-ctx.Done():
+					return fmt.Errorf("timeout waiting for chain to start")
 				default:
 					time.Sleep(1 * time.Second)
 				}

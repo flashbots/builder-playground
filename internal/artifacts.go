@@ -37,6 +37,7 @@ import (
 
 var (
 	defaultDiscoveryPrivKey = "a11ac89899cd86e36b6fb881ec1255b8a92a688790b7d950f8b7d8dd626671fb"
+	defaultDiscoveryEnodeID = "3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f"
 )
 
 // minimumGenesisDelay is the minimum delay for the genesis time. This is required

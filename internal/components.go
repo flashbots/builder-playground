@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -91,6 +92,9 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 
 type OpGeth struct {
 	UseDeterministicP2PKey bool
+
+	// outputs
+	Enode string
 }
 
 func logLevelToGethVerbosity(logLevel LogLevel) string {
@@ -153,6 +157,28 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
 		)
+}
+
+var _ ServiceReady = &OpGeth{}
+
+func (o *OpGeth) Ready(out io.Writer, service *service, ctx context.Context) error {
+	logs := service.logs
+
+	if err := logs.WaitForLog("HTTP server started", 5*time.Second); err != nil {
+		return err
+	}
+
+	enodeLine, err := logs.FindLog("enode://")
+	if err != nil {
+		return err
+	}
+
+	parts := strings.Split(enodeLine, "enode://")[1]
+	enodeID := strings.Split(parts, "@")[0]
+
+	enode := fmt.Sprintf("enode://%s@127.0.0.1:%d?discport=0", enodeID, service.MustGetPort("rpc").HostPort)
+	o.Enode = enode
+	return nil
 }
 
 var _ ServiceWatchdog = &OpGeth{}
@@ -293,7 +319,7 @@ var _ ServiceReady = &LighthouseBeaconNode{}
 func (l *LighthouseBeaconNode) Ready(logOutput io.Writer, service *service, ctx context.Context) error {
 	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 
-	if err := waitForChainAlive(logOutput, beaconNodeURL, 30*time.Second); err != nil {
+	if err := waitForChainAlive(ctx, logOutput, beaconNodeURL, 30*time.Second); err != nil {
 		return err
 	}
 	return nil

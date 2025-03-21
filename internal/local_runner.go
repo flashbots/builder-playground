@@ -56,8 +56,13 @@ type LocalRunner struct {
 
 	// tasks tracks the status of each service
 	tasksMtx     sync.Mutex
-	tasks        map[string]string
+	tasks        map[string]*task
 	taskUpdateCh chan struct{}
+}
+
+type task struct {
+	status string
+	logs   *os.File
 }
 
 var (
@@ -86,9 +91,12 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		overrides[k] = v
 	}
 
-	tasks := map[string]string{}
+	tasks := map[string]*task{}
 	for _, svc := range manifest.services {
-		tasks[svc.Name] = taskStatusPending
+		tasks[svc.Name] = &task{
+			status: taskStatusPending,
+			logs:   nil,
+		}
 	}
 
 	d := &LocalRunner{
@@ -153,7 +161,7 @@ func (d *LocalRunner) printStatus() {
 			lineOffset = 0
 			// Use ordered services instead of ranging over map
 			for _, name := range orderedServices {
-				status := d.tasks[name]
+				status := d.tasks[name].status
 				var statusLine string
 
 				switch status {
@@ -183,7 +191,7 @@ func (d *LocalRunner) printStatus() {
 func (d *LocalRunner) updateTaskStatus(name string, status string) {
 	d.tasksMtx.Lock()
 	defer d.tasksMtx.Unlock()
-	d.tasks[name] = status
+	d.tasks[name].status = status
 
 	if status == taskStatusDie {
 		d.exitErr <- fmt.Errorf("container %s failed", name)
@@ -482,9 +490,12 @@ func (d *LocalRunner) runOnHost(ss *service) error {
 
 // trackLogs tracks the logs of a container and writes them to the log output
 func (d *LocalRunner) trackLogs(serviceName string, containerID string) error {
-	log_output, err := d.out.LogOutput(serviceName)
-	if err != nil {
-		return fmt.Errorf("error getting log output: %w", err)
+	d.tasksMtx.Lock()
+	log_output := d.tasks[serviceName].logs
+	d.tasksMtx.Unlock()
+
+	if log_output == nil {
+		panic("BUG: log output not found for service " + serviceName)
 	}
 
 	logs, err := d.client.ContainerLogs(context.Background(), containerID, container.LogsOptions{
@@ -544,6 +555,18 @@ func (d *LocalRunner) Run() error {
 
 	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
 		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
+	}
+
+	// generate the output log file for each service so that it is available after Run is done
+	for _, svc := range d.manifest.services {
+		log_output, err := d.out.LogOutput(svc.Name)
+		if err != nil {
+			return fmt.Errorf("error getting log output: %w", err)
+		}
+		svc.logs = &serviceLogs{
+			path: log_output.Name(),
+		}
+		d.tasks[svc.Name].logs = log_output
 	}
 
 	// First start the services that are running in docker-compose
