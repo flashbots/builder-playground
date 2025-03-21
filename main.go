@@ -117,7 +117,11 @@ func runIt(recipe internal.Recipe) error {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+
 	if err := dockerRunner.Run(); err != nil {
+		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
 	}
 
@@ -138,23 +142,20 @@ func runIt(recipe internal.Recipe) error {
 		}
 	}
 
-	// wait for service readiness
-	if err := internal.WaitForReady(svcManager); err != nil {
-		dockerRunner.Stop()
-		return fmt.Errorf("failed to wait for service readiness: %w", err)
-	}
-
 	watchdogErr := make(chan error, 1)
-	if watchdog {
-		go func() {
+	readyErr := make(chan error, 1)
+
+	go func() {
+		if err := internal.WaitForReady(svcManager); err != nil {
+			readyErr <- fmt.Errorf("failed to wait for service readiness: %w", err)
+		}
+
+		if watchdog {
 			if err := internal.RunWatchdog(svcManager); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
-		}()
-	}
-
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+		}
+	}()
 
 	var timerCh <-chan time.Time
 	if timeout > 0 {
@@ -166,6 +167,8 @@ func runIt(recipe internal.Recipe) error {
 		fmt.Println("Stopping...")
 	case err := <-dockerRunner.ExitErr():
 		fmt.Println("Service failed:", err)
+	case err := <-readyErr:
+		fmt.Println("Service failed to start:", err)
 	case err := <-watchdogErr:
 		fmt.Println("Watchdog failed:", err)
 	case <-timerCh:
