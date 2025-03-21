@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"log"
@@ -120,6 +121,12 @@ func runIt(recipe internal.Recipe) error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-sig
+		cancel()
+	}()
+
 	if err := dockerRunner.Run(); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
@@ -127,7 +134,7 @@ func runIt(recipe internal.Recipe) error {
 
 	if !interactive {
 		// print services info
-		fmt.Printf("Services started:\n==================\n")
+		fmt.Printf("\n========= Services started =========\n")
 		for _, ss := range svcManager.Services() {
 			ports := ss.Ports()
 			sort.Slice(ports, func(i, j int) bool {
@@ -142,20 +149,28 @@ func runIt(recipe internal.Recipe) error {
 		}
 	}
 
-	watchdogErr := make(chan error, 1)
-	readyErr := make(chan error, 1)
+	if err := internal.WaitForReady(ctx, svcManager); err != nil {
+		dockerRunner.Stop()
+		return fmt.Errorf("failed to wait for service readiness: %w", err)
+	}
 
-	go func() {
-		if err := internal.WaitForReady(svcManager); err != nil {
-			readyErr <- fmt.Errorf("failed to wait for service readiness: %w", err)
+	// get the output from the recipe
+	output := recipe.Output(svcManager)
+	if len(output) > 0 {
+		fmt.Printf("\n========= Output =========\n")
+		for k, v := range output {
+			fmt.Printf("- %s: %v\n", k, v)
 		}
+	}
 
-		if watchdog {
+	watchdogErr := make(chan error, 1)
+	if watchdog {
+		go func() {
 			if err := internal.RunWatchdog(svcManager); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
-		}
-	}()
+		}()
+	}
 
 	var timerCh <-chan time.Time
 	if timeout > 0 {
@@ -163,12 +178,10 @@ func runIt(recipe internal.Recipe) error {
 	}
 
 	select {
-	case <-sig:
+	case <-ctx.Done():
 		fmt.Println("Stopping...")
 	case err := <-dockerRunner.ExitErr():
 		fmt.Println("Service failed:", err)
-	case err := <-readyErr:
-		fmt.Println("Service failed to start:", err)
 	case err := <-watchdogErr:
 		fmt.Println("Watchdog failed:", err)
 	case <-timerCh:

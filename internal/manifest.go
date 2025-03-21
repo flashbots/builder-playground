@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	flag "github.com/spf13/pflag"
 )
@@ -19,6 +21,7 @@ type Recipe interface {
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
 	Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
+	Output(manifest *Manifest) map[string]interface{}
 }
 
 // Manifest describes a list of services and their dependencies
@@ -80,7 +83,7 @@ type ServiceReady interface {
 	Ready(out io.Writer, service *service, ctx context.Context) error
 }
 
-func WaitForReady(manifest *Manifest) error {
+func WaitForReady(ctx context.Context, manifest *Manifest) error {
 	var wg sync.WaitGroup
 	readyErr := make(chan error, len(manifest.Services()))
 
@@ -96,7 +99,7 @@ func WaitForReady(manifest *Manifest) error {
 			go func() {
 				defer wg.Done()
 
-				if err := readyFn.Ready(output, s, context.Background()); err != nil {
+				if err := readyFn.Ready(output, s, ctx); err != nil {
 					readyErr <- fmt.Errorf("service %s failed to start: %w", s.Name, err)
 				}
 			}()
@@ -240,6 +243,52 @@ type NodeRef struct {
 	PortLabel string
 }
 
+// serviceLogs is a service to access the logs of the running service
+type serviceLogs struct {
+	path string
+}
+
+func (s *serviceLogs) readLogs() (string, error) {
+	content, err := os.ReadFile(s.path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read logs: %w", err)
+	}
+	return string(content), nil
+}
+
+func (s *serviceLogs) WaitForLog(pattern string, timeout time.Duration) error {
+	timer := time.After(timeout)
+	for {
+		select {
+		case <-timer:
+			return fmt.Errorf("timeout waiting for log pattern %s", pattern)
+		case <-time.After(500 * time.Millisecond):
+			logs, err := s.readLogs()
+			if err != nil {
+				return fmt.Errorf("failed to read logs: %w", err)
+			}
+			if strings.Contains(logs, pattern) {
+				return nil
+			}
+		}
+	}
+}
+
+func (s *serviceLogs) FindLog(pattern string) (string, error) {
+	logs, err := s.readLogs()
+	if err != nil {
+		return "", fmt.Errorf("failed to read logs: %w", err)
+	}
+
+	lines := strings.Split(logs, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, pattern) {
+			return line, nil
+		}
+	}
+	return "", fmt.Errorf("log pattern %s not found", pattern)
+}
+
 type service struct {
 	Name string
 	args []string
@@ -253,6 +302,7 @@ type service struct {
 	image      string
 	entrypoint string
 
+	logs      *serviceLogs
 	component Service
 }
 
