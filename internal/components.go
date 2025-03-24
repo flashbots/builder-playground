@@ -404,3 +404,79 @@ func (m *MevBoostRelay) Watchdog(out io.Writer, service *service, ctx context.Co
 
 	return watchGroup.wait()
 }
+
+type BuilderHub struct {
+}
+
+func (b *BuilderHub) Run(service *service, ctx *ExContext) {
+	// Start the builder-hub service
+	service.
+		WithImage("ghcr.io/flashbots/builder-hub/builder-hub").
+		WithTag("latest").
+		WithArgs(
+			"--listen-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "http" 8080}}`),
+			"--admin-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "admin" 8081}}`),
+			"--internal-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "internal" 8082}}`),
+			"--metrics-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "metrics" 8090}}`),
+			"--log-json", "true",
+			"--log-debug",
+			// Use proper template format for postgres connection
+			"--postgres-dsn", `postgres://postgres:postgres@{{Service "builder-hub-postgres" "postgres"}}/postgres?sslmode=disable`,
+		)
+}
+
+// BuilderHubPostgres is a component that runs the postgres database for builder-hub
+type BuilderHubPostgres struct {
+}
+
+func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
+	// Start the postgres database
+	service.
+		WithImage("postgres").
+		WithTag("latest").
+		WithPort("postgres", 5432).
+		WithLabel("POSTGRES_USER", "postgres").
+		WithLabel("POSTGRES_PASSWORD", "postgres").
+		WithLabel("POSTGRES_DB", "postgres")
+}
+
+var _ ServiceReady = &BuilderHubPostgres{}
+
+func (b *BuilderHubPostgres) Ready(out io.Writer, service *service, ctx context.Context) error {
+	// Wait for postgresql to be ready
+	logs := service.logs
+	if err := logs.WaitForLog("database system is ready to accept connections", 30*time.Second); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out, "PostgreSQL is ready for builder-hub")
+	return nil
+}
+
+// BuilderHubInitDB is a component that initializes the builder-hub database
+type BuilderHubInitDB struct {
+}
+
+func (b *BuilderHubInitDB) Run(service *service, ctx *ExContext) {
+	// This component runs and exits - it just initializes the database with SQL scripts
+	service.
+		WithImage("ghcr.io/flashbots/builder-hub/builder-hub").
+		WithTag("latest").
+		WithEntrypoint("/bin/sh").
+		WithArgs(
+			"-c",
+			// Use proper template format for postgres connection
+			`for file in schema/*.sql; do psql "postgres://postgres:postgres@{{Service "builder-hub-postgres" "postgres"}}/postgres?sslmode=disable" -f $file; done`,
+		)
+}
+
+var _ ServiceReady = &BuilderHubInitDB{}
+
+func (b *BuilderHubInitDB) Ready(out io.Writer, service *service, ctx context.Context) error {
+	// The completion of SQL file execution won't necessarily produce a specific log message,
+	// so we'll just wait for a few seconds to allow the scripts to complete
+	time.Sleep(5 * time.Second)
+
+	fmt.Fprintln(out, "BuilderHub database migrations completed")
+	return nil
+}
