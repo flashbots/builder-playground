@@ -28,6 +28,10 @@ func (r *RollupBoost) Run(service *service, ctx *ExContext) {
 		)
 }
 
+func (r *RollupBoost) Name() string {
+	return "rollup-boost"
+}
+
 type OpBatcher struct {
 	L1Node     string
 	L2Node     string
@@ -49,6 +53,10 @@ func (o *OpBatcher) Run(service *service, ctx *ExContext) {
 			"--num-confirmations=1",
 			"--private-key=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
 		)
+}
+
+func (o *OpBatcher) Name() string {
+	return "op-batcher"
 }
 
 type OpNode struct {
@@ -88,6 +96,10 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 			"--rpc.enable-admin",
 			"--safedb.path", "{{.Dir}}/db",
 		)
+}
+
+func (o *OpNode) Name() string {
+	return "op-node"
 }
 
 type OpGeth struct {
@@ -157,6 +169,10 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
 		)
+}
+
+func (o *OpGeth) Name() string {
+	return "op-geth"
 }
 
 var _ ServiceReady = &OpGeth{}
@@ -262,6 +278,10 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 	}
 }
 
+func (r *RethEL) Name() string {
+	return "reth"
+}
+
 var _ ServiceWatchdog = &RethEL{}
 
 func (r *RethEL) Watchdog(out io.Writer, service *service, ctx context.Context) error {
@@ -318,6 +338,10 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 	}
 }
 
+func (l *LighthouseBeaconNode) Name() string {
+	return "lighthouse-beacon-node"
+}
+
 var _ ServiceReady = &LighthouseBeaconNode{}
 
 func (l *LighthouseBeaconNode) Ready(logOutput io.Writer, service *service, ctx context.Context) error {
@@ -351,6 +375,10 @@ func (l *LighthouseValidator) Run(service *service, ctx *ExContext) {
 		)
 }
 
+func (l *LighthouseValidator) Name() string {
+	return "lighthouse-validator"
+}
+
 type ClProxy struct {
 	PrimaryBuilder   string
 	SecondaryBuilder string
@@ -366,6 +394,10 @@ func (c *ClProxy) Run(service *service, ctx *ExContext) {
 			"--secondary-builder", c.SecondaryBuilder,
 			"--port", `{{Port "authrpc" 5656}}`,
 		)
+}
+
+func (c *ClProxy) Name() string {
+	return "cl-proxy"
 }
 
 type MevBoostRelay struct {
@@ -387,6 +419,10 @@ func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 	if m.ValidationServer != "" {
 		service.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
 	}
+}
+
+func (m *MevBoostRelay) Name() string {
+	return "mev-boost-relay"
 }
 
 var _ ServiceWatchdog = &MevBoostRelay{}

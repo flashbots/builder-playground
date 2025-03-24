@@ -20,7 +20,7 @@ type release struct {
 	Arch    func(string, string) string
 }
 
-func downloadRelease(outputFolder string, artifact *release) (string, error) {
+func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 

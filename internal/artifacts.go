@@ -91,7 +91,7 @@ type Artifacts struct {
 }
 
 func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
-	homeDir, err := getHomeDir()
+	homeDir, err := GetHomeDir()
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +523,7 @@ type sszObject interface {
 	MarshalSSZ() ([]byte, error)
 }
 
-func getHomeDir() (string, error) {
+func GetHomeDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("error getting user home directory: %w", err)
