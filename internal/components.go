@@ -441,7 +441,7 @@ func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
 		WithEnv("POSTGRES_PASSWORD", "postgres").
 		WithEnv("POSTGRES_DB", "postgres").
 		WithReady(ReadyCheck{
-			Test:        []string{"pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"},
+			Test:        []string{"CMD-SHELL", "pg_isready -U postgres -d postgres"},
 			Interval:    1 * time.Second,
 			Timeout:     30 * time.Second,
 			Retries:     3,
@@ -461,6 +461,7 @@ func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("latest").
+		WithEntrypoint("/app/builder-hub").
 		WithArgs(
 			"--listen-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "http" 8080}}`),
 			"--admin-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "admin" 8081}}`),
@@ -468,7 +469,7 @@ func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 			"--metrics-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "metrics" 8090}}`),
 			"--log-json", "true",
 			"--log-debug",
-			"--postgres-dsn", "postgres://postgres:postgres@"+Connect(b.postgres, "postgres")+":5432/postgres?sslmode=disable",
+			"--postgres-dsn", "postgres://postgres:postgres@"+Connect(b.postgres, "postgres")+"/postgres?sslmode=disable",
 			"--mock-secrets", "true",
 		).
 		DependsOnHealthy(b.postgres)
