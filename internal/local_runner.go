@@ -383,6 +383,10 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		"labels": map[string]string{"playground": "true"},
 	}
 
+	if len(s.env) > 0 {
+		service["env"] = s.env
+	}
+
 	if runtime.GOOS == "linux" {
 		// We rely on host.docker.internal as the DNS address for the host inside
 		// the container. But, this is only available on Macos and Windows.

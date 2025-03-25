@@ -296,6 +296,9 @@ type service struct {
 
 	labels map[string]string
 
+	// list of environment variables to set for the service
+	env map[string]string
+
 	ports    []*Port
 	nodeRefs []*NodeRef
 
@@ -330,6 +333,14 @@ func (s *service) GetPort(name string) (*Port, bool) {
 
 func (s *service) UseHostExecution() *service {
 	s.WithLabel(useHostExecutionLabel, "true")
+	return s
+}
+
+func (s *service) WithEnv(key, value string) *service {
+	if s.env == nil {
+		s.env = make(map[string]string)
+	}
+	s.env[key] = value
 	return s
 }
 
