@@ -196,6 +196,11 @@ func (d *LocalRunner) AreReady() bool {
 	defer d.tasksMtx.Unlock()
 
 	for name, task := range d.tasks {
+		// ensure the task is not a host service
+		if d.isHostService(name) {
+			continue
+		}
+
 		// first ensure the task has started
 		if task.status != taskStatusStarted {
 			return false

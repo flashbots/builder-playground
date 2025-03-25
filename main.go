@@ -229,6 +229,8 @@ func runIt(recipe internal.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
+	fmt.Printf("Services are ready...\n")
+
 	if err := svcManager.CompleteReady(); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to complete ready: %w", err)

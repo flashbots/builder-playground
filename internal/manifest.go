@@ -184,8 +184,16 @@ func (s *Manifest) Validate() error {
 
 		// validate depends_on statements
 		for _, dep := range ss.dependsOn {
-			if _, ok := s.GetService(dep.Name); !ok {
+			service, ok := s.GetService(dep.Name)
+			if !ok {
 				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.Name, dep.Name)
+			}
+
+			if dep.Condition == DependsOnConditionHealthy {
+				// if we depedn on the service to be healthy, it must have a ready check
+				if service.readyCheck == nil {
+					return fmt.Errorf("service %s depends on service %s, but it does not have a ready check", ss.Name, dep.Name)
+				}
 			}
 		}
 	}
