@@ -15,6 +15,7 @@ import (
 
 type release struct {
 	Name    string
+	Repo    string
 	Org     string
 	Version string
 	Arch    func(string, string) string
@@ -50,7 +51,11 @@ func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 		}
 	} else {
 		// Case 3. Download the binary from the release page
-		releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, archVersion)
+		repo := artifact.Repo
+		if repo == "" {
+			repo = artifact.Name
+		}
+		releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, repo, artifact.Version, artifact.Name, artifact.Version, archVersion)
 		log.Printf("Downloading %s: %s\n", outPath, releasesURL)
 
 		if err := downloadArtifact(releasesURL, artifact.Name, outPath); err != nil {
