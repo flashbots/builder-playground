@@ -299,6 +299,8 @@ type service struct {
 	// list of environment variables to set for the service
 	env map[string]string
 
+	readyCheck *ReadyCheck
+
 	ports    []*Port
 	nodeRefs []*NodeRef
 
@@ -400,6 +402,20 @@ func (s *service) WithArgs(args ...string) *service {
 	}
 	s.args = append(s.args, args...)
 	return s
+}
+
+func (s *service) WithReady(check ReadyCheck) *service {
+	s.readyCheck = &check
+	return s
+}
+
+type ReadyCheck struct {
+	QueryURL    string
+	Test        []string
+	Interval    time.Duration
+	StartPeriod time.Duration
+	Timeout     time.Duration
+	Retries     int
 }
 
 func applyTemplate(templateStr string) (string, []Port, []NodeRef) {

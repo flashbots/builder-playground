@@ -387,6 +387,25 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		service["environment"] = s.env
 	}
 
+	if s.readyCheck != nil {
+		/*
+			var test []string
+			if s.readyCheck.QueryURL != "" {
+				test = []string{"CMD-SHELL", "chmod", "+x", "/artifacts/scripts/query.sh", "&&", "/artifacts/scripts/query.sh", s.readyCheck.QueryURL}
+			} else {
+				test = s.readyCheck.Test
+			}
+
+			service["healthcheck"] = map[string]interface{}{
+				"test":         test,
+				"interval":     s.readyCheck.Interval.String(),
+				"timeout":      s.readyCheck.Timeout.String(),
+				"retries":      s.readyCheck.Retries,
+				"start_period": s.readyCheck.StartPeriod.String(),
+			}
+		*/
+	}
+
 	if runtime.GOOS == "linux" {
 		// We rely on host.docker.internal as the DNS address for the host inside
 		// the container. But, this is only available on Macos and Windows.
@@ -541,6 +560,9 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 			case events.ActionDie:
 				d.updateTaskStatus(name, taskStatusDie)
 				log.Info("container died", "name", name)
+
+			default:
+				fmt.Println("event", "action", event.Action, "name", name)
 			}
 
 		case err := <-errCh:

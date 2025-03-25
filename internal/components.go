@@ -328,7 +328,14 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
-		)
+		).
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
