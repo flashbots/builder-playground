@@ -77,6 +77,7 @@ type ExContext struct {
 
 type Service interface {
 	Run(service *service, ctx *ExContext)
+	Name() string
 }
 
 type ServiceReady interface {
@@ -213,7 +214,7 @@ func (s *Manifest) Validate() error {
 				return fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
 			}
 			releaseArtifact := releaseService.ReleaseArtifact()
-			bin, err := downloadRelease(s.out.homeDir, releaseArtifact)
+			bin, err := DownloadRelease(s.out.homeDir, releaseArtifact)
 			if err != nil {
 				return fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
 			}

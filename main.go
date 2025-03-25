@@ -45,6 +45,39 @@ var cookCmd = &cobra.Command{
 	},
 }
 
+var artifactsCmd = &cobra.Command{
+	Use:   "artifacts",
+	Short: "List available artifacts",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 1 {
+			return fmt.Errorf("please specify a service name")
+		}
+		serviceName := args[0]
+		component := internal.FindComponent(serviceName)
+		if component == nil {
+			return fmt.Errorf("service %s not found", serviceName)
+		}
+		releaseService, ok := component.(internal.ReleaseService)
+		if !ok {
+			return fmt.Errorf("service %s is not a release service", serviceName)
+		}
+		output := outputFlag
+		if output == "" {
+			homeDir, err := internal.GetHomeDir()
+			if err != nil {
+				return fmt.Errorf("failed to get home directory: %w", err)
+			}
+			output = homeDir
+		}
+		location, err := internal.DownloadRelease(output, releaseService.ReleaseArtifact())
+		if err != nil {
+			return fmt.Errorf("failed to download release: %w", err)
+		}
+		fmt.Println(location)
+		return nil
+	},
+}
+
 var recipes = []internal.Recipe{
 	&internal.L1Recipe{},
 	&internal.OpRecipe{},
@@ -75,7 +108,12 @@ func main() {
 		cookCmd.AddCommand(recipeCmd)
 	}
 
+	// reuse the same output flag for the artifacts command
+	artifactsCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+
 	rootCmd.AddCommand(cookCmd)
+	rootCmd.AddCommand(artifactsCmd)
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
