@@ -493,6 +493,38 @@ func (b *BuilderHubMockProxy) Name() string {
 	return "builder-hub-mock-proxy"
 }
 
+type OrderflowProxySender struct {
+	ConfigHubEndpoint string
+	SignerKey         string
+}
+
+func (o *OrderflowProxySender) Run(service *service, ctx *ExContext) {
+	service.
+		WithImage("docker.io/flashbots/orderflow-proxy-sender").
+		WithTag("latest").
+		WithArgs(
+			"--listen-address", fmt.Sprintf("0.0.0.0:%s", `{{Port "http" 8080}}`),
+			"--builder-confighub-endpoint", Connect(o.ConfigHubEndpoint, "http"),
+			"--orderflow-signer-key", o.SignerKey,
+			"--connections-per-peer", "10",
+			"--metrics-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "metrics" 8090}}`),
+			"--log-json",
+		).
+		WithPort("http", 8080).
+		WithPort("metrics", 8090).
+		WithReady(ReadyCheck{
+			Test:        []string{"CMD-SHELL", "wget -q --spider http://localhost:8080 || curl -s http://localhost:8080 > /dev/null"},
+			Interval:    1 * time.Second,
+			Timeout:     5 * time.Second,
+			Retries:     3,
+			StartPeriod: 3 * time.Second,
+		})
+}
+
+func (o *OrderflowProxySender) Name() string {
+	return "orderflow-proxy-sender"
+}
+
 type OpReth struct {
 }
 

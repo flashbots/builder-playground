@@ -20,6 +20,7 @@ func init() {
 	register(&BuilderHub{})
 	register(&BuilderHubPostgres{})
 	register(&BuilderHubMockProxy{})
+	register(&OrderflowProxySender{})
 }
 
 func FindComponent(name string) Service {

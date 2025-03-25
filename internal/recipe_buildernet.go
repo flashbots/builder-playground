@@ -15,6 +15,12 @@ type BuilderNetRecipe struct {
 
 	// Add mock proxy for testing
 	includeMockProxy bool
+
+	// Add orderflow proxy sender
+	includeOrderflowProxySender bool
+
+	// Orderflow proxy signer key
+	orderflowProxySignerKey string
 }
 
 func (b *BuilderNetRecipe) Name() string {
