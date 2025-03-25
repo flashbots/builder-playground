@@ -81,37 +81,15 @@ type Service interface {
 }
 
 type ServiceReady interface {
-	Ready(out io.Writer, service *service, ctx context.Context) error
+	Ready(ouservice *service) error
 }
 
-func WaitForReady(ctx context.Context, manifest *Manifest) error {
-	var wg sync.WaitGroup
-	readyErr := make(chan error, len(manifest.Services()))
-
-	output, err := manifest.out.LogOutput("ready")
-	if err != nil {
-		return fmt.Errorf("failed to create log output: %w", err)
-	}
-
-	for _, s := range manifest.Services() {
+func (m *Manifest) CompleteReady() error {
+	for _, s := range m.services {
 		if readyFn, ok := s.component.(ServiceReady); ok {
-			wg.Add(1)
-
-			go func() {
-				defer wg.Done()
-
-				if err := readyFn.Ready(output, s, ctx); err != nil {
-					readyErr <- fmt.Errorf("service %s failed to start: %w", s.Name, err)
-				}
-			}()
-		}
-	}
-	wg.Wait()
-
-	close(readyErr)
-	for err := range readyErr {
-		if err != nil {
-			return err
+			if err := readyFn.Ready(s); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -257,24 +235,6 @@ func (s *serviceLogs) readLogs() (string, error) {
 	return string(content), nil
 }
 
-func (s *serviceLogs) WaitForLog(pattern string, timeout time.Duration) error {
-	timer := time.After(timeout)
-	for {
-		select {
-		case <-timer:
-			return fmt.Errorf("timeout waiting for log pattern %s", pattern)
-		case <-time.After(500 * time.Millisecond):
-			logs, err := s.readLogs()
-			if err != nil {
-				return fmt.Errorf("failed to read logs: %w", err)
-			}
-			if strings.Contains(logs, pattern) {
-				return nil
-			}
-		}
-	}
-}
-
 func (s *serviceLogs) FindLog(pattern string) (string, error) {
 	logs, err := s.readLogs()
 	if err != nil {
@@ -301,6 +261,8 @@ type service struct {
 
 	readyCheck *ReadyCheck
 
+	dependsOn []DependsOn
+
 	ports    []*Port
 	nodeRefs []*NodeRef
 
@@ -310,6 +272,18 @@ type service struct {
 
 	logs      *serviceLogs
 	component Service
+}
+
+type DependsOnCondition string
+
+const (
+	DependsOnConditionRunning DependsOnCondition = "service_started"
+	DependsOnConditionHealthy DependsOnCondition = "service_healthy"
+)
+
+type DependsOn struct {
+	Name      string
+	Condition DependsOnCondition
 }
 
 func (s *service) Ports() []*Port {
@@ -416,6 +390,16 @@ type ReadyCheck struct {
 	StartPeriod time.Duration
 	Timeout     time.Duration
 	Retries     int
+}
+
+func (s *service) DependsOnHealthy(name string) *service {
+	s.dependsOn = append(s.dependsOn, DependsOn{Name: name, Condition: DependsOnConditionHealthy})
+	return s
+}
+
+func (s *service) DependsOnRunning(name string) *service {
+	s.dependsOn = append(s.dependsOn, DependsOn{Name: name, Condition: DependsOnConditionRunning})
+	return s
 }
 
 func applyTemplate(templateStr string) (string, []Port, []NodeRef) {

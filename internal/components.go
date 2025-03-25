@@ -178,14 +178,8 @@ func (o *OpGeth) Name() string {
 
 var _ ServiceReady = &OpGeth{}
 
-func (o *OpGeth) Ready(out io.Writer, service *service, ctx context.Context) error {
-	logs := service.logs
-
-	if err := logs.WaitForLog("HTTP server started", 5*time.Second); err != nil {
-		return err
-	}
-
-	enodeLine, err := logs.FindLog("enode://")
+func (o *OpGeth) Ready(service *service) error {
+	enodeLine, err := service.logs.FindLog("enode://")
 	if err != nil {
 		return err
 	}
@@ -346,17 +340,6 @@ func (l *LighthouseBeaconNode) Name() string {
 	return "lighthouse-beacon-node"
 }
 
-var _ ServiceReady = &LighthouseBeaconNode{}
-
-func (l *LighthouseBeaconNode) Ready(logOutput io.Writer, service *service, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-
-	if err := waitForChainAlive(ctx, logOutput, beaconNodeURL, 30*time.Second); err != nil {
-		return err
-	}
-	return nil
-}
-
 type LighthouseValidator struct {
 	BeaconNode string
 }
@@ -414,6 +397,7 @@ func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
 		WithEntrypoint("mev-boost-relay").
+		DependsOnHealthy(m.BeaconClient).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
 			"--api-listen-port", `{{Port "http" 5555}}`,

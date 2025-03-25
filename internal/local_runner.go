@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
@@ -62,6 +63,7 @@ type LocalRunner struct {
 
 type task struct {
 	status string
+	ready  bool
 	logs   *os.File
 }
 
@@ -69,6 +71,7 @@ var (
 	taskStatusPending = "pending"
 	taskStatusStarted = "started"
 	taskStatusDie     = "die"
+	taskStatusHealthy = "healthy"
 )
 
 type taskUI struct {
@@ -188,10 +191,52 @@ func (d *LocalRunner) printStatus() {
 	}
 }
 
+func (d *LocalRunner) AreReady() bool {
+	d.tasksMtx.Lock()
+	defer d.tasksMtx.Unlock()
+
+	for name, task := range d.tasks {
+		// first ensure the task has started
+		if task.status != taskStatusStarted {
+			return false
+		}
+
+		// then ensure it is ready if it has a ready function
+		svc := d.getService(name)
+		if svc.readyCheck != nil {
+			if !task.ready {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-time.After(1 * time.Second):
+			if d.AreReady() {
+				return nil
+			}
+
+		case err := <-d.exitErr:
+			return err
+		}
+	}
+}
+
 func (d *LocalRunner) updateTaskStatus(name string, status string) {
 	d.tasksMtx.Lock()
 	defer d.tasksMtx.Unlock()
-	d.tasks[name].status = status
+	if status == taskStatusHealthy {
+		d.tasks[name].ready = true
+	} else {
+		d.tasks[name].status = status
+	}
 
 	if status == taskStatusDie {
 		d.exitErr <- fmt.Errorf("container %s failed", name)
@@ -388,22 +433,36 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 	}
 
 	if s.readyCheck != nil {
-		/*
-			var test []string
-			if s.readyCheck.QueryURL != "" {
-				test = []string{"CMD-SHELL", "chmod", "+x", "/artifacts/scripts/query.sh", "&&", "/artifacts/scripts/query.sh", s.readyCheck.QueryURL}
-			} else {
-				test = s.readyCheck.Test
-			}
+		var test []string
+		if s.readyCheck.QueryURL != "" {
+			// This is pretty much hardcoded for now.
+			test = []string{"CMD-SHELL", "chmod +x /artifacts/scripts/query.sh && /artifacts/scripts/query.sh " + s.readyCheck.QueryURL}
+		} else {
+			test = s.readyCheck.Test
+		}
 
-			service["healthcheck"] = map[string]interface{}{
-				"test":         test,
-				"interval":     s.readyCheck.Interval.String(),
-				"timeout":      s.readyCheck.Timeout.String(),
-				"retries":      s.readyCheck.Retries,
-				"start_period": s.readyCheck.StartPeriod.String(),
+		service["healthcheck"] = map[string]interface{}{
+			"test":         test,
+			"interval":     s.readyCheck.Interval.String(),
+			"timeout":      s.readyCheck.Timeout.String(),
+			"retries":      s.readyCheck.Retries,
+			"start_period": s.readyCheck.StartPeriod.String(),
+		}
+	}
+
+	if s.dependsOn != nil {
+		depends := map[string]interface{}{}
+
+		for _, d := range s.dependsOn {
+			if d.Condition == "" {
+				depends[d.Name] = struct{}{}
+			} else {
+				depends[d.Name] = map[string]interface{}{
+					"condition": d.Condition,
+				}
 			}
-		*/
+		}
+		service["depends_on"] = depends
 	}
 
 	if runtime.GOOS == "linux" {
@@ -547,6 +606,8 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 		case event := <-eventCh:
 			name := event.Actor.Attributes["com.docker.compose.service"]
 
+			fmt.Println("event", "action", event.Action, "name", name)
+
 			switch event.Action {
 			case events.ActionStart:
 				d.updateTaskStatus(name, taskStatusStarted)
@@ -561,8 +622,9 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 				d.updateTaskStatus(name, taskStatusDie)
 				log.Info("container died", "name", name)
 
-			default:
-				fmt.Println("event", "action", event.Action, "name", name)
+			case events.ActionHealthStatusHealthy:
+				d.updateTaskStatus(name, taskStatusHealthy)
+				log.Info("container is healthy", "name", name)
 			}
 
 		case err := <-errCh:
