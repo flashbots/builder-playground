@@ -606,8 +606,6 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 		case event := <-eventCh:
 			name := event.Actor.Attributes["com.docker.compose.service"]
 
-			fmt.Println("event", "action", event.Action, "name", name)
-
 			switch event.Action {
 			case events.ActionStart:
 				d.updateTaskStatus(name, taskStatusStarted)
