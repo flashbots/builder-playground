@@ -384,7 +384,7 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 	}
 
 	if len(s.env) > 0 {
-		service["env"] = s.env
+		service["environment"] = s.env
 	}
 
 	if runtime.GOOS == "linux" {
