@@ -178,14 +178,8 @@ func (o *OpGeth) Name() string {
 
 var _ ServiceReady = &OpGeth{}
 
-func (o *OpGeth) Ready(out io.Writer, service *service, ctx context.Context) error {
-	logs := service.logs
-
-	if err := logs.WaitForLog("HTTP server started", 5*time.Second); err != nil {
-		return err
-	}
-
-	enodeLine, err := logs.FindLog("enode://")
+func (o *OpGeth) Ready(service *service) error {
+	enodeLine, err := service.logs.FindLog("enode://")
 	if err != nil {
 		return err
 	}
@@ -324,7 +318,14 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
-		)
+		).
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -337,17 +338,6 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 
 func (l *LighthouseBeaconNode) Name() string {
 	return "lighthouse-beacon-node"
-}
-
-var _ ServiceReady = &LighthouseBeaconNode{}
-
-func (l *LighthouseBeaconNode) Ready(logOutput io.Writer, service *service, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-
-	if err := waitForChainAlive(ctx, logOutput, beaconNodeURL, 30*time.Second); err != nil {
-		return err
-	}
-	return nil
 }
 
 type LighthouseValidator struct {
@@ -407,6 +397,7 @@ func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
 		WithEntrypoint("mev-boost-relay").
+		DependsOnHealthy(m.BeaconClient).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
 			"--api-listen-port", `{{Port "http" 5555}}`,

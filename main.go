@@ -224,9 +224,14 @@ func runIt(recipe internal.Recipe) error {
 		}
 	}
 
-	if err := internal.WaitForReady(ctx, svcManager); err != nil {
+	if err := dockerRunner.WaitForReady(ctx, 20*time.Second); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
+	}
+
+	if err := svcManager.CompleteReady(); err != nil {
+		dockerRunner.Stop()
+		return fmt.Errorf("failed to complete ready: %w", err)
 	}
 
 	// get the output from the recipe
