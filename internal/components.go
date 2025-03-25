@@ -70,6 +70,7 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.11.0").
 		WithEntrypoint("op-node").
+		WithEnv("A", "B"). // this is just a placeholder to make sure env works since we e2e test with the recipes
 		WithArgs(
 			"--l1", Connect(o.L1Node, "http"),
 			"--l1.beacon", Connect(o.L1Beacon, "http"),
