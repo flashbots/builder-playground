@@ -1,9 +1,9 @@
 package internal
 
-var components = []Service{}
+var Components = []Service{}
 
 func register(component Service) {
-	components = append(components, component)
+	Components = append(Components, component)
 }
 
 func init() {
@@ -20,7 +20,7 @@ func init() {
 }
 
 func FindComponent(name string) Service {
-	for _, component := range components {
+	for _, component := range Components {
 		if component.Name() == name {
 			return component
 		}
