@@ -49,6 +49,14 @@ Flags:
 
 - `--external-builder`: URL of an external builder to use (enables rollup-boost)
 
+### Example Commands
+
+Here's a complete example showing how to run the L1 recipe with the latest fork enabled and custom output directory:
+
+```bash
+$ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genesis-delay 15 --log-level debug
+```
+
 ## Common Options
 
 - `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.playground/devnet`

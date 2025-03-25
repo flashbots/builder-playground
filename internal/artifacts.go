@@ -57,6 +57,9 @@ var opState []byte
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
 
+//go:embed utils/query.sh
+var queryReadyCheck []byte
+
 type ArtifactsBuilder struct {
 	outputDir         string
 	applyLatestL1Fork bool
@@ -91,7 +94,7 @@ type Artifacts struct {
 }
 
 func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
-	homeDir, err := getHomeDir()
+	homeDir, err := GetHomeDir()
 	if err != nil {
 		return nil, err
 	}
@@ -230,6 +233,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		"testnet/genesis_validators_root.txt": hex.EncodeToString(state.GenesisValidatorsRoot()),
 		"data_validator/":                     &lighthouseKeystore{privKeys: priv},
 		"deterministic_p2p_key.txt":           defaultDiscoveryPrivKey,
+		"scripts/query.sh":                    queryReadyCheck,
 	})
 	if err != nil {
 		return nil, err
@@ -523,7 +527,7 @@ type sszObject interface {
 	MarshalSSZ() ([]byte, error)
 }
 
-func getHomeDir() (string, error) {
+func GetHomeDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("error getting user home directory: %w", err)

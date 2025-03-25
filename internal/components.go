@@ -28,6 +28,10 @@ func (r *RollupBoost) Run(service *service, ctx *ExContext) {
 		)
 }
 
+func (r *RollupBoost) Name() string {
+	return "rollup-boost"
+}
+
 type OpBatcher struct {
 	L1Node     string
 	L2Node     string
@@ -51,6 +55,10 @@ func (o *OpBatcher) Run(service *service, ctx *ExContext) {
 		)
 }
 
+func (o *OpBatcher) Name() string {
+	return "op-batcher"
+}
+
 type OpNode struct {
 	L1Node   string
 	L1Beacon string
@@ -62,6 +70,7 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.11.0").
 		WithEntrypoint("op-node").
+		WithEnv("A", "B"). // this is just a placeholder to make sure env works since we e2e test with the recipes
 		WithArgs(
 			"--l1", Connect(o.L1Node, "http"),
 			"--l1.beacon", Connect(o.L1Beacon, "http"),
@@ -88,6 +97,10 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 			"--rpc.enable-admin",
 			"--safedb.path", "{{.Dir}}/db",
 		)
+}
+
+func (o *OpNode) Name() string {
+	return "op-node"
 }
 
 type OpGeth struct {
@@ -159,16 +172,14 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 		)
 }
 
+func (o *OpGeth) Name() string {
+	return "op-geth"
+}
+
 var _ ServiceReady = &OpGeth{}
 
-func (o *OpGeth) Ready(out io.Writer, service *service, ctx context.Context) error {
-	logs := service.logs
-
-	if err := logs.WaitForLog("HTTP server started", 5*time.Second); err != nil {
-		return err
-	}
-
-	enodeLine, err := logs.FindLog("enode://")
+func (o *OpGeth) Ready(service *service) error {
+	enodeLine, err := service.logs.FindLog("enode://")
 	if err != nil {
 		return err
 	}
@@ -262,6 +273,10 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 	}
 }
 
+func (r *RethEL) Name() string {
+	return "reth"
+}
+
 var _ ServiceWatchdog = &RethEL{}
 
 func (r *RethEL) Watchdog(out io.Writer, service *service, ctx context.Context) error {
@@ -283,15 +298,9 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"bn",
 			"--datadir", "{{.Dir}}/data_beacon_node",
 			"--testnet-dir", "{{.Dir}}/testnet",
+			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
-			"--disable-discovery",
-			"--disable-upnp",
-			"--disable-packet-filter",
-			"--target-peers", "0",
-			"--boot-nodes", "",
-			"--debug-level", "error",
-			"--logfile-debug-level", "error",
 			"--enr-address", "127.0.0.1",
 			"--enr-udp-port", `{{Port "p2p" 9000}}`,
 			"--enr-tcp-port", `{{Port "p2p" 9000}}`,
@@ -302,12 +311,21 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--http-port", `{{Port "http" 3500}}`,
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
+			"--disable-packet-filter",
+			"--target-peers", "0",
 			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
-		)
+		).
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -318,15 +336,8 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 	}
 }
 
-var _ ServiceReady = &LighthouseBeaconNode{}
-
-func (l *LighthouseBeaconNode) Ready(logOutput io.Writer, service *service, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-
-	if err := waitForChainAlive(ctx, logOutput, beaconNodeURL, 30*time.Second); err != nil {
-		return err
-	}
-	return nil
+func (l *LighthouseBeaconNode) Name() string {
+	return "lighthouse-beacon-node"
 }
 
 type LighthouseValidator struct {
@@ -351,6 +362,10 @@ func (l *LighthouseValidator) Run(service *service, ctx *ExContext) {
 		)
 }
 
+func (l *LighthouseValidator) Name() string {
+	return "lighthouse-validator"
+}
+
 type ClProxy struct {
 	PrimaryBuilder   string
 	SecondaryBuilder string
@@ -368,6 +383,10 @@ func (c *ClProxy) Run(service *service, ctx *ExContext) {
 		)
 }
 
+func (c *ClProxy) Name() string {
+	return "cl-proxy"
+}
+
 type MevBoostRelay struct {
 	BeaconClient     string
 	ValidationServer string
@@ -378,6 +397,7 @@ func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
 		WithEntrypoint("mev-boost-relay").
+		DependsOnHealthy(m.BeaconClient).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
 			"--api-listen-port", `{{Port "http" 5555}}`,
@@ -387,6 +407,10 @@ func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 	if m.ValidationServer != "" {
 		service.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
 	}
+}
+
+func (m *MevBoostRelay) Name() string {
+	return "mev-boost-relay"
 }
 
 var _ ServiceWatchdog = &MevBoostRelay{}
@@ -413,24 +437,24 @@ func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
 		WithImage("docker.io/flashbots/builder-hub-db").
 		WithTag("latest").
 		WithPort("postgres", 5432).
-		WithLabel("POSTGRES_USER", "postgres").
-		WithLabel("POSTGRES_PASSWORD", "postgres").
-		WithLabel("POSTGRES_DB", "postgres")
+		WithEnv("POSTGRES_USER", "postgres").
+		WithEnv("POSTGRES_PASSWORD", "postgres").
+		WithEnv("POSTGRES_DB", "postgres").
+		WithReady(ReadyCheck{
+			Test:        []string{"pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"},
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 }
 
-var _ ServiceReady = &BuilderHubPostgres{}
-
-func (b *BuilderHubPostgres) Ready(out io.Writer, service *service, ctx context.Context) error {
-	logs := service.logs
-	if err := logs.WaitForLog("database system is ready to accept connections", 30*time.Second); err != nil {
-		return err
-	}
-
-	fmt.Fprintln(out, "PostgreSQL is ready for builder-hub")
-	return nil
+func (b *BuilderHubPostgres) Name() string {
+	return "builder-hub-postgres"
 }
 
 type BuilderHub struct {
+	postgres string
 }
 
 func (b *BuilderHub) Run(service *service, ctx *ExContext) {
@@ -444,22 +468,14 @@ func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 			"--metrics-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "metrics" 8090}}`),
 			"--log-json", "true",
 			"--log-debug",
-			// Use proper template format for postgres connection
-			"--postgres-dsn", `postgres://postgres:postgres@{{Service "builder-hub-postgres" "postgres"}}/postgres?sslmode=disable`,
-			"--mock-secrets", "true", // Use mock secrets for easier testing
-		)
+			"--postgres-dsn", "postgres://postgres:postgres@"+Connect(b.postgres, "postgres")+":5432/postgres?sslmode=disable",
+			"--mock-secrets", "true",
+		).
+		DependsOnHealthy(b.postgres)
 }
 
-var _ ServiceReady = &BuilderHub{}
-
-func (b *BuilderHub) Ready(out io.Writer, service *service, ctx context.Context) error {
-	logs := service.logs
-	if err := logs.WaitForLog("Starting API service", 30*time.Second); err != nil {
-		return err
-	}
-
-	fmt.Fprintln(out, "Builder-Hub service is ready")
-	return nil
+func (b *BuilderHub) Name() string {
+	return "builder-hub"
 }
 
 type BuilderHubMockProxy struct {
@@ -473,9 +489,40 @@ func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
 		WithPort("http", 8888)
 
 	if b.TargetService != "" {
-		service.nodeRefs = append(service.nodeRefs, &NodeRef{
-			Service:   b.TargetService,
-			PortLabel: "http",
-		})
+		service.DependsOnHealthy(b.TargetService)
+	}
+}
+
+func (b *BuilderHubMockProxy) Name() string {
+	return "builder-hub-mock-proxy"
+}
+
+type OpReth struct {
+}
+
+func (o *OpReth) Run(service *service, ctx *ExContext) {
+	panic("BUG: op-reth is not implemented yet")
+}
+
+func (o *OpReth) Name() string {
+	return "op-reth"
+}
+
+func (o *OpReth) ReleaseArtifact() *release {
+	return &release{
+		Name:    "op-reth",
+		Repo:    "reth",
+		Org:     "paradigmxyz",
+		Version: "v1.3.4",
+		Arch: func(goos, goarch string) string {
+			if goos == "linux" {
+				return "x86_64-unknown-linux-gnu"
+			} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+				return "aarch64-apple-darwin"
+			} else if goos == "darwin" && goarch == "amd64" {
+				return "x86_64-apple-darwin"
+			}
+			return ""
+		},
 	}
 }

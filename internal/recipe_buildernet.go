@@ -48,7 +48,9 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
 	svcManager.AddService("builder-hub-postgres", &BuilderHubPostgres{})
 
 	// Add the builder-hub service
-	svcManager.AddService("builder-hub", &BuilderHub{})
+	svcManager.AddService("builder-hub", &BuilderHub{
+		postgres: "builder-hub-postgres",
+	})
 
 	// Optionally add mock proxy for testing
 	if b.includeMockProxy {
