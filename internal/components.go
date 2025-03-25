@@ -462,16 +462,11 @@ func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("latest").
 		WithEntrypoint("/app/builder-hub").
-		WithArgs(
-			"--listen-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "http" 8080}}`),
-			"--admin-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "admin" 8081}}`),
-			"--internal-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "internal" 8082}}`),
-			"--metrics-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "metrics" 8090}}`),
-			"--log-json", "true",
-			"--log-debug",
-			"--postgres-dsn", "postgres://postgres:postgres@"+Connect(b.postgres, "postgres")+"/postgres?sslmode=disable",
-			"--mock-secrets", "true",
-		).
+		WithEnv("POSTGRES_DSN", "postgres://postgres:postgres@"+ConnectRaw(b.postgres, "postgres", "")+"/postgres?sslmode=disable").
+		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
+		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
+		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
+		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
 		DependsOnHealthy(b.postgres)
 }
 
