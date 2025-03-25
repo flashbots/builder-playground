@@ -170,6 +170,7 @@ func (s *Manifest) GetService(name string) (*service, bool) {
 // - downloads any local release artifacts for the services that require host execution
 func (s *Manifest) Validate() error {
 	for _, ss := range s.services {
+		// validate node port references
 		for _, nodeRef := range ss.nodeRefs {
 			targetService, ok := s.GetService(nodeRef.Service)
 			if !ok {
@@ -178,6 +179,13 @@ func (s *Manifest) Validate() error {
 
 			if _, ok := targetService.GetPort(nodeRef.PortLabel); !ok {
 				return fmt.Errorf("service %s depends on service %s, but it does not expose port %s", ss.Name, nodeRef.Service, nodeRef.PortLabel)
+			}
+		}
+
+		// validate depends_on statements
+		for _, dep := range ss.dependsOn {
+			if _, ok := s.GetService(dep.Name); !ok {
+				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.Name, dep.Name)
 			}
 		}
 	}
@@ -490,6 +498,18 @@ func (s *Manifest) GenerateDotGraph() string {
 				sourceNode,
 				targetNode,
 				ref.PortLabel,
+			))
+		}
+	}
+
+	// Add edges for dependws_on
+	for _, ss := range s.services {
+		for _, dep := range ss.dependsOn {
+			sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
+			targetNode := strings.ReplaceAll(dep.Name, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -> %s [style=dashed, color=gray, constraint=true, label=\"depends_on\"];\n",
+				sourceNode,
+				targetNode,
 			))
 		}
 	}
