@@ -405,34 +405,12 @@ func (m *MevBoostRelay) Watchdog(out io.Writer, service *service, ctx context.Co
 	return watchGroup.wait()
 }
 
-type BuilderHub struct {
-}
-
-func (b *BuilderHub) Run(service *service, ctx *ExContext) {
-	// Start the builder-hub service
-	service.
-		WithImage("ghcr.io/flashbots/builder-hub/builder-hub").
-		WithTag("latest").
-		WithArgs(
-			"--listen-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "http" 8080}}`),
-			"--admin-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "admin" 8081}}`),
-			"--internal-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "internal" 8082}}`),
-			"--metrics-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "metrics" 8090}}`),
-			"--log-json", "true",
-			"--log-debug",
-			// Use proper template format for postgres connection
-			"--postgres-dsn", `postgres://postgres:postgres@{{Service "builder-hub-postgres" "postgres"}}/postgres?sslmode=disable`,
-		)
-}
-
-// BuilderHubPostgres is a component that runs the postgres database for builder-hub
 type BuilderHubPostgres struct {
 }
 
 func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
-	// Start the postgres database
 	service.
-		WithImage("postgres").
+		WithImage("docker.io/flashbots/builder-hub-db").
 		WithTag("latest").
 		WithPort("postgres", 5432).
 		WithLabel("POSTGRES_USER", "postgres").
@@ -443,7 +421,6 @@ func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
 var _ ServiceReady = &BuilderHubPostgres{}
 
 func (b *BuilderHubPostgres) Ready(out io.Writer, service *service, ctx context.Context) error {
-	// Wait for postgresql to be ready
 	logs := service.logs
 	if err := logs.WaitForLog("database system is ready to accept connections", 30*time.Second); err != nil {
 		return err
@@ -453,30 +430,52 @@ func (b *BuilderHubPostgres) Ready(out io.Writer, service *service, ctx context.
 	return nil
 }
 
-// BuilderHubInitDB is a component that initializes the builder-hub database
-type BuilderHubInitDB struct {
+type BuilderHub struct {
 }
 
-func (b *BuilderHubInitDB) Run(service *service, ctx *ExContext) {
-	// This component runs and exits - it just initializes the database with SQL scripts
+func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 	service.
-		WithImage("ghcr.io/flashbots/builder-hub/builder-hub").
+		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("latest").
-		WithEntrypoint("/bin/sh").
 		WithArgs(
-			"-c",
+			"--listen-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "http" 8080}}`),
+			"--admin-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "admin" 8081}}`),
+			"--internal-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "internal" 8082}}`),
+			"--metrics-addr", fmt.Sprintf("0.0.0.0:%s", `{{Port "metrics" 8090}}`),
+			"--log-json", "true",
+			"--log-debug",
 			// Use proper template format for postgres connection
-			`for file in schema/*.sql; do psql "postgres://postgres:postgres@{{Service "builder-hub-postgres" "postgres"}}/postgres?sslmode=disable" -f $file; done`,
+			"--postgres-dsn", `postgres://postgres:postgres@{{Service "builder-hub-postgres" "postgres"}}/postgres?sslmode=disable`,
+			"--mock-secrets", "true", // Use mock secrets for easier testing
 		)
 }
 
-var _ ServiceReady = &BuilderHubInitDB{}
+var _ ServiceReady = &BuilderHub{}
 
-func (b *BuilderHubInitDB) Ready(out io.Writer, service *service, ctx context.Context) error {
-	// The completion of SQL file execution won't necessarily produce a specific log message,
-	// so we'll just wait for a few seconds to allow the scripts to complete
-	time.Sleep(5 * time.Second)
+func (b *BuilderHub) Ready(out io.Writer, service *service, ctx context.Context) error {
+	logs := service.logs
+	if err := logs.WaitForLog("Starting API service", 30*time.Second); err != nil {
+		return err
+	}
 
-	fmt.Fprintln(out, "BuilderHub database migrations completed")
+	fmt.Fprintln(out, "Builder-Hub service is ready")
 	return nil
+}
+
+type BuilderHubMockProxy struct {
+	TargetService string
+}
+
+func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
+	service.
+		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
+		WithTag("latest").
+		WithPort("http", 8888)
+
+	if b.TargetService != "" {
+		service.nodeRefs = append(service.nodeRefs, &NodeRef{
+			Service:   b.TargetService,
+			PortLabel: "http",
+		})
+	}
 }
