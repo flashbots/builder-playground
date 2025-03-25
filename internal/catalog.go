@@ -16,6 +16,7 @@ func init() {
 	register(&ClProxy{})
 	register(&MevBoostRelay{})
 	register(&RollupBoost{})
+	register(&OpReth{})
 }
 
 func FindComponent(name string) Service {

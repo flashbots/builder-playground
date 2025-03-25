@@ -440,3 +440,33 @@ func (m *MevBoostRelay) Watchdog(out io.Writer, service *service, ctx context.Co
 
 	return watchGroup.wait()
 }
+
+type OpReth struct {
+}
+
+func (o *OpReth) Run(service *service, ctx *ExContext) {
+	panic("BUG: op-reth is not implemented yet")
+}
+
+func (o *OpReth) Name() string {
+	return "op-reth"
+}
+
+func (o *OpReth) ReleaseArtifact() *release {
+	return &release{
+		Name:    "op-reth",
+		Repo:    "reth",
+		Org:     "paradigmxyz",
+		Version: "v1.3.4",
+		Arch: func(goos, goarch string) string {
+			if goos == "linux" {
+				return "x86_64-unknown-linux-gnu"
+			} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+				return "aarch64-apple-darwin"
+			} else if goos == "darwin" && goarch == "amd64" {
+				return "x86_64-apple-darwin"
+			}
+			return ""
+		},
+	}
+}
