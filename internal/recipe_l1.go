@@ -43,6 +43,11 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 }
 
 func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
+	// Validate incompatible flag combinations
+	if l.useNativeReth && l.secondaryELPort != 0 {
+		panic("cannot use --use-native-reth and --secondary-el together for L1 recipe")
+	}
+	
 	builder := NewArtifactsBuilder()
 	builder.ApplyLatestL1Fork(l.latestFork)
 
