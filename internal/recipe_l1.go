@@ -62,8 +62,7 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		// we are going to use the cl-proxy service to connect the beacon node to two builders
 		// one the 'el' builder and another one the remote one
 		elService = "cl-proxy"
-		
-		// Determine the primary builder endpoint based on whether we're using native Reth
+
 		primaryBuilder := "el"
 		if l.useNativeReth {
 			// When using native Reth, we need to connect to the host machine
