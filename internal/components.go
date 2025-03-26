@@ -70,6 +70,7 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.11.0").
 		WithEntrypoint("op-node").
+		WithEnv("A", "B"). // this is just a placeholder to make sure env works since we e2e test with the recipes
 		WithArgs(
 			"--l1", Connect(o.L1Node, "http"),
 			"--l1.beacon", Connect(o.L1Beacon, "http"),
@@ -177,14 +178,8 @@ func (o *OpGeth) Name() string {
 
 var _ ServiceReady = &OpGeth{}
 
-func (o *OpGeth) Ready(out io.Writer, service *service, ctx context.Context) error {
-	logs := service.logs
-
-	if err := logs.WaitForLog("HTTP server started", 5*time.Second); err != nil {
-		return err
-	}
-
-	enodeLine, err := logs.FindLog("enode://")
+func (o *OpGeth) Ready(service *service) error {
+	enodeLine, err := service.logs.FindLog("enode://")
 	if err != nil {
 		return err
 	}
@@ -303,15 +298,9 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"bn",
 			"--datadir", "{{.Dir}}/data_beacon_node",
 			"--testnet-dir", "{{.Dir}}/testnet",
+			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
-			"--disable-discovery",
-			"--disable-upnp",
-			"--disable-packet-filter",
-			"--target-peers", "0",
-			"--boot-nodes", "",
-			"--debug-level", "error",
-			"--logfile-debug-level", "error",
 			"--enr-address", "127.0.0.1",
 			"--enr-udp-port", `{{Port "p2p" 9000}}`,
 			"--enr-tcp-port", `{{Port "p2p" 9000}}`,
@@ -322,12 +311,21 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--http-port", `{{Port "http" 3500}}`,
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
+			"--disable-packet-filter",
+			"--target-peers", "0",
 			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
-		)
+		).
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -340,17 +338,6 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 
 func (l *LighthouseBeaconNode) Name() string {
 	return "lighthouse-beacon-node"
-}
-
-var _ ServiceReady = &LighthouseBeaconNode{}
-
-func (l *LighthouseBeaconNode) Ready(logOutput io.Writer, service *service, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-
-	if err := waitForChainAlive(ctx, logOutput, beaconNodeURL, 30*time.Second); err != nil {
-		return err
-	}
-	return nil
 }
 
 type LighthouseValidator struct {
@@ -410,6 +397,7 @@ func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
 		WithEntrypoint("mev-boost-relay").
+		DependsOnHealthy(m.BeaconClient).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
 			"--api-listen-port", `{{Port "http" 5555}}`,

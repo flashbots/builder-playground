@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sort"
 	"strings"
@@ -78,6 +79,40 @@ var artifactsCmd = &cobra.Command{
 	},
 }
 
+var artifactsAllCmd = &cobra.Command{
+	Use:   "artifacts-all",
+	Short: "Download all the artifacts available in the catalog (Used for testing purposes)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("Downloading all artifacts...")
+
+		output := outputFlag
+		if output == "" {
+			homeDir, err := internal.GetHomeDir()
+			if err != nil {
+				return fmt.Errorf("failed to get home directory: %w", err)
+			}
+			output = homeDir
+		}
+		for _, component := range internal.Components {
+			releaseService, ok := component.(internal.ReleaseService)
+			if !ok {
+				continue
+			}
+			location, err := internal.DownloadRelease(output, releaseService.ReleaseArtifact())
+			if err != nil {
+				return fmt.Errorf("failed to download release: %w", err)
+			}
+
+			// make sure the artifact is valid to be executed on this platform
+			log.Printf("Downloaded %s to %s\n", releaseService.ReleaseArtifact().Name, location)
+			if err := isExecutableValid(location); err != nil {
+				return fmt.Errorf("failed to check if artifact is valid: %w", err)
+			}
+		}
+		return nil
+	},
+}
+
 var recipes = []internal.Recipe{
 	&internal.L1Recipe{},
 	&internal.OpRecipe{},
@@ -110,9 +145,11 @@ func main() {
 
 	// reuse the same output flag for the artifacts command
 	artifactsCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+	artifactsAllCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
 
 	rootCmd.AddCommand(cookCmd)
 	rootCmd.AddCommand(artifactsCmd)
+	rootCmd.AddCommand(artifactsAllCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -187,9 +224,14 @@ func runIt(recipe internal.Recipe) error {
 		}
 	}
 
-	if err := internal.WaitForReady(ctx, svcManager); err != nil {
+	if err := dockerRunner.WaitForReady(ctx, 20*time.Second); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
+	}
+
+	if err := svcManager.CompleteReady(); err != nil {
+		dockerRunner.Stop()
+		return fmt.Errorf("failed to complete ready: %w", err)
 	}
 
 	// get the output from the recipe
@@ -229,5 +271,28 @@ func runIt(recipe internal.Recipe) error {
 	if err := dockerRunner.Stop(); err != nil {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
+	return nil
+}
+
+func isExecutableValid(path string) error {
+	// First check if file exists
+	_, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("file does not exist or is inaccessible: %w", err)
+	}
+
+	// Try to execute with a harmless flag or in a way that won't run the main program
+	cmd := exec.Command(path, "--version")
+	// Redirect output to /dev/null
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("cannot start executable: %w", err)
+	}
+
+	// Immediately kill the process since we just want to test if it starts
+	cmd.Process.Kill()
+
 	return nil
 }

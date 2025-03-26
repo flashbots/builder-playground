@@ -81,37 +81,15 @@ type Service interface {
 }
 
 type ServiceReady interface {
-	Ready(out io.Writer, service *service, ctx context.Context) error
+	Ready(ouservice *service) error
 }
 
-func WaitForReady(ctx context.Context, manifest *Manifest) error {
-	var wg sync.WaitGroup
-	readyErr := make(chan error, len(manifest.Services()))
-
-	output, err := manifest.out.LogOutput("ready")
-	if err != nil {
-		return fmt.Errorf("failed to create log output: %w", err)
-	}
-
-	for _, s := range manifest.Services() {
+func (m *Manifest) CompleteReady() error {
+	for _, s := range m.services {
 		if readyFn, ok := s.component.(ServiceReady); ok {
-			wg.Add(1)
-
-			go func() {
-				defer wg.Done()
-
-				if err := readyFn.Ready(output, s, ctx); err != nil {
-					readyErr <- fmt.Errorf("service %s failed to start: %w", s.Name, err)
-				}
-			}()
-		}
-	}
-	wg.Wait()
-
-	close(readyErr)
-	for err := range readyErr {
-		if err != nil {
-			return err
+			if err := readyFn.Ready(s); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -192,6 +170,7 @@ func (s *Manifest) GetService(name string) (*service, bool) {
 // - downloads any local release artifacts for the services that require host execution
 func (s *Manifest) Validate() error {
 	for _, ss := range s.services {
+		// validate node port references
 		for _, nodeRef := range ss.nodeRefs {
 			targetService, ok := s.GetService(nodeRef.Service)
 			if !ok {
@@ -200,6 +179,21 @@ func (s *Manifest) Validate() error {
 
 			if _, ok := targetService.GetPort(nodeRef.PortLabel); !ok {
 				return fmt.Errorf("service %s depends on service %s, but it does not expose port %s", ss.Name, nodeRef.Service, nodeRef.PortLabel)
+			}
+		}
+
+		// validate depends_on statements
+		for _, dep := range ss.dependsOn {
+			service, ok := s.GetService(dep.Name)
+			if !ok {
+				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.Name, dep.Name)
+			}
+
+			if dep.Condition == DependsOnConditionHealthy {
+				// if we depedn on the service to be healthy, it must have a ready check
+				if service.readyCheck == nil {
+					return fmt.Errorf("service %s depends on service %s, but it does not have a ready check", ss.Name, dep.Name)
+				}
 			}
 		}
 	}
@@ -257,24 +251,6 @@ func (s *serviceLogs) readLogs() (string, error) {
 	return string(content), nil
 }
 
-func (s *serviceLogs) WaitForLog(pattern string, timeout time.Duration) error {
-	timer := time.After(timeout)
-	for {
-		select {
-		case <-timer:
-			return fmt.Errorf("timeout waiting for log pattern %s", pattern)
-		case <-time.After(500 * time.Millisecond):
-			logs, err := s.readLogs()
-			if err != nil {
-				return fmt.Errorf("failed to read logs: %w", err)
-			}
-			if strings.Contains(logs, pattern) {
-				return nil
-			}
-		}
-	}
-}
-
 func (s *serviceLogs) FindLog(pattern string) (string, error) {
 	logs, err := s.readLogs()
 	if err != nil {
@@ -296,6 +272,13 @@ type service struct {
 
 	labels map[string]string
 
+	// list of environment variables to set for the service
+	env map[string]string
+
+	readyCheck *ReadyCheck
+
+	dependsOn []DependsOn
+
 	ports    []*Port
 	nodeRefs []*NodeRef
 
@@ -305,6 +288,18 @@ type service struct {
 
 	logs      *serviceLogs
 	component Service
+}
+
+type DependsOnCondition string
+
+const (
+	DependsOnConditionRunning DependsOnCondition = "service_started"
+	DependsOnConditionHealthy DependsOnCondition = "service_healthy"
+)
+
+type DependsOn struct {
+	Name      string
+	Condition DependsOnCondition
 }
 
 func (s *service) Ports() []*Port {
@@ -330,6 +325,14 @@ func (s *service) GetPort(name string) (*Port, bool) {
 
 func (s *service) UseHostExecution() *service {
 	s.WithLabel(useHostExecutionLabel, "true")
+	return s
+}
+
+func (s *service) WithEnv(key, value string) *service {
+	if s.env == nil {
+		s.env = make(map[string]string)
+	}
+	s.env[key] = value
 	return s
 }
 
@@ -388,6 +391,30 @@ func (s *service) WithArgs(args ...string) *service {
 		}
 	}
 	s.args = append(s.args, args...)
+	return s
+}
+
+func (s *service) WithReady(check ReadyCheck) *service {
+	s.readyCheck = &check
+	return s
+}
+
+type ReadyCheck struct {
+	QueryURL    string
+	Test        []string
+	Interval    time.Duration
+	StartPeriod time.Duration
+	Timeout     time.Duration
+	Retries     int
+}
+
+func (s *service) DependsOnHealthy(name string) *service {
+	s.dependsOn = append(s.dependsOn, DependsOn{Name: name, Condition: DependsOnConditionHealthy})
+	return s
+}
+
+func (s *service) DependsOnRunning(name string) *service {
+	s.dependsOn = append(s.dependsOn, DependsOn{Name: name, Condition: DependsOnConditionRunning})
 	return s
 }
 
@@ -479,6 +506,18 @@ func (s *Manifest) GenerateDotGraph() string {
 				sourceNode,
 				targetNode,
 				ref.PortLabel,
+			))
+		}
+	}
+
+	// Add edges for dependws_on
+	for _, ss := range s.services {
+		for _, dep := range ss.dependsOn {
+			sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
+			targetNode := strings.ReplaceAll(dep.Name, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -> %s [style=dashed, color=gray, constraint=true, label=\"depends_on\"];\n",
+				sourceNode,
+				targetNode,
 			))
 		}
 	}
