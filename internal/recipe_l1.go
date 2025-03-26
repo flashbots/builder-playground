@@ -43,11 +43,6 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 }
 
 func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
-	// Validate incompatible flag combinations
-	if l.useNativeReth && l.secondaryELPort != 0 {
-		panic("cannot use --use-native-reth and --secondary-el together for L1 recipe")
-	}
-	
 	builder := NewArtifactsBuilder()
 	builder.ApplyLatestL1Fork(l.latestFork)
 
@@ -67,8 +62,17 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		// we are going to use the cl-proxy service to connect the beacon node to two builders
 		// one the 'el' builder and another one the remote one
 		elService = "cl-proxy"
+		
+		// Determine the primary builder endpoint based on whether we're using native Reth
+		primaryBuilder := "el"
+		if l.useNativeReth {
+			// When using native Reth, we need to connect to the host machine
+			// instead of the Docker service name "el"
+			primaryBuilder = "host.docker.internal:8545"
+		}
+		
 		svcManager.AddService("cl-proxy", &ClProxy{
-			PrimaryBuilder:   "el",
+			PrimaryBuilder:   primaryBuilder,
 			SecondaryBuilder: fmt.Sprintf("http://localhost:%d", l.secondaryELPort),
 		})
 	} else {
