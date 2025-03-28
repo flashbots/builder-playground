@@ -333,7 +333,7 @@ func (d *LocalRunner) getService(name string) *service {
 
 // applyTemplate resolves the templates from the manifest (Dir, Port, Connect) into
 // the actual values for this specific docker execution.
-func (d *LocalRunner) applyTemplate(s *service) ([]string, error) {
+func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, error) {
 	var input map[string]interface{}
 
 	// For {{.Dir}}:
@@ -350,7 +350,12 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, error) {
 	}
 
 	funcs := template.FuncMap{
-		"Service": func(name string, portLabel string) string {
+		"Service": func(name string, portLabel, protocol string) string {
+			protocolPrefix := ""
+			if protocol == "http" {
+				protocolPrefix = "http://"
+			}
+
 			// For {{Service "name" "portLabel"}}:
 			// - Service runs on host:
 			//   A: target is inside docker: access with localhost:hostPort
@@ -365,14 +370,14 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, error) {
 
 			if d.isHostService(s.Name) {
 				// A and B
-				return fmt.Sprintf("http://localhost:%d", port.HostPort)
+				return fmt.Sprintf("%slocalhost:%d", protocolPrefix, port.HostPort)
 			} else {
 				if d.isHostService(svc.Name) {
 					// D
-					return fmt.Sprintf("http://host.docker.internal:%d", port.HostPort)
+					return fmt.Sprintf("%shost.docker.internal:%d", protocolPrefix, port.HostPort)
 				}
 				// C
-				return fmt.Sprintf("http://%s:%d", svc.Name, port.Port)
+				return fmt.Sprintf("%s%s:%d", protocolPrefix, svc.Name, port.Port)
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
@@ -386,28 +391,48 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, error) {
 		},
 	}
 
-	var argsResult []string
-	for _, arg := range s.args {
+	runTemplate := func(arg string) (string, error) {
 		tpl, err := template.New("").Funcs(funcs).Parse(arg)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 
 		var out strings.Builder
 		if err := tpl.Execute(&out, input); err != nil {
-			return nil, err
+			return "", err
 		}
-		argsResult = append(argsResult, out.String())
+
+		return out.String(), nil
 	}
 
-	return argsResult, nil
+	// apply the templates to the arguments
+	var argsResult []string
+	for _, arg := range s.args {
+		newArg, err := runTemplate(arg)
+		if err != nil {
+			return nil, nil, err
+		}
+		argsResult = append(argsResult, newArg)
+	}
+
+	// apply the templates to the environment variables
+	envs := map[string]string{}
+	for k, v := range s.env {
+		newV, err := runTemplate(v)
+		if err != nil {
+			return nil, nil, err
+		}
+		envs[k] = newV
+	}
+
+	return argsResult, envs, nil
 }
 
 func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}, error) {
 	// apply the template again on the arguments to figure out the connections
 	// at this point all of them are valid, we just have to resolve them again. We assume for now
 	// everyone is going to be on docker at the same network.
-	args, err := d.applyTemplate(s)
+	args, envs, err := d.applyTemplate(s)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply template, err: %w", err)
 	}
@@ -433,8 +458,8 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		"labels": map[string]string{"playground": "true"},
 	}
 
-	if len(s.env) > 0 {
-		service["environment"] = s.env
+	if len(envs) > 0 {
+		service["environment"] = envs
 	}
 
 	if s.readyCheck != nil {
@@ -544,7 +569,8 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 
 // runOnHost runs the service on the host machine
 func (d *LocalRunner) runOnHost(ss *service) error {
-	args, err := d.applyTemplate(ss)
+	// TODO: Use env vars in host processes
+	args, _, err := d.applyTemplate(ss)
 	if err != nil {
 		return fmt.Errorf("failed to apply template, err: %w", err)
 	}

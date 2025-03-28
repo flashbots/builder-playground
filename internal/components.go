@@ -429,6 +429,70 @@ func (m *MevBoostRelay) Watchdog(out io.Writer, service *service, ctx context.Co
 	return watchGroup.wait()
 }
 
+type BuilderHubPostgres struct {
+}
+
+func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
+	service.
+		WithImage("docker.io/flashbots/builder-hub-db").
+		WithTag("latest").
+		WithPort("postgres", 5432).
+		WithEnv("POSTGRES_USER", "postgres").
+		WithEnv("POSTGRES_PASSWORD", "postgres").
+		WithEnv("POSTGRES_DB", "postgres").
+		WithReady(ReadyCheck{
+			Test:        []string{"CMD-SHELL", "pg_isready -U postgres -d postgres"},
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
+}
+
+func (b *BuilderHubPostgres) Name() string {
+	return "builder-hub-postgres"
+}
+
+type BuilderHub struct {
+	postgres string
+}
+
+func (b *BuilderHub) Run(service *service, ctx *ExContext) {
+	service.
+		WithImage("docker.io/flashbots/builder-hub").
+		WithTag("latest").
+		WithEntrypoint("/app/builder-hub").
+		WithEnv("POSTGRES_DSN", "postgres://postgres:postgres@"+ConnectRaw(b.postgres, "postgres", "")+"/postgres?sslmode=disable").
+		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
+		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
+		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
+		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
+		DependsOnHealthy(b.postgres)
+}
+
+func (b *BuilderHub) Name() string {
+	return "builder-hub"
+}
+
+type BuilderHubMockProxy struct {
+	TargetService string
+}
+
+func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
+	service.
+		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
+		WithTag("latest").
+		WithPort("http", 8888)
+
+	if b.TargetService != "" {
+		service.DependsOnHealthy(b.TargetService)
+	}
+}
+
+func (b *BuilderHubMockProxy) Name() string {
+	return "builder-hub-mock-proxy"
+}
+
 type OpReth struct {
 }
 

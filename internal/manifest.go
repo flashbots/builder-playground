@@ -332,6 +332,7 @@ func (s *service) WithEnv(key, value string) *service {
 	if s.env == nil {
 		s.env = make(map[string]string)
 	}
+	s.applyTemplate(value)
 	s.env[key] = value
 	return s
 }
@@ -378,17 +379,21 @@ func (s *service) WithPort(name string, portNumber int) *service {
 	return s
 }
 
+func (s *service) applyTemplate(arg string) {
+	var port []Port
+	var nodeRef []NodeRef
+	_, port, nodeRef = applyTemplate(arg)
+	for _, p := range port {
+		s.WithPort(p.Name, p.Port)
+	}
+	for _, n := range nodeRef {
+		s.nodeRefs = append(s.nodeRefs, &n)
+	}
+}
+
 func (s *service) WithArgs(args ...string) *service {
-	for i, arg := range args {
-		var port []Port
-		var nodeRef []NodeRef
-		args[i], port, nodeRef = applyTemplate(arg)
-		for _, p := range port {
-			s.WithPort(p.Name, p.Port)
-		}
-		for _, n := range nodeRef {
-			s.nodeRefs = append(s.nodeRefs, &n)
-		}
+	for _, arg := range args {
+		s.applyTemplate(arg)
 	}
 	s.args = append(s.args, args...)
 	return s
@@ -419,6 +424,8 @@ func (s *service) DependsOnRunning(name string) *service {
 }
 
 func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
+	// TODO: Can we remove the return argument string?
+
 	// use template substitution to load constants
 	// pass-through the Dir template because it has to be resolved at the runtime
 	input := map[string]interface{}{
@@ -430,7 +437,7 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 	// ther can be multiple port and nodere because in the case of op-geth we pass a whole string as nested command args
 
 	funcs := template.FuncMap{
-		"Service": func(name string, portLabel string) string {
+		"Service": func(name string, portLabel, protocol string) string {
 			if name == "" {
 				panic("BUG: service name cannot be empty")
 			}
