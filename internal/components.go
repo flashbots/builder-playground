@@ -156,7 +156,7 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 				"--ws.api debug,eth,txpool,net,engine,miner "+
 				"--syncmode full "+
 				"--nodiscover "+
-				"--maxpeers 0 "+
+				"--maxpeers 5 "+
 				"--rpc.allow-unprotected-txs "+
 				"--authrpc.addr 0.0.0.0 "+
 				"--authrpc.port "+`{{Port "authrpc" 8551}} `+
