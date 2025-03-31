@@ -341,8 +341,12 @@ func getPrivKey(privStr string) (*ecdsa.PrivateKey, error) {
 	return priv, nil
 }
 
+func ConnectRaw(service, port, protocol string) string {
+	return fmt.Sprintf(`{{Service "%s" "%s" "%s"}}`, service, port, protocol)
+}
+
 func Connect(service, port string) string {
-	return fmt.Sprintf(`{{Service "%s" "%s"}}`, service, port)
+	return ConnectRaw(service, port, "http")
 }
 
 type output struct {

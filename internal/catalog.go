@@ -17,6 +17,9 @@ func init() {
 	register(&MevBoostRelay{})
 	register(&RollupBoost{})
 	register(&OpReth{})
+	register(&BuilderHub{})
+	register(&BuilderHubPostgres{})
+	register(&BuilderHubMockProxy{})
 }
 
 func FindComponent(name string) Service {

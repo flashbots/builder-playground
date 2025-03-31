@@ -116,6 +116,7 @@ var artifactsAllCmd = &cobra.Command{
 var recipes = []internal.Recipe{
 	&internal.L1Recipe{},
 	&internal.OpRecipe{},
+	&internal.BuilderNetRecipe{},
 }
 
 func main() {
