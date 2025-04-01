@@ -17,13 +17,13 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	_ "embed"
 
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/hashicorp/go-uuid"
@@ -36,6 +36,7 @@ import (
 )
 
 var (
+	opBlockTimeSeconds      = uint64(2)
 	defaultDiscoveryPrivKey = "a11ac89899cd86e36b6fb881ec1255b8a92a688790b7d950f8b7d8dd626671fb"
 	defaultDiscoveryEnodeID = "3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f"
 )
@@ -64,6 +65,7 @@ type ArtifactsBuilder struct {
 	outputDir         string
 	applyLatestL1Fork bool
 	genesisDelay      uint64
+	applyLatestL2Fork *uint64
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -81,6 +83,11 @@ func (b *ArtifactsBuilder) OutputDir(outputDir string) *ArtifactsBuilder {
 
 func (b *ArtifactsBuilder) ApplyLatestL1Fork(applyLatestL1Fork bool) *ArtifactsBuilder {
 	b.applyLatestL1Fork = applyLatestL1Fork
+	return b
+}
+
+func (b *ArtifactsBuilder) ApplyLatestL2Fork(applyLatestL2Fork *uint64) *ArtifactsBuilder {
+	b.applyLatestL2Fork = applyLatestL2Fork
 	return b
 }
 
@@ -240,26 +247,50 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	}
 
 	{
+		// We have to start slightly ahead of L1 genesis time
 		opTimestamp := genesisTime + 2
 
+		// If the latest fork is applied, convert the time to a fork time.
+		// If the time is 0, apply on genesis, the fork time is zero.
+		// if the time b is > 0, apply b * opBlockTimeSeconds to the genesis time.
+		var forkTime *uint64
+		if b.applyLatestL2Fork != nil {
+			forkTime = new(uint64)
+
+			if *b.applyLatestL2Fork != 0 {
+				*forkTime = opTimestamp + opBlockTimeSeconds*(*b.applyLatestL2Fork)
+			} else {
+				*forkTime = 0
+			}
+		}
+
 		// override l2 genesis, make the timestamp start 2 seconds after the L1 genesis
-		newOpGenesis, err := overrideJSON(opGenesis, map[string]interface{}{
+		input := map[string]interface{}{
 			"timestamp": hexutil.Uint64(opTimestamp).String(),
-		})
+		}
+		if forkTime != nil {
+			// We need to enable prague on the EL to enable the engine v4 calls
+			input["config"] = map[string]interface{}{
+				"pragueTime":  *forkTime,
+				"isthmusTime": *forkTime,
+			}
+		}
+
+		newOpGenesis, err := overrideJSON(opGenesis, input)
 		if err != nil {
 			return nil, err
 		}
 
 		// the hash of the genesis has changed beause of the timestamp so we need to account for that
-		var opGenesisObj core.Genesis
-		if err := json.Unmarshal(newOpGenesis, &opGenesisObj); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal opGenesis: %w", err)
+		opGenesisBlock, err := toOpBlock(newOpGenesis)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert opGenesis to block: %w", err)
 		}
 
-		opGenesisHash := opGenesisObj.ToBlock().Hash()
+		opGenesisHash := opGenesisBlock.Hash()
 
 		// override rollup.json with the real values for the L1 chain and the correct timestamp
-		newOpRollup, err := overrideJSON(opRollupConfig, map[string]interface{}{
+		rollupInput := map[string]interface{}{
 			"genesis": map[string]interface{}{
 				"l2_time": opTimestamp, // this one not in hex
 				"l1": map[string]interface{}{
@@ -276,7 +307,12 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 				"eip1559Denominator":       50,
 				"eip1559DenominatorCanyon": 250,
 			},
-		})
+		}
+		if forkTime != nil {
+			rollupInput["isthmus_time"] = *forkTime
+		}
+
+		newOpRollup, err := overrideJSON(opRollupConfig, rollupInput)
 		if err != nil {
 			return nil, err
 		}
@@ -290,6 +326,11 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	}
 
 	return &Artifacts{Out: out}, nil
+}
+
+type OpGenesisTmplInput struct {
+	Timestamp  uint64
+	LatestFork *uint64
 }
 
 func overrideJSON(jsonData []byte, overrides map[string]interface{}) ([]byte, error) {
@@ -604,4 +645,18 @@ var prefundedAccounts = []string{
 	"0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
 	"0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
 	"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+}
+
+func applyTemplate2(templateStr []byte, input interface{}) ([]byte, error) {
+	tpl, err := template.New("").Parse(string(templateStr))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var out strings.Builder
+	if err := tpl.Execute(&out, input); err != nil {
+		return nil, fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return []byte(out.String()), nil
 }

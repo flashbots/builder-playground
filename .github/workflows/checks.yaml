@@ -18,6 +18,7 @@ jobs:
           - "l1 --use-native-reth"
           - "opstack"
           - "opstack --external-builder http://host.docker.internal:4444"
+          - "opstack --enable-latest-fork=10"
     steps:
       - name: Check out code
         uses: actions/checkout@v2
