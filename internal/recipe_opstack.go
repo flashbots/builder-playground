@@ -11,6 +11,9 @@ type OpRecipe struct {
 	// externalBuilder is the URL of the external builder to use. If enabled, the recipe deploys
 	// rollup-boost on the sequencer and uses this URL as the external builder.
 	externalBuilder string
+
+	// whether to enable the latest fork isthmus and when
+	enableLatestFork *uint64
 }
 
 func (o *OpRecipe) Name() string {
@@ -24,11 +27,13 @@ func (o *OpRecipe) Description() string {
 func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("opstack", flag.ContinueOnError)
 	flags.StringVar(&o.externalBuilder, "external-builder", "", "External builder URL")
+	flags.Var(&nullableUint64Value{&o.enableLatestFork}, "enable-latest-fork", "Enable latest fork isthmus (nil or empty = disabled, otherwise enabled at specified block)")
 	return flags
 }
 
 func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
+	builder.ApplyLatestL2Fork(o.enableLatestFork)
 	return builder
 }
 
