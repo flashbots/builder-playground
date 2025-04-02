@@ -41,7 +41,7 @@ type OpBatcher struct {
 func (o *OpBatcher) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
-		WithTag("v1.11.1").
+		WithTag("v1.12.0-rc.1").
 		WithEntrypoint("op-batcher").
 		WithArgs(
 			"--l1-eth-rpc", Connect(o.L1Node, "http"),
@@ -68,7 +68,7 @@ type OpNode struct {
 func (o *OpNode) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
-		WithTag("v1.11.0").
+		WithTag("v1.13.0-rc.1").
 		WithEntrypoint("op-node").
 		WithEnv("A", "B"). // this is just a placeholder to make sure env works since we e2e test with the recipes
 		WithArgs(
@@ -135,7 +135,7 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
-		WithTag("v1.101500.0").
+		WithTag("v1.101503.2-rc.5").
 		WithEntrypoint("/bin/sh").
 		WithArgs(
 			"-c",
