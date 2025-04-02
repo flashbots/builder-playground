@@ -116,6 +116,7 @@ func RunWatchdog(manifest *Manifest) error {
 		}
 	}
 
+	// If any of the watchdogs fail, we return the error
 	if err := <-watchdogErr; err != nil {
 		return fmt.Errorf("failed to run watchdog: %w", err)
 	}
