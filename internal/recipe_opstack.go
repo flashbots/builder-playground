@@ -47,13 +47,21 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		BeaconNode: "beacon",
 	})
 
+	externalBuilderRef := o.externalBuilder
+	if o.externalBuilder == "op-reth" {
+		// Add a new op-reth service and connect it to Rollup-boost
+		svcManager.AddService("op-reth", &OpReth{})
+
+		externalBuilderRef = Connect("op-reth", "authrpc")
+	}
+
 	elNode := "op-geth"
 	if o.externalBuilder != "" {
 		elNode = "rollup-boost"
 
 		svcManager.AddService("rollup-boost", &RollupBoost{
 			ELNode:  "op-geth",
-			Builder: o.externalBuilder,
+			Builder: externalBuilderRef,
 		})
 	}
 	svcManager.AddService("op-node", &OpNode{
