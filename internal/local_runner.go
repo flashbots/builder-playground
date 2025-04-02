@@ -80,8 +80,16 @@ type taskUI struct {
 	style    lipgloss.Style
 }
 
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*LocalRunner, error) {
+func newDockerClient() (*client.Client, error) {
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
+	}
+	return client, nil
+}
+
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*LocalRunner, error) {
+	client, err := newDockerClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
@@ -494,6 +502,21 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		return nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
 	}
 
+	labels := map[string]string{
+		// It is important to use the playground label to identify the containers
+		// during the cleanup process
+		"playground": "true",
+		"service":    s.Name,
+	}
+
+	// add the local ports exposed by the service as labels
+	// we have to do this for now since we do not store the manifest in JSON yet.
+	// Otherwise, we could use that directly
+	for _, port := range s.ports {
+		labels[fmt.Sprintf("port.%s", port.Name)] = fmt.Sprintf("%d", port.Port)
+	}
+
+	// add the ports to the labels as well
 	service := map[string]interface{}{
 		"image":   imageName,
 		"command": args,
@@ -503,9 +526,7 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		},
 		// Add the ethereum network
 		"networks": []string{networkName},
-		// It is important to use the playground label to identify the containers
-		// during the cleanup process
-		"labels": map[string]string{"playground": "true"},
+		"labels":   labels,
 	}
 
 	if len(envs) > 0 {
