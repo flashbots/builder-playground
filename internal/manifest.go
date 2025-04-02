@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
 	"text/template"
 	"time"
 
@@ -100,7 +99,6 @@ type ServiceWatchdog interface {
 }
 
 func RunWatchdog(manifest *Manifest) error {
-	var wg sync.WaitGroup
 	watchdogErr := make(chan error, len(manifest.Services()))
 
 	output, err := manifest.out.LogOutput("watchdog")
@@ -110,23 +108,17 @@ func RunWatchdog(manifest *Manifest) error {
 
 	for _, s := range manifest.Services() {
 		if watchdogFn, ok := s.component.(ServiceWatchdog); ok {
-			wg.Add(1)
-
 			go func() {
-				defer wg.Done()
 				if err := watchdogFn.Watchdog(output, s, context.Background()); err != nil {
 					watchdogErr <- fmt.Errorf("service %s watchdog failed: %w", s.Name, err)
 				}
 			}()
 		}
 	}
-	wg.Wait()
 
-	close(watchdogErr)
-	for err := range watchdogErr {
-		if err != nil {
-			return err
-		}
+	// If any of the watchdogs fail, we return the error
+	if err := <-watchdogErr; err != nil {
+		return fmt.Errorf("failed to run watchdog: %w", err)
 	}
 	return nil
 }
