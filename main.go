@@ -113,6 +113,33 @@ var artifactsAllCmd = &cobra.Command{
 	},
 }
 
+var inspectCmd = &cobra.Command{
+	Use:   "inspect",
+	Short: "Inspect a connection between two services",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// two arguments, the name of the service and the name of the connection
+		if len(args) != 2 {
+			return fmt.Errorf("please specify a service name and a connection name")
+		}
+		serviceName := args[0]
+		connectionName := args[1]
+
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			<-sig
+			cancel()
+		}()
+
+		if err := internal.Inspect(ctx, serviceName, connectionName); err != nil {
+			return fmt.Errorf("failed to inspect connection: %w", err)
+		}
+		return nil
+	},
+}
+
 var recipes = []internal.Recipe{
 	&internal.L1Recipe{},
 	&internal.OpRecipe{},
@@ -151,6 +178,7 @@ func main() {
 	rootCmd.AddCommand(cookCmd)
 	rootCmd.AddCommand(artifactsCmd)
 	rootCmd.AddCommand(artifactsAllCmd)
+	rootCmd.AddCommand(inspectCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
