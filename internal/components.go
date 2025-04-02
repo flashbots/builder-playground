@@ -195,8 +195,8 @@ func (o *OpGeth) Ready(service *service) error {
 var _ ServiceWatchdog = &OpGeth{}
 
 func (o *OpGeth) Watchdog(out io.Writer, service *service, ctx context.Context) error {
-	rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-	return watchChainHead(out, rethURL, 2*time.Second)
+	gethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+	return watchChainHead(out, gethURL, 2*time.Second)
 }
 
 type RethEL struct {
@@ -497,7 +497,22 @@ type OpReth struct {
 }
 
 func (o *OpReth) Run(service *service, ctx *ExContext) {
-	panic("BUG: op-reth is not implemented yet")
+	service.WithImage("ghcr.io/paradigmxyz/op-reth").
+		WithTag("nightly").
+		WithEntrypoint("op-reth").
+		WithArgs(
+			"node",
+			"--authrpc.port", `{{Port "authrpc" 8551}}`,
+			"--authrpc.addr", "0.0.0.0",
+			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"--http",
+			"--http.addr", "0.0.0.0",
+			"--http.port", `{{Port "http" 8545}}`,
+			"--chain", "{{.Dir}}/l2-genesis.json",
+			"--datadir", "{{.Dir}}/data_op_reth",
+			"--disable-discovery",
+			"--color", "never",
+			"--port", `{{Port "rpc" 30303}}`)
 }
 
 func (o *OpReth) Name() string {
@@ -521,4 +536,11 @@ func (o *OpReth) ReleaseArtifact() *release {
 			return ""
 		},
 	}
+}
+
+var _ ServiceWatchdog = &OpReth{}
+
+func (p *OpReth) Watchdog(out io.Writer, service *service, ctx context.Context) error {
+	rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+	return watchChainHead(out, rethURL, 2*time.Second)
 }

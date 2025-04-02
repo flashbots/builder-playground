@@ -45,3 +45,11 @@ The command above starts op-reth as an external block builder with the following
 - `--trusted-peers`: Connects to our Op Stack's EL node using the deterministic enode address
 
 Once op-reth is running, it will connect to the Op Stack and begin participating in block building. You can verify it's working by checking the logs of both the sequencer and op-reth for successful block proposals.
+
+## Internal block builder
+
+To use an internal `op-reth` as a block builder, run:
+
+```
+$ go run main.go cook opstack --external-builder op-reth
+```
