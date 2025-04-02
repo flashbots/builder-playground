@@ -68,6 +68,23 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 
 To stop the playground, press `Ctrl+C`.
 
+## Inspect
+
+Builder-playground supports inspecting the connection of a service to a specific port.
+
+```bash
+$ builder-playground inspect <service> <port>
+```
+
+Example:
+
+```bash
+$ builder-playground cook opstack
+$ builder-playground inspect op-geth authrpc
+```
+
+This command starts a `tcpflow` container in the same network interface as the service and captures the traffic to the specified port.
+
 ## Internals
 
 ### Execution Flow
