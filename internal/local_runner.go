@@ -94,6 +94,29 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		overrides[k] = v
 	}
 
+	// Now, the override can either be one of two things (we are overloading the override map):
+	// - docker image: In that case, change the manifest and remove from override map
+	// - a path to an executable: In that case, we need to run it on the host machine
+	// and use the override map <- We only check this case, and if it is not a path, we assume
+	// it is a docker image. If it is not a docker image either, the error will be catched during the execution
+	for k, v := range overrides {
+		if _, err := os.Stat(v); err != nil {
+			// this is a path to an executable, remove it from the overrides since we
+			// assume it s a docker image and add it to manifest
+			parts := strings.Split(v, ":")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid override docker image %s, expected image:tag", v)
+			}
+
+			srv := manifest.MustGetService(k)
+			srv.image = parts[0]
+			srv.tag = parts[1]
+
+			delete(overrides, k)
+			continue
+		}
+	}
+
 	tasks := map[string]*task{}
 	for _, svc := range manifest.services {
 		tasks[svc.Name] = &task{
@@ -428,6 +451,27 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 	return argsResult, envs, nil
 }
 
+func (d *LocalRunner) validateImageExists(image string) error {
+	// check locally
+	_, err := d.client.ImageInspect(context.Background(), image)
+	if err == nil {
+		return nil
+	}
+	if !client.IsErrNotFound(err) {
+		return err
+	}
+
+	// check remotely
+	if _, err = d.client.DistributionInspect(context.Background(), image, ""); err == nil {
+		return nil
+	}
+	if !client.IsErrNotFound(err) {
+		return err
+	}
+
+	return fmt.Errorf("image %s not found: %w", image)
+}
+
 func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}, error) {
 	// apply the template again on the arguments to figure out the connections
 	// at this point all of them are valid, we just have to resolve them again. We assume for now
@@ -444,8 +488,14 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		return nil, fmt.Errorf("failed to get absolute path for output folder: %w", err)
 	}
 
+	// Validate that the image exists
+	imageName := fmt.Sprintf("%s:%s", s.image, s.tag)
+	if err := d.validateImageExists(imageName); err != nil {
+		return nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
+	}
+
 	service := map[string]interface{}{
-		"image":   fmt.Sprintf("%s:%s", s.image, s.tag),
+		"image":   imageName,
 		"command": args,
 		// Add volume mount for the output directory
 		"volumes": []string{

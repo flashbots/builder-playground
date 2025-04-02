@@ -166,6 +166,16 @@ func runIt(recipe internal.Recipe) error {
 
 	log.Printf("Log level: %s\n", logLevel)
 
+	// parse the overrides
+	overrides := map[string]string{}
+	for _, val := range withOverrides {
+		parts := strings.SplitN(val, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid override format: %s, expected service=val", val)
+		}
+		overrides[parts[0]] = parts[1]
+	}
+
 	builder := recipe.Artifacts()
 	builder.OutputDir(outputFlag)
 	builder.GenesisDelay(genesisDelayFlag)
@@ -189,7 +199,14 @@ func runIt(recipe internal.Recipe) error {
 		return nil
 	}
 
-	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, nil, interactive)
+	// validate that override is being applied to a service in the manifest
+	for k := range overrides {
+		if _, ok := svcManager.GetService(k); !ok {
+			return fmt.Errorf("service '%s' in override not found in manifest", k)
+		}
+	}
+
+	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, overrides, interactive)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
