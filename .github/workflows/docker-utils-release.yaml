@@ -10,8 +10,10 @@ on:
     paths:
       - 'cl-proxy/**'
       - 'mev-boost-relay/**'
+      - 'internal/**'
       - 'go.mod'
       - 'go.sum'
+      - 'main.go'
       - 'Dockerfile'
 
 jobs:
