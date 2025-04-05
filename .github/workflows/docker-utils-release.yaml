@@ -7,6 +7,12 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'cl-proxy/**'
+      - 'mev-boost-relay/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
 
 jobs:
   docker:
