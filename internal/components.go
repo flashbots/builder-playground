@@ -255,6 +255,7 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--addr", "127.0.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
 			"--bootnodes", "enode://"+defaultDiscoveryEnodeID+"@bootnode:30301",
+			// "--disable-discovery",
 			// http config
 			"--http",
 			"--http.addr", "0.0.0.0",
