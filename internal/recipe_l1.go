@@ -52,10 +52,18 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	svcManager := NewManifest(ctx, artifacts.Out)
 
-	svcManager.AddService("el", &RethEL{
+	// Add bootnode service first
+	bootnode := &Bootnode{
+		DiscoveryPort: 30301,
+	}
+	svcManager.AddService("bootnode", bootnode)
+
+	el := &RethEL{
 		UseRethForValidation: l.useRethForValidation,
 		UseNativeReth:        l.useNativeReth,
-	})
+	}
+	svcManager.AddService("el", el)
+	svcManager.MustGetService("el").DependsOnHealthy("bootnode")
 
 	var elService string
 	if l.secondaryELPort != 0 {
@@ -70,22 +78,34 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		elService = "el"
 	}
 
-	svcManager.AddService("beacon", &LighthouseBeaconNode{
+	// Add beacon node with dependency on bootnode
+	beacon := &LighthouseBeaconNode{
 		ExecutionNode: elService,
 		MevBoostNode:  "mev-boost",
-	})
-	svcManager.AddService("validator", &LighthouseValidator{
+	}
+	svcManager.AddService("beacon", beacon)
+	svcManager.MustGetService("beacon").DependsOnHealthy("bootnode")
+
+	// Add validator with dependency on beacon node
+	validator := &LighthouseValidator{
 		BeaconNode: "beacon",
-	})
+	}
+	svcManager.AddService("validator", validator)
+	svcManager.MustGetService("validator").DependsOnHealthy("beacon")
 
 	mevBoostValidationServer := ""
 	if l.useRethForValidation {
 		mevBoostValidationServer = "el"
 	}
-	svcManager.AddService("mev-boost", &MevBoostRelay{
+	
+	// Add mev-boost with dependency on beacon node
+	mevBoost := &MevBoostRelay{
 		BeaconClient:     "beacon",
 		ValidationServer: mevBoostValidationServer,
-	})
+	}
+	svcManager.AddService("mev-boost", mevBoost)
+	svcManager.MustGetService("mev-boost").DependsOnHealthy("beacon")
+
 	return svcManager
 }
 
