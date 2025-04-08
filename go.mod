@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/docker/docker v28.0.1+incompatible
 	github.com/ethereum/go-ethereum v1.15.3
-	github.com/flashbots/go-boost-utils v1.8.2-0.20240925223941-58709124077d
+	github.com/flashbots/go-boost-utils v1.9.0
 	github.com/flashbots/mev-boost-relay v0.30.0-rc1
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/holiman/uint256 v1.3.2
@@ -28,7 +28,7 @@ require (
 	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 // indirect
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aohorodnyk/mimeheader v0.0.6 // indirect
-	github.com/attestantio/go-builder-client v0.6.1-0.20250218155713-9f16ff484247 // indirect
+	github.com/attestantio/go-builder-client v0.6.1 // indirect
 	github.com/attestantio/go-eth2-client v0.24.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -47,7 +47,7 @@ require (
 	github.com/crate-crypto/go-kzg-4844 v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/deckarep/golang-set/v2 v2.6.0 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
