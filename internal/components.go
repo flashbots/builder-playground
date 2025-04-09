@@ -467,6 +467,7 @@ func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
 		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
 		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
+		WithEnv("MOCK_SECRETS", "true").
 		DependsOnHealthy(b.postgres)
 }
 
@@ -480,13 +481,26 @@ type BuilderHubMockProxy struct {
 
 func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
 	service.
-		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
-		WithTag("latest").
-		WithPort("http", 8888)
-
-	if b.TargetService != "" {
-		service.DependsOnHealthy(b.TargetService)
-	}
+		WithImage("nginx").
+		WithTag("1.27").
+		WithPort("http", 8888).
+		DependsOnRunning(b.TargetService).
+		WithEntrypoint("/bin/sh").
+		WithArgs("-c", fmt.Sprintf(`cat > /etc/nginx/conf.d/default.conf << 'EOF'
+server {
+  listen 80;
+  listen 8888;
+  
+  location / {
+    proxy_pass http://%s:8080;
+    proxy_set_header X-Flashbots-Attestation-Type 'test';
+    proxy_set_header X-Flashbots-Measurement '{}';
+    proxy_set_header X-Forwarded-For '1.2.3.4';
+  }
+}
+EOF
+nginx -g 'daemon off;'
+`, b.TargetService))
 }
 
 func (b *BuilderHubMockProxy) Name() string {
