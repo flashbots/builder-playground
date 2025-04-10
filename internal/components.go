@@ -165,6 +165,7 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 				"--gcmode archive "+
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
+				"--bootnodes enode://"+defaultDiscoveryEnodeID+"@bootnode:30301 "+
 				nodeKeyFlag+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
@@ -253,6 +254,7 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--ipcpath", "{{.Dir}}/reth.ipc",
 			"--addr", "127.0.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
+			"--bootnodes", "enode://"+defaultDiscoveryEnodeID+"@bootnode:30301",
 			// "--disable-discovery",
 			// http config
 			"--http",
@@ -318,6 +320,7 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
+			"--boot-nodes", "enode://"+defaultDiscoveryEnodeID+"@bootnode:30301",
 		).
 		WithReady(ReadyCheck{
 			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
@@ -543,4 +546,45 @@ var _ ServiceWatchdog = &OpReth{}
 func (p *OpReth) Watchdog(out io.Writer, service *service, ctx context.Context) error {
 	rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 	return watchChainHead(out, rethURL, 2*time.Second)
+}
+
+// Bootnode represents a P2P discovery bootnode service that helps other nodes discover each other
+// in the network. It runs a Geth bootnode instance that other Ethereum clients can connect to
+// for peer discovery.
+type Bootnode struct {
+	// DiscoveryPort is the UDP port used for P2P discovery
+	DiscoveryPort uint64
+
+	// PrivateKey is the hex-encoded private key used by the bootnode for P2P communication.
+	// If not provided, a default key will be used.
+	PrivateKey string
+}
+
+// Watchdog implements the ServiceWatchdog interface to monitor the bootnode's health.
+// It checks if the bootnode is listening for connections on its discovery port.
+var _ ServiceWatchdog = &Bootnode{}
+
+// Run configures and starts the bootnode service using the ethereum/client-go image.
+// It sets up the necessary arguments for the bootnode to run, including the private key
+// and discovery port.
+func (b *Bootnode) Run(service *service, ctx *ExContext) {
+	// Use the default discovery key if not provided
+	privateKey := b.PrivateKey
+	if privateKey == "" {
+		privateKey = defaultDiscoveryPrivKey
+	}
+
+	service.
+		WithImage("ethereum/client-go").
+		WithTag("v1.13.0").
+		WithEntrypoint("bootnode").
+		WithArgs(
+			"--nodekeyhex", privateKey,
+			"--addr", fmt.Sprintf("0.0.0.0:%d", b.DiscoveryPort),
+			"--verbosity", "3",
+		)
+}
+
+func (b *Bootnode) Name() string {
+	return "bootnode"
 }

@@ -23,6 +23,9 @@ type L1Recipe struct {
 	// will run on the host machine. This is useful if you want to bind to the Reth database and you
 	// are running a host machine (i.e Mac) that is differerent from the docker one (Linux)
 	useNativeReth bool
+
+	// bootnodePrivKey is the private key used by the bootnode for P2P discovery
+	bootnodePrivKey string
 }
 
 func (l *L1Recipe) Name() string {
@@ -39,6 +42,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
 	flags.Uint64Var(&l.secondaryELPort, "secondary-el", 0, "port to use for the secondary builder")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
+	flags.StringVar(&l.bootnodePrivKey, "bootnode-privkey", "", "private key for the bootnode (optional)")
 	return flags
 }
 
@@ -49,18 +53,33 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
+func (m *Manifest) AddServiceWithDeps(name string, service Service, deps ...string) {
+	m.AddService(name, service)
+	for _, dep := range deps {
+		m.MustGetService(name).DependsOnHealthy(dep)
+	}
+}
+
 func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	svcManager := NewManifest(ctx, artifacts.Out)
 
-	svcManager.AddService("el", &RethEL{
+	// Register bootnode without dependency
+	bootnode := &Bootnode{
+		DiscoveryPort: 30301,
+		PrivateKey:    l.bootnodePrivKey,
+	}
+	svcManager.AddService("bootnode", bootnode)
+
+	// Register 'el' service with dependency on bootnode
+	el := &RethEL{
 		UseRethForValidation: l.useRethForValidation,
 		UseNativeReth:        l.useNativeReth,
-	})
+	}
+	svcManager.AddServiceWithDeps("el", el, "bootnode")
 
 	var elService string
 	if l.secondaryELPort != 0 {
-		// we are going to use the cl-proxy service to connect the beacon node to two builders
-		// one the 'el' builder and another one the remote one
+		// Use cl-proxy service to connect the beacon node to two builders
 		elService = "cl-proxy"
 		svcManager.AddService("cl-proxy", &ClProxy{
 			PrimaryBuilder:   "el",
@@ -70,22 +89,31 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		elService = "el"
 	}
 
-	svcManager.AddService("beacon", &LighthouseBeaconNode{
+	// Register beacon with dependency on bootnode
+	beacon := &LighthouseBeaconNode{
 		ExecutionNode: elService,
 		MevBoostNode:  "mev-boost",
-	})
-	svcManager.AddService("validator", &LighthouseValidator{
+	}
+	svcManager.AddServiceWithDeps("beacon", beacon, "bootnode")
+
+	// Register validator with dependency on beacon
+	validator := &LighthouseValidator{
 		BeaconNode: "beacon",
-	})
+	}
+	svcManager.AddServiceWithDeps("validator", validator, "beacon")
 
 	mevBoostValidationServer := ""
 	if l.useRethForValidation {
 		mevBoostValidationServer = "el"
 	}
-	svcManager.AddService("mev-boost", &MevBoostRelay{
+
+	// Register mev-boost with dependency on beacon
+	mevBoost := &MevBoostRelay{
 		BeaconClient:     "beacon",
 		ValidationServer: mevBoostValidationServer,
-	})
+	}
+	svcManager.AddServiceWithDeps("mev-boost", mevBoost, "beacon")
+
 	return svcManager
 }
 
