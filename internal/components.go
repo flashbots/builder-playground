@@ -251,7 +251,7 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--datadir", "{{.Dir}}/data_reth",
 			"--color", "never",
 			"--ipcpath", "{{.Dir}}/reth.ipc",
-			"--addr", "127.0.0.1",
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
@@ -301,7 +301,7 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
-			"--enr-address", "127.0.0.1",
+			"--enr-address", "10.0.2.2",
 			"--enr-udp-port", `{{Port "p2p" 9000}}`,
 			"--enr-tcp-port", `{{Port "p2p" 9000}}`,
 			"--enr-quic-port", `{{Port "quic-p2p" 9100}}`,
