@@ -548,13 +548,25 @@ func (p *OpReth) Watchdog(out io.Writer, service *service, ctx context.Context) 
 	return watchChainHead(out, rethURL, 2*time.Second)
 }
 
+// Bootnode represents a P2P discovery bootnode service that helps other nodes discover each other
+// in the network. It runs a Geth bootnode instance that other Ethereum clients can connect to
+// for peer discovery.
 type Bootnode struct {
-	// Discovery port for P2P communication
+	// DiscoveryPort is the UDP port used for P2P discovery
 	DiscoveryPort uint64
-	// Private key for the bootnode (optional)
+
+	// PrivateKey is the hex-encoded private key used by the bootnode for P2P communication.
+	// If not provided, a default key will be used.
 	PrivateKey string
 }
 
+// Watchdog implements the ServiceWatchdog interface to monitor the bootnode's health.
+// It checks if the bootnode is listening for connections on its discovery port.
+var _ ServiceWatchdog = &Bootnode{}
+
+// Run configures and starts the bootnode service using the ethereum/client-go image.
+// It sets up the necessary arguments for the bootnode to run, including the private key
+// and discovery port.
 func (b *Bootnode) Run(service *service, ctx *ExContext) {
 	// Use the default discovery key if not provided
 	privateKey := b.PrivateKey
