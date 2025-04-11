@@ -251,7 +251,7 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--datadir", "{{.Dir}}/data_reth",
 			"--color", "never",
 			"--ipcpath", "{{.Dir}}/reth.ipc",
-			"--addr", "127.0.0.1",
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
@@ -301,7 +301,7 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
-			"--enr-address", "127.0.0.1",
+			"--enr-address", "10.0.2.2",
 			"--enr-udp-port", `{{Port "p2p" 9000}}`,
 			"--enr-tcp-port", `{{Port "p2p" 9000}}`,
 			"--enr-quic-port", `{{Port "quic-p2p" 9100}}`,
@@ -435,8 +435,8 @@ type BuilderHubPostgres struct {
 func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub-db").
-		WithTag("latest").
-		WithPort("postgres", 5432).
+		WithTag("0.2.1").
+		WithLocalPort("postgres", 5432).
 		WithEnv("POSTGRES_USER", "postgres").
 		WithEnv("POSTGRES_PASSWORD", "postgres").
 		WithEnv("POSTGRES_DB", "postgres").
@@ -460,13 +460,14 @@ type BuilderHub struct {
 func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub").
-		WithTag("latest").
+		WithTag("0.2.1").
 		WithEntrypoint("/app/builder-hub").
 		WithEnv("POSTGRES_DSN", "postgres://postgres:postgres@"+ConnectRaw(b.postgres, "postgres", "")+"/postgres?sslmode=disable").
 		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
 		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
 		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
 		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
+		WithEnv("MOCK_SECRETS", "true").
 		DependsOnHealthy(b.postgres)
 }
 
@@ -480,13 +481,26 @@ type BuilderHubMockProxy struct {
 
 func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
 	service.
-		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
-		WithTag("latest").
-		WithPort("http", 8888)
-
-	if b.TargetService != "" {
-		service.DependsOnHealthy(b.TargetService)
-	}
+		WithImage("nginx").
+		WithTag("1.27").
+		WithLocalPort("http", 8888).
+		DependsOnRunning(b.TargetService).
+		WithEntrypoint("/bin/sh").
+		WithArgs("-c", fmt.Sprintf(`cat > /etc/nginx/conf.d/default.conf << 'EOF'
+server {
+  listen 80;
+  listen 8888;
+  
+  location / {
+    proxy_pass http://%s:8080;
+    proxy_set_header X-Flashbots-Attestation-Type 'test';
+    proxy_set_header X-Flashbots-Measurement '{}';
+    proxy_set_header X-Forwarded-For '1.2.3.4';
+  }
+}
+EOF
+nginx -g 'daemon off;'
+`, b.TargetService))
 }
 
 func (b *BuilderHubMockProxy) Name() string {
