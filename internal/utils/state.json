@@ -9,7 +9,7 @@
       "protocolVersionsOwner": "0xaff0ca253b97e54440965855cec0a8a2e2399896",
       "guardian": "0xaff0ca253b97e54440965855cec0a8a2e2399896"
     },
-    "fundDevAccounts": false,
+    "fundDevAccounts": true,
     "useInterop": false,
     "l1ContractsLocator": "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-c193a1863182092bc6cb723e523e8313a0f4b6e9c9636513927f1db74c047c15.tar.gz",
     "l2ContractsLocator": "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-c193a1863182092bc6cb723e523e8313a0f4b6e9c9636513927f1db74c047c15.tar.gz",
