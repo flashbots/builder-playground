@@ -24,6 +24,7 @@ var dryRun bool
 var interactive bool
 var timeout time.Duration
 var logLevelFlag string
+var localPortsFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -167,6 +168,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
 		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
+		recipeCmd.Flags().BoolVar(&localPortsFlag, "local-ports", false, "bind all ports to localhost only (127.0.0.1) for enhanced security")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -215,6 +217,15 @@ func runIt(recipe internal.Recipe) error {
 	svcManager := recipe.Apply(&internal.ExContext{LogLevel: logLevel}, artifacts)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
+	}
+
+	// set the local ports flag
+	if localPortsFlag {
+		for _, svc := range svcManager.Services() {
+			for _, port := range svc.Ports() {
+				port.Local = true
+			}
+		}
 	}
 
 	// generate the dot graph

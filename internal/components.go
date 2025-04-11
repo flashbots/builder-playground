@@ -435,8 +435,8 @@ type BuilderHubPostgres struct {
 func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub-db").
-		WithTag("latest").
-		WithPort("postgres", 5432).
+		WithTag("0.2.1").
+		WithLocalPort("postgres", 5432).
 		WithEnv("POSTGRES_USER", "postgres").
 		WithEnv("POSTGRES_PASSWORD", "postgres").
 		WithEnv("POSTGRES_DB", "postgres").
@@ -460,7 +460,7 @@ type BuilderHub struct {
 func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub").
-		WithTag("latest").
+		WithTag("0.2.1").
 		WithEntrypoint("/app/builder-hub").
 		WithEnv("POSTGRES_DSN", "postgres://postgres:postgres@"+ConnectRaw(b.postgres, "postgres", "")+"/postgres?sslmode=disable").
 		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
@@ -483,7 +483,7 @@ func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("nginx").
 		WithTag("1.27").
-		WithPort("http", 8888).
+		WithLocalPort("http", 8888).
 		DependsOnRunning(b.TargetService).
 		WithEntrypoint("/bin/sh").
 		WithArgs("-c", fmt.Sprintf(`cat > /etc/nginx/conf.d/default.conf << 'EOF'
