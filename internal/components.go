@@ -252,6 +252,7 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--color", "never",
 			"--ipcpath", "{{.Dir}}/reth.ipc",
 			"--addr", "0.0.0.0",
+			"--nat", "extip:172.17.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
@@ -312,12 +313,15 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
-			"--target-peers", "0",
+			"--target-peers", "5",
 			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
+			"--subscribe-all-subnets",
+			"--import-all-attestations",
+			"--debug-level", "trace",
 		).
 		WithReady(ReadyCheck{
 			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",

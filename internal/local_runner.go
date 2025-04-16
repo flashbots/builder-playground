@@ -585,10 +585,12 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		for _, p := range s.ports {
 			if p.Local {
 				// Bind only to localhost (127.0.0.1)
-				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d", p.HostPort, p.Port))
+				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d/tcp", p.HostPort, p.Port))
+				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d/udp", p.HostPort, p.Port))
 			} else {
 				// Bind to all interfaces (default)
-				ports = append(ports, fmt.Sprintf("%d:%d", p.HostPort, p.Port))
+				ports = append(ports, fmt.Sprintf("%d:%d/tcp", p.HostPort, p.Port))
+				ports = append(ports, fmt.Sprintf("%d:%d/udp", p.HostPort, p.Port))
 			}
 		}
 		service["ports"] = ports
