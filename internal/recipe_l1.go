@@ -72,20 +72,20 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	svcManager.AddService("beacon", &LighthouseBeaconNode{
 		ExecutionNode: elService,
-		MevBoostNode:  "mev-boost",
+		// MevBoostNode:  "mev-boost",
 	})
 	svcManager.AddService("validator", &LighthouseValidator{
 		BeaconNode: "beacon",
 	})
 
-	mevBoostValidationServer := ""
-	if l.useRethForValidation {
-		mevBoostValidationServer = "el"
-	}
-	svcManager.AddService("mev-boost", &MevBoostRelay{
-		BeaconClient:     "beacon",
-		ValidationServer: mevBoostValidationServer,
-	})
+	// mevBoostValidationServer := ""
+	// if l.useRethForValidation {
+	// 	mevBoostValidationServer = "el"
+	// }
+	// svcManager.AddService("mev-boost", &MevBoostRelay{
+	// 	BeaconClient:     "beacon",
+	// 	ValidationServer: mevBoostValidationServer,
+	// })
 	return svcManager
 }
 

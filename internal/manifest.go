@@ -222,6 +222,9 @@ type Port struct {
 	// container port. It is populated by the local runner
 	// TODO: We might want to move this to the runner itself.
 	HostPort int
+
+	// Local indicates if this port should only be bound to localhost (127.0.0.1)
+	Local bool
 }
 
 // NodeRef describes a reference from one service to another
@@ -356,7 +359,7 @@ func (s *service) WithTag(tag string) *service {
 	return s
 }
 
-func (s *service) WithPort(name string, portNumber int) *service {
+func (s *service) WithPort(name string, portNumber int, local bool) *service {
 	// add the port if not already present with the same name.
 	// if preset with the same name, they must have same port number
 	for _, p := range s.ports {
@@ -367,8 +370,18 @@ func (s *service) WithPort(name string, portNumber int) *service {
 			return s
 		}
 	}
-	s.ports = append(s.ports, &Port{Name: name, Port: portNumber})
+	s.ports = append(s.ports, &Port{Name: name, Port: portNumber, Local: local})
 	return s
+}
+
+// WithLocalPort is a convenience method to add a port that should only be bound to localhost
+func (s *service) WithLocalPort(name string, portNumber int) *service {
+	return s.WithPort(name, portNumber, true)
+}
+
+// WithPublicPort is a convenience method to add a port that should be bound to all interfaces (default behavior)
+func (s *service) WithPublicPort(name string, portNumber int) *service {
+	return s.WithPort(name, portNumber, false)
 }
 
 func (s *service) applyTemplate(arg string) {
@@ -376,7 +389,7 @@ func (s *service) applyTemplate(arg string) {
 	var nodeRef []NodeRef
 	_, port, nodeRef = applyTemplate(arg)
 	for _, p := range port {
-		s.WithPort(p.Name, p.Port)
+		s.WithPort(p.Name, p.Port, false) // Default to non-local ports for backward compatibility
 	}
 	for _, n := range nodeRef {
 		s.nodeRefs = append(s.nodeRefs, &n)
@@ -445,7 +458,7 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 			return fmt.Sprintf(`{{Service "%s" "%s"}}`, name, portLabel)
 		},
 		"Port": func(name string, defaultPort int) string {
-			portRef = append(portRef, Port{Name: name, Port: defaultPort})
+			portRef = append(portRef, Port{Name: name, Port: defaultPort, Local: false})
 			return fmt.Sprintf(`{{Port "%s" %d}}`, name, defaultPort)
 		},
 	}
