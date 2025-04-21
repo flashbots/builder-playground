@@ -524,7 +524,7 @@ func (o *OpReth) ReleaseArtifact() *release {
 		Name:    "op-reth",
 		Repo:    "reth",
 		Org:     "paradigmxyz",
-		Version: "v1.3.9",
+		Version: "v1.3.12",
 		Arch: func(goos, goarch string) string {
 			if goos == "linux" {
 				return "x86_64-unknown-linux-gnu"
