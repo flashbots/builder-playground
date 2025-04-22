@@ -276,6 +276,21 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			}
 		}
 
+		// Update the allocs to include the same prefunded accounts as the L1 genesis.
+		allocs := make(map[string]interface{})
+		input["alloc"] = allocs
+		for _, privStr := range prefundedAccounts {
+			priv, err := getPrivKey(privStr)
+			if err != nil {
+				return nil, err
+			}
+			addr := ecrypto.PubkeyToAddress(priv.PublicKey)
+			allocs[addr.String()] = map[string]interface{}{
+				"balance": "0x10000000000000000000000",
+				"nonce":   "0x1",
+			}
+		}
+
 		newOpGenesis, err := overrideJSON(opGenesis, input)
 		if err != nil {
 			return nil, err

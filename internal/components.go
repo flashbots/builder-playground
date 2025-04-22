@@ -87,7 +87,7 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 			"--rpc.port", `{{Port "http" 8549}}`,
 			"--p2p.listen.ip", "0.0.0.0",
 			"--p2p.listen.tcp", `{{Port "p2p" 9003}}`,
-			"--p2p.listen.udp", `{{Port "p2p" 9003}}`,
+			"--p2p.listen.udp", `{{PortUDP "p2p" 9003}}`,
 			"--p2p.scoring.peers", "light",
 			"--p2p.ban.peers", "true",
 			"--metrics.enabled",
@@ -303,11 +303,11 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--disable-peer-scoring",
 			"--staking",
 			"--enr-address", "10.0.2.2",
-			"--enr-udp-port", `{{Port "p2p" 9000}}`,
+			"--enr-udp-port", `{{PortUDP "p2p" 9000}}`,
 			"--enr-tcp-port", `{{Port "p2p" 9000}}`,
-			"--enr-quic-port", `{{Port "quic-p2p" 9100}}`,
-			"--port", `{{Port "p2p" 9000}}`,
-			"--quic-port", `{{Port "quic-p2p" 9100}}`,
+			"--enr-quic-port", `{{PortUDP "quic-p2p" 9100}}`,
+			"--port", `{{PortUDP "p2p" 9000}}`,
+			"--quic-port", `{{PortUDP "quic-p2p" 9100}}`,
 			"--http",
 			"--http-port", `{{Port "http" 3500}}`,
 			"--http-address", "0.0.0.0",
@@ -440,7 +440,7 @@ func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub-db").
 		WithTag("0.2.1").
-		WithLocalPort("postgres", 5432).
+		WithPort("postgres", 5432).
 		WithEnv("POSTGRES_USER", "postgres").
 		WithEnv("POSTGRES_PASSWORD", "postgres").
 		WithEnv("POSTGRES_DB", "postgres").
@@ -487,7 +487,7 @@ func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("nginx").
 		WithTag("1.27").
-		WithLocalPort("http", 8888).
+		WithPort("http", 8888).
 		DependsOnRunning(b.TargetService).
 		WithEntrypoint("/bin/sh").
 		WithArgs("-c", fmt.Sprintf(`cat > /etc/nginx/conf.d/default.conf << 'EOF'

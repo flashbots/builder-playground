@@ -210,6 +210,11 @@ func (s *Manifest) Validate() error {
 	return nil
 }
 
+const (
+	ProtocolUDP = "udp"
+	ProtocolTCP = "tcp"
+)
+
 // Port describes a port that a service exposes
 type Port struct {
 	// Name is the name of the port
@@ -217,6 +222,9 @@ type Port struct {
 
 	// Port is the port number
 	Port int
+
+	// Protocol (tcp or udp)
+	Protocol string
 
 	// HostPort is the port number assigned on the host machine for this
 	// container port. It is populated by the local runner
@@ -359,7 +367,15 @@ func (s *service) WithTag(tag string) *service {
 	return s
 }
 
-func (s *service) WithPort(name string, portNumber int, local bool) *service {
+func (s *service) WithPort(name string, portNumber int, protocolVar ...string) *service {
+	protocol := ProtocolTCP
+	if len(protocolVar) > 0 {
+		if protocolVar[0] != ProtocolTCP && protocolVar[0] != ProtocolUDP {
+			panic(fmt.Sprintf("protocol %s not supported", protocolVar[0]))
+		}
+		protocol = protocolVar[0]
+	}
+
 	// add the port if not already present with the same name.
 	// if preset with the same name, they must have same port number
 	for _, p := range s.ports {
@@ -367,21 +383,15 @@ func (s *service) WithPort(name string, portNumber int, local bool) *service {
 			if p.Port != portNumber {
 				panic(fmt.Sprintf("port %s already defined with different port number", name))
 			}
+			if p.Protocol != protocol {
+				// If they have different protocols they are different ports
+				continue
+			}
 			return s
 		}
 	}
-	s.ports = append(s.ports, &Port{Name: name, Port: portNumber, Local: local})
+	s.ports = append(s.ports, &Port{Name: name, Port: portNumber, Protocol: protocol})
 	return s
-}
-
-// WithLocalPort is a convenience method to add a port that should only be bound to localhost
-func (s *service) WithLocalPort(name string, portNumber int) *service {
-	return s.WithPort(name, portNumber, true)
-}
-
-// WithPublicPort is a convenience method to add a port that should be bound to all interfaces (default behavior)
-func (s *service) WithPublicPort(name string, portNumber int) *service {
-	return s.WithPort(name, portNumber, false)
 }
 
 func (s *service) applyTemplate(arg string) {
@@ -389,7 +399,7 @@ func (s *service) applyTemplate(arg string) {
 	var nodeRef []NodeRef
 	_, port, nodeRef = applyTemplate(arg)
 	for _, p := range port {
-		s.WithPort(p.Name, p.Port, false) // Default to non-local ports for backward compatibility
+		s.WithPort(p.Name, p.Port, p.Protocol)
 	}
 	for _, n := range nodeRef {
 		s.nodeRefs = append(s.nodeRefs, &n)
@@ -458,8 +468,12 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 			return fmt.Sprintf(`{{Service "%s" "%s"}}`, name, portLabel)
 		},
 		"Port": func(name string, defaultPort int) string {
-			portRef = append(portRef, Port{Name: name, Port: defaultPort, Local: false})
+			portRef = append(portRef, Port{Name: name, Port: defaultPort, Protocol: ProtocolTCP})
 			return fmt.Sprintf(`{{Port "%s" %d}}`, name, defaultPort)
+		},
+		"PortUDP": func(name string, defaultPort int) string {
+			portRef = append(portRef, Port{Name: name, Port: defaultPort, Protocol: ProtocolUDP})
+			return fmt.Sprintf(`{{PortUDP "%s" %d}}`, name, defaultPort)
 		},
 	}
 

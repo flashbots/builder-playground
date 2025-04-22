@@ -59,6 +59,9 @@ type LocalRunner struct {
 	tasksMtx     sync.Mutex
 	tasks        map[string]*task
 	taskUpdateCh chan struct{}
+
+	// wether to bind the ports to the local interface
+	bindHostPortsLocally bool
 }
 
 type task struct {
@@ -88,11 +91,13 @@ func newDockerClient() (*client.Client, error) {
 	return client, nil
 }
 
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*LocalRunner, error) {
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool) (*LocalRunner, error) {
 	client, err := newDockerClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
+
+	fmt.Println(bindHostPortsLocally)
 
 	// merge the overrides with the manifest overrides
 	if overrides == nil {
@@ -134,15 +139,16 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	}
 
 	d := &LocalRunner{
-		out:           out,
-		manifest:      manifest,
-		client:        client,
-		reservedPorts: map[int]bool{},
-		overrides:     overrides,
-		handles:       []*exec.Cmd{},
-		tasks:         tasks,
-		taskUpdateCh:  make(chan struct{}),
-		exitErr:       make(chan error, 2),
+		out:                  out,
+		manifest:             manifest,
+		client:               client,
+		reservedPorts:        map[int]bool{},
+		overrides:            overrides,
+		handles:              []*exec.Cmd{},
+		tasks:                tasks,
+		taskUpdateCh:         make(chan struct{}),
+		exitErr:              make(chan error, 2),
+		bindHostPortsLocally: bindHostPortsLocally,
 	}
 
 	if interactive {
@@ -380,6 +386,16 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 		}
 	}
 
+	resolvePort := func(name string, defaultPort int, protocol string) int {
+		// For {{Port "name" "defaultPort"}}:
+		// - Service runs on host: return the host port
+		// - Service runs inside docker: return the docker port
+		if d.isHostService(s.Name) {
+			return s.MustGetPort(name).HostPort
+		}
+		return defaultPort
+	}
+
 	funcs := template.FuncMap{
 		"Service": func(name string, portLabel, protocol string) string {
 			protocolPrefix := ""
@@ -412,13 +428,10 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
-			// For {{Port "name" "defaultPort"}}:
-			// - Service runs on host: return the host port
-			// - Service runs inside docker: return the docker port
-			if d.isHostService(s.Name) {
-				return s.MustGetPort(name).HostPort
-			}
-			return defaultPort
+			return resolvePort(name, defaultPort, ProtocolTCP)
+		},
+		"PortUDP": func(name string, defaultPort int) int {
+			return resolvePort(name, defaultPort, ProtocolUDP)
 		},
 	}
 
@@ -583,14 +596,15 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 	if len(s.ports) > 0 {
 		ports := []string{}
 		for _, p := range s.ports {
-			if p.Local {
-				// Bind only to localhost (127.0.0.1)
-				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d/tcp", p.HostPort, p.Port))
-				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d/udp", p.HostPort, p.Port))
+			protocol := ""
+			if p.Protocol == ProtocolUDP {
+				protocol = "/udp"
+			}
+
+			if d.bindHostPortsLocally {
+				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d%s", p.HostPort, p.Port, protocol))
 			} else {
-				// Bind to all interfaces (default)
-				ports = append(ports, fmt.Sprintf("%d:%d/tcp", p.HostPort, p.Port))
-				ports = append(ports, fmt.Sprintf("%d:%d/udp", p.HostPort, p.Port))
+				ports = append(ports, fmt.Sprintf("%d:%d%s", p.HostPort, p.Port, protocol))
 			}
 		}
 		service["ports"] = ports
