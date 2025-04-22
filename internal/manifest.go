@@ -366,7 +366,7 @@ func (s *service) WithTag(tag string) *service {
 
 func (s *service) WithPort(name string, portNumber int, protocolVar ...string) *service {
 	protocol := ProtocolTCP
-	if len(protocol) > 0 {
+	if len(protocolVar) > 0 {
 		if protocolVar[0] != ProtocolTCP && protocolVar[0] != ProtocolUDP {
 			panic(fmt.Sprintf("protocol %s not supported", protocolVar[0]))
 		}
