@@ -59,6 +59,9 @@ type LocalRunner struct {
 	tasksMtx     sync.Mutex
 	tasks        map[string]*task
 	taskUpdateCh chan struct{}
+
+	// wether to bind the ports to the local interface
+	bindHostPortsLocally bool
 }
 
 type task struct {
@@ -88,11 +91,13 @@ func newDockerClient() (*client.Client, error) {
 	return client, nil
 }
 
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool) (*LocalRunner, error) {
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool) (*LocalRunner, error) {
 	client, err := newDockerClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
+
+	fmt.Println(bindHostPortsLocally)
 
 	// merge the overrides with the manifest overrides
 	if overrides == nil {
@@ -134,15 +139,16 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	}
 
 	d := &LocalRunner{
-		out:           out,
-		manifest:      manifest,
-		client:        client,
-		reservedPorts: map[int]bool{},
-		overrides:     overrides,
-		handles:       []*exec.Cmd{},
-		tasks:         tasks,
-		taskUpdateCh:  make(chan struct{}),
-		exitErr:       make(chan error, 2),
+		out:                  out,
+		manifest:             manifest,
+		client:               client,
+		reservedPorts:        map[int]bool{},
+		overrides:            overrides,
+		handles:              []*exec.Cmd{},
+		tasks:                tasks,
+		taskUpdateCh:         make(chan struct{}),
+		exitErr:              make(chan error, 2),
+		bindHostPortsLocally: bindHostPortsLocally,
 	}
 
 	if interactive {
@@ -587,10 +593,18 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		service["entrypoint"] = s.entrypoint
 	}
 
+	fmt.Println("XXX")
+
 	if len(s.ports) > 0 {
 		ports := []string{}
+		fmt.Println("x", d.bindHostPortsLocally)
+
 		for _, p := range s.ports {
-			ports = append(ports, fmt.Sprintf("%d:%d", p.HostPort, p.Port))
+			if d.bindHostPortsLocally {
+				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d", p.HostPort, p.Port))
+			} else {
+				ports = append(ports, fmt.Sprintf("%d:%d", p.HostPort, p.Port))
+			}
 		}
 		service["ports"] = ports
 	}
