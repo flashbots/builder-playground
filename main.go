@@ -24,6 +24,7 @@ var dryRun bool
 var interactive bool
 var timeout time.Duration
 var logLevelFlag string
+var bindExternal bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -167,6 +168,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
 		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
+		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -234,7 +236,7 @@ func runIt(recipe internal.Recipe) error {
 		}
 	}
 
-	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, overrides, interactive)
+	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, overrides, interactive, !bindExternal)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
