@@ -386,7 +386,7 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 		}
 	}
 
-	resolvePort := func(name string, defaultPort int) int {
+	resolvePort := func(name string, defaultPort int, protocol string) int {
 		// For {{Port "name" "defaultPort"}}:
 		// - Service runs on host: return the host port
 		// - Service runs inside docker: return the docker port
@@ -428,10 +428,10 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
-			return resolvePort(name, defaultPort)
+			return resolvePort(name, defaultPort, ProtocolTCP)
 		},
 		"PortUDP": func(name string, defaultPort int) int {
-			return resolvePort(name, defaultPort)
+			return resolvePort(name, defaultPort, ProtocolUDP)
 		},
 	}
 
@@ -593,17 +593,18 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		service["entrypoint"] = s.entrypoint
 	}
 
-	fmt.Println("XXX")
-
 	if len(s.ports) > 0 {
 		ports := []string{}
-		fmt.Println("x", d.bindHostPortsLocally)
-
 		for _, p := range s.ports {
+			protocol := ""
+			if p.Protocol == ProtocolUDP {
+				protocol = "/udp"
+			}
+
 			if d.bindHostPortsLocally {
-				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d", p.HostPort, p.Port))
+				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d%s", p.HostPort, p.Port, protocol))
 			} else {
-				ports = append(ports, fmt.Sprintf("%d:%d", p.HostPort, p.Port))
+				ports = append(ports, fmt.Sprintf("%d:%d%s", p.HostPort, p.Port, protocol))
 			}
 		}
 		service["ports"] = ports

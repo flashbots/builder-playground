@@ -210,6 +210,11 @@ func (s *Manifest) Validate() error {
 	return nil
 }
 
+const (
+	ProtocolUDP = "udp"
+	ProtocolTCP = "tcp"
+)
+
 // Port describes a port that a service exposes
 type Port struct {
 	// Name is the name of the port
@@ -360,9 +365,9 @@ func (s *service) WithTag(tag string) *service {
 }
 
 func (s *service) WithPort(name string, portNumber int, protocolVar ...string) *service {
-	protocol := "tcp"
+	protocol := ProtocolTCP
 	if len(protocol) > 0 {
-		if protocolVar[0] != "tcp" && protocolVar[0] != "udp" {
+		if protocolVar[0] != ProtocolTCP && protocolVar[0] != ProtocolUDP {
 			panic(fmt.Sprintf("protocol %s not supported", protocolVar[0]))
 		}
 		protocol = protocolVar[0]
@@ -375,10 +380,14 @@ func (s *service) WithPort(name string, portNumber int, protocolVar ...string) *
 			if p.Port != portNumber {
 				panic(fmt.Sprintf("port %s already defined with different port number", name))
 			}
+			if p.Protocol != protocol {
+				// If they have different protocols they are different ports
+				continue
+			}
 			return s
 		}
 	}
-	s.ports = append(s.ports, &Port{Name: name, Port: portNumber, Protocol: "tcp"})
+	s.ports = append(s.ports, &Port{Name: name, Port: portNumber, Protocol: protocol})
 	return s
 }
 
@@ -456,11 +465,11 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 			return fmt.Sprintf(`{{Service "%s" "%s"}}`, name, portLabel)
 		},
 		"Port": func(name string, defaultPort int) string {
-			portRef = append(portRef, Port{Name: name, Port: defaultPort, Protocol: "tcp"})
+			portRef = append(portRef, Port{Name: name, Port: defaultPort, Protocol: ProtocolTCP})
 			return fmt.Sprintf(`{{Port "%s" %d}}`, name, defaultPort)
 		},
 		"PortUDP": func(name string, defaultPort int) string {
-			portRef = append(portRef, Port{Name: name, Port: defaultPort, Protocol: "udp"})
+			portRef = append(portRef, Port{Name: name, Port: defaultPort, Protocol: ProtocolUDP})
 			return fmt.Sprintf(`{{PortUDP "%s" %d}}`, name, defaultPort)
 		},
 	}

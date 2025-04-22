@@ -266,7 +266,11 @@ func runIt(recipe internal.Recipe) error {
 
 			portsStr := []string{}
 			for _, p := range ports {
-				portsStr = append(portsStr, fmt.Sprintf("%s: %d/%d", p.Name, p.Port, p.HostPort))
+				protocol := ""
+				if p.Protocol == internal.ProtocolUDP {
+					protocol = "/udp"
+				}
+				portsStr = append(portsStr, fmt.Sprintf("%s: %d/%d%s", p.Name, p.Port, p.HostPort, protocol))
 			}
 			fmt.Printf("- %s (%s)\n", ss.Name, strings.Join(portsStr, ", "))
 		}
