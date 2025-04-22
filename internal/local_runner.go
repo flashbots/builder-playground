@@ -380,6 +380,16 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 		}
 	}
 
+	resolvePort := func(name string, defaultPort int) int {
+		// For {{Port "name" "defaultPort"}}:
+		// - Service runs on host: return the host port
+		// - Service runs inside docker: return the docker port
+		if d.isHostService(s.Name) {
+			return s.MustGetPort(name).HostPort
+		}
+		return defaultPort
+	}
+
 	funcs := template.FuncMap{
 		"Service": func(name string, portLabel, protocol string) string {
 			protocolPrefix := ""
@@ -412,13 +422,10 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
-			// For {{Port "name" "defaultPort"}}:
-			// - Service runs on host: return the host port
-			// - Service runs inside docker: return the docker port
-			if d.isHostService(s.Name) {
-				return s.MustGetPort(name).HostPort
-			}
-			return defaultPort
+			return resolvePort(name, defaultPort)
+		},
+		"PortUDP": func(name string, defaultPort int) int {
+			return resolvePort(name, defaultPort)
 		},
 	}
 
