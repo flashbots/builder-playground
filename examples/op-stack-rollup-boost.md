@@ -8,7 +8,7 @@ First, download the op-reth binary:
 $ go run main.go artifacts op-reth
 ```
 
-This will download the op-reth binary and save it under `$HOME/.playground/op-reth-v1.3.1`.
+This will download the op-reth binary and save it under `$HOME/.playground/op-reth-v1.3.12`.
 
 Second, we can deploy the Op Stack with rollup-boost:
 
@@ -35,7 +35,7 @@ The `--external-builder` flag is used to specify the URL of the external block b
 Third, we can start the `op-reth` binary as the external block builder:
 
 ```bash
-$ $HOME/.playground/op-reth-v1.3.1 node --authrpc.port 4444 --authrpc.jwtsecret ./output/jwtsecret --chain ./output/l2-genesis.json --datadir /tmp/builder --disable-discovery --port 30333 --trusted-peers enode://3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f@127.0.0.1:30304
+$ $HOME/.playground/op-reth-v1.3.12 node --http --http.port 2222 --authrpc.port 4444 --authrpc.jwtsecret $HOME/.playground/devnet/jwtsecret --chain $HOME/.playground/devnet/l2-genesis.json --datadir /tmp/builder --disable-discovery --port 30333 --trusted-peers enode://3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f@127.0.0.1:30304
 ```
 
 The command above starts op-reth as an external block builder with the following key parameters:
