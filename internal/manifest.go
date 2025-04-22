@@ -230,9 +230,6 @@ type Port struct {
 	// container port. It is populated by the local runner
 	// TODO: We might want to move this to the runner itself.
 	HostPort int
-
-	// Local indicates if this port should only be bound to localhost (127.0.0.1)
-	Local bool
 }
 
 // NodeRef describes a reference from one service to another
