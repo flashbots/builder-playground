@@ -759,6 +759,18 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	// Read all the components to be deployed and find all the ports with name 'metrics'
 	// to create the prometheus scrapper config
 	var scrapeConfigs []map[string]interface{}
+
+	// global scrape config
+	scrapeConfigs = append(scrapeConfigs, map[string]interface{}{
+		"job_name":     "external",
+		"metrics_path": "/metrics",
+		"static_configs": []map[string]interface{}{
+			{
+				"targets": []string{"host.docker.internal:5555"},
+			},
+		},
+	})
+
 	for _, c := range manifest.services {
 		for _, port := range c.ports {
 			if port.Name == "metrics" {
