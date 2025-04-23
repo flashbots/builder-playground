@@ -755,6 +755,56 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 	}
 }
 
+func CreatePrometheusServices(manifest *Manifest, out *output) error {
+	// Read all the components to be deployed and find all the ports with name 'metrics'
+	// to create the prometheus scrapper config
+	var scrapeConfigs []map[string]interface{}
+	for _, c := range manifest.services {
+		for _, port := range c.ports {
+			if port.Name == "metrics" {
+				metricsPath := "/metrics"
+				if overrideMetricsPath, ok := c.labels["metrics_path"]; ok {
+					metricsPath = overrideMetricsPath
+				}
+
+				scrapeConfig := map[string]interface{}{
+					"job_name":     c.Name,
+					"metrics_path": metricsPath,
+					"static_configs": []map[string]interface{}{
+						{
+							"targets": []string{fmt.Sprintf("%s:%d", c.Name, port.Port)},
+						},
+					},
+				}
+				scrapeConfigs = append(scrapeConfigs, scrapeConfig)
+			}
+		}
+	}
+
+	promConfig := map[string]interface{}{
+		"global": map[string]interface{}{
+			"scrape_interval":     "1s",
+			"evaluation_interval": "1s",
+		},
+		"scrape_configs": scrapeConfigs,
+	}
+
+	if err := out.WriteFile("prometheus.yaml", promConfig); err != nil {
+		return fmt.Errorf("failed to write prometheus.yml: %w", err)
+	}
+
+	// add to the manifest the prometheus service
+	// This is a bit of a hack.
+	srv := manifest.NewService("prometheus").
+		WithImage("prom/prometheus").
+		WithTag("latest").
+		WithArgs("--config.file", "{{.Dir}}/prometheus.yaml").
+		WithPort("metrics", 9090, "tcp")
+	manifest.services = append(manifest.services, srv)
+
+	return nil
+}
+
 func (d *LocalRunner) Run() error {
 	go d.trackContainerStatusAndLogs()
 

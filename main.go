@@ -25,6 +25,7 @@ var interactive bool
 var timeout time.Duration
 var logLevelFlag string
 var bindExternal bool
+var withPrometheus bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -169,6 +170,7 @@ func main() {
 		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
 		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
+		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -223,6 +225,12 @@ func runIt(recipe internal.Recipe) error {
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
+	}
+
+	if withPrometheus {
+		if err := internal.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
+			return fmt.Errorf("failed to create prometheus services: %w", err)
+		}
 	}
 
 	if dryRun {
