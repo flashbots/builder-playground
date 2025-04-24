@@ -396,6 +396,7 @@ func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
+		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
 		WithEntrypoint("mev-boost-relay").
 		DependsOnHealthy(m.BeaconClient).
 		WithArgs(
