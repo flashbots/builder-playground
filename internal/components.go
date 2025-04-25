@@ -137,6 +137,7 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101503.2-rc.5").
 		WithEntrypoint("/bin/sh").
+		WithLabel("metrics_path", "/debug/metrics/prometheus").
 		WithArgs(
 			"-c",
 			"geth init --datadir {{.Dir}}/data_opgeth --state.scheme hash {{.Dir}}/l2-genesis.json && "+
@@ -262,6 +263,7 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
 			logLevelToRethVerbosity(ctx.LogLevel),
@@ -513,6 +515,7 @@ func (o *OpReth) Run(service *service, ctx *ExContext) {
 			"--datadir", "{{.Dir}}/data_op_reth",
 			"--disable-discovery",
 			"--color", "never",
+			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			"--port", `{{Port "rpc" 30303}}`)
 }
 
