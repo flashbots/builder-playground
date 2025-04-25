@@ -347,17 +347,36 @@ func (d *LocalRunner) Stop() error {
 // reservePort finds the first available port from the startPort and reserves it
 // Note that we have to keep track of the port in 'reservedPorts' because
 // the port allocation happens before the services uses it and binds to it.
-func (d *LocalRunner) reservePort(startPort int) int {
+func (d *LocalRunner) reservePort(startPort int, protocol string) int {
 	for i := startPort; i < startPort+1000; i++ {
 		if _, ok := d.reservedPorts[i]; ok {
 			continue
 		}
-		// make a net.Listen on the port to see if it is aavailable
-		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", i))
-		if err != nil {
-			continue
+
+		bindAddr := "0.0.0.0"
+		if d.bindHostPortsLocally {
+			bindAddr = "127.0.0.1"
 		}
-		listener.Close()
+
+		if protocol == ProtocolUDP {
+			listener, err := net.ListenUDP("udp", &net.UDPAddr{
+				Port: i,
+				IP:   net.ParseIP(bindAddr),
+			})
+			if err != nil {
+				continue
+			}
+			listener.Close()
+		} else if protocol == ProtocolTCP {
+			listener, err := net.Listen(protocol, fmt.Sprintf("%s:%d", bindAddr, i))
+			if err != nil {
+				continue
+			}
+			listener.Close()
+		} else {
+			panic(fmt.Sprintf("invalid protocol: %s", protocol))
+		}
+
 		d.reservedPorts[i] = true
 		return i
 	}
@@ -642,7 +661,7 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	// between services running inside docker and the ones running on the host machine.
 	for _, svc := range d.manifest.services {
 		for _, port := range svc.ports {
-			port.HostPort = d.reservePort(port.Port)
+			port.HostPort = d.reservePort(port.Port, port.Protocol)
 		}
 	}
 
