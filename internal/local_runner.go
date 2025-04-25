@@ -25,7 +25,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const networkName = "ethplayground"
+const defaultNetworkName = "ethplayground"
 
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
@@ -67,6 +67,9 @@ type LocalRunner struct {
 	// sessionID is a random sequence that is used to identify the session
 	// it is used to identify the containers in the cleanup process
 	sessionID string
+
+	// networkName is the name of the network to use for the services
+	networkName string
 }
 
 type task struct {
@@ -96,7 +99,8 @@ func newDockerClient() (*client.Client, error) {
 	return client, nil
 }
 
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool) (*LocalRunner, error) {
+// TODO: add a runner config struct
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool, networkName string) (*LocalRunner, error) {
 	client, err := newDockerClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
@@ -141,6 +145,9 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		}
 	}
 
+	if networkName == "" {
+		networkName = defaultNetworkName
+	}
 	d := &LocalRunner{
 		out:                  out,
 		manifest:             manifest,
@@ -153,6 +160,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		exitErr:              make(chan error, 2),
 		bindHostPortsLocally: bindHostPortsLocally,
 		sessionID:            uuid.New().String(),
+		networkName:          networkName,
 	}
 
 	if interactive {
@@ -563,7 +571,7 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 			fmt.Sprintf("%s:/artifacts", outputFolder),
 		},
 		// Add the ethereum network
-		"networks": []string{networkName},
+		"networks": []string{d.networkName},
 		"labels":   labels,
 	}
 
@@ -648,8 +656,8 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 		// We create a new network to be used by all the services so that
 		// we can do DNS discovery between them.
 		"networks": map[string]interface{}{
-			networkName: map[string]interface{}{
-				"name": networkName,
+			d.networkName: map[string]interface{}{
+				"name": d.networkName,
 			},
 		},
 	}
