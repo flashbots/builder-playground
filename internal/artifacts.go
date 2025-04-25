@@ -36,9 +36,9 @@ import (
 )
 
 var (
-	opBlockTimeSeconds      = uint64(2)
-	defaultDiscoveryPrivKey = "a11ac89899cd86e36b6fb881ec1255b8a92a688790b7d950f8b7d8dd626671fb"
-	defaultDiscoveryEnodeID = "3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f"
+	defaultOpBlockTimeSeconds = uint64(2)
+	defaultDiscoveryPrivKey   = "a11ac89899cd86e36b6fb881ec1255b8a92a688790b7d950f8b7d8dd626671fb"
+	defaultDiscoveryEnodeID   = "3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f"
 )
 
 // minimumGenesisDelay is the minimum delay for the genesis time. This is required
@@ -66,6 +66,7 @@ type ArtifactsBuilder struct {
 	applyLatestL1Fork bool
 	genesisDelay      uint64
 	applyLatestL2Fork *uint64
+	OpblockTime       uint64
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -73,6 +74,7 @@ func NewArtifactsBuilder() *ArtifactsBuilder {
 		outputDir:         "",
 		applyLatestL1Fork: false,
 		genesisDelay:      MinimumGenesisDelay,
+		OpblockTime:       defaultOpBlockTimeSeconds,
 	}
 }
 
@@ -93,6 +95,11 @@ func (b *ArtifactsBuilder) ApplyLatestL2Fork(applyLatestL2Fork *uint64) *Artifac
 
 func (b *ArtifactsBuilder) GenesisDelay(genesisDelaySeconds uint64) *ArtifactsBuilder {
 	b.genesisDelay = genesisDelaySeconds
+	return b
+}
+
+func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
+	b.OpblockTime = blockTimeSeconds
 	return b
 }
 
@@ -258,7 +265,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			forkTime = new(uint64)
 
 			if *b.applyLatestL2Fork != 0 {
-				*forkTime = opTimestamp + opBlockTimeSeconds*(*b.applyLatestL2Fork)
+				*forkTime = opTimestamp + b.OpblockTime*(*b.applyLatestL2Fork)
 			} else {
 				*forkTime = 0
 			}
@@ -317,6 +324,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 					"number": 0,
 				},
 			},
+			"block_time": b.OpblockTime,
 			"chain_op_config": map[string]interface{}{ // TODO: Read this from somewhere (genesis??)
 				"eip1559Elasticity":        6,
 				"eip1559Denominator":       50,
