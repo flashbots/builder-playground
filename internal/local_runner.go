@@ -21,6 +21,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/google/uuid"
 	"gopkg.in/yaml.v2"
 )
 
@@ -62,6 +63,10 @@ type LocalRunner struct {
 
 	// wether to bind the ports to the local interface
 	bindHostPortsLocally bool
+
+	// sessionID is a random sequence that is used to identify the session
+	// it is used to identify the containers in the cleanup process
+	sessionID string
 }
 
 type task struct {
@@ -96,8 +101,6 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
-
-	fmt.Println(bindHostPortsLocally)
 
 	// merge the overrides with the manifest overrides
 	if overrides == nil {
@@ -149,6 +152,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		taskUpdateCh:         make(chan struct{}),
 		exitErr:              make(chan error, 2),
 		bindHostPortsLocally: bindHostPortsLocally,
+		sessionID:            uuid.New().String(),
 	}
 
 	if interactive {
@@ -295,8 +299,9 @@ func (d *LocalRunner) ExitErr() <-chan error {
 }
 
 func (d *LocalRunner) Stop() error {
+	// only stop the containers that belong to this session
 	containers, err := d.client.ContainerList(context.Background(), container.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
+		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", d.sessionID))),
 	})
 	if err != nil {
 		return fmt.Errorf("error getting container list: %w", err)
@@ -518,8 +523,9 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 	labels := map[string]string{
 		// It is important to use the playground label to identify the containers
 		// during the cleanup process
-		"playground": "true",
-		"service":    s.Name,
+		"playground":         "true",
+		"playground.session": d.sessionID,
+		"service":            s.Name,
 	}
 
 	// add the local ports exposed by the service as labels
@@ -722,7 +728,7 @@ func (d *LocalRunner) trackLogs(serviceName string, containerID string) error {
 
 func (d *LocalRunner) trackContainerStatusAndLogs() {
 	eventCh, errCh := d.client.Events(context.Background(), events.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
+		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", d.sessionID))),
 	})
 
 	for {
