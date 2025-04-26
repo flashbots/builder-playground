@@ -76,7 +76,7 @@ func NewArtifactsBuilder() *ArtifactsBuilder {
 		applyLatestL1Fork: false,
 		genesisDelay:      MinimumGenesisDelay,
 		OpblockTime:       defaultOpBlockTimeSeconds,
-		networkName:       "ethplayground",
+		networkName:       DefaultNetworkName,
 	}
 }
 
