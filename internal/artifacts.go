@@ -66,6 +66,7 @@ type ArtifactsBuilder struct {
 	applyLatestL1Fork bool
 	genesisDelay      uint64
 	applyLatestL2Fork *uint64
+	networkName       string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -73,6 +74,7 @@ func NewArtifactsBuilder() *ArtifactsBuilder {
 		outputDir:         "",
 		applyLatestL1Fork: false,
 		genesisDelay:      MinimumGenesisDelay,
+		networkName:       "ethplayground",
 	}
 }
 
@@ -96,6 +98,11 @@ func (b *ArtifactsBuilder) GenesisDelay(genesisDelaySeconds uint64) *ArtifactsBu
 	return b
 }
 
+func (b *ArtifactsBuilder) NetworkName(networkName string) *ArtifactsBuilder {
+	b.networkName = networkName
+	return b
+}
+
 type Artifacts struct {
 	Out *output
 }
@@ -106,9 +113,15 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		return nil, err
 	}
 	if b.outputDir == "" {
-		// Use the $HOMEDIR/devnet as the default output
-		b.outputDir = filepath.Join(homeDir, "devnet")
+		// If a custom network name is specified, namespace the folder as devnet-[networkname].
+		if b.networkName != "" && b.networkName != DefaultNetworkName {
+			b.outputDir = filepath.Join(homeDir, fmt.Sprintf("devnet-%s", b.networkName))
+		} else {
+			// Use $HOMEDIR/devnet as the default output.
+			b.outputDir = filepath.Join(homeDir, "devnet")
+		}
 	}
+	log.Printf("using output directory: %s", b.outputDir)
 
 	out := &output{dst: b.outputDir, homeDir: homeDir}
 

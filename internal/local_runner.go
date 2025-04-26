@@ -25,8 +25,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const defaultNetworkName = "ethplayground"
-
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
 // But, some services (if they are configured to do so) can be run on the host machine instead.
@@ -146,7 +144,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	}
 
 	if networkName == "" {
-		networkName = defaultNetworkName
+		networkName = DefaultNetworkName
 	}
 	d := &LocalRunner{
 		out:                  out,

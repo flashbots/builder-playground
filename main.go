@@ -211,7 +211,7 @@ func runIt(recipe internal.Recipe) error {
 	}
 
 	builder := recipe.Artifacts()
-	builder.OutputDir(outputFlag)
+	builder.OutputDir(outputFlag).NetworkName(networkName)
 	builder.GenesisDelay(genesisDelayFlag)
 	artifacts, err := builder.Build()
 	if err != nil {
