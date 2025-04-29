@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -33,12 +34,16 @@ func (r *RollupBoost) Name() string {
 }
 
 type OpBatcher struct {
-	L1Node     string
-	L2Node     string
-	RollupNode string
+	L1Node             string
+	L2Node             string
+	RollupNode         string
+	MaxChannelDuration uint64
 }
 
 func (o *OpBatcher) Run(service *service, ctx *ExContext) {
+	if o.MaxChannelDuration == 0 {
+		o.MaxChannelDuration = 2
+	}
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
 		WithTag("v1.12.0-rc.1").
@@ -47,7 +52,7 @@ func (o *OpBatcher) Run(service *service, ctx *ExContext) {
 			"--l1-eth-rpc", Connect(o.L1Node, "http"),
 			"--l2-eth-rpc", Connect(o.L2Node, "http"),
 			"--rollup-rpc", Connect(o.RollupNode, "http"),
-			"--max-channel-duration=2",
+			"--max-channel-duration="+strconv.FormatUint(o.MaxChannelDuration, 10),
 			"--sub-safety-margin=4",
 			"--poll-interval=1s",
 			"--num-confirmations=1",

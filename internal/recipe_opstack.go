@@ -18,6 +18,10 @@ type OpRecipe struct {
 	// blockTime is the block time to use for the rollup
 	// (default is 2 seconds)
 	blockTime uint64
+
+	// batcherMaxChannelDuration is the maximum channel duration to use for the batcher
+	// (default is 2 seconds)
+	batcherMaxChannelDuration uint64
 }
 
 func (o *OpRecipe) Name() string {
@@ -33,6 +37,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.StringVar(&o.externalBuilder, "external-builder", "", "External builder URL")
 	flags.Var(&nullableUint64Value{&o.enableLatestFork}, "enable-latest-fork", "Enable latest fork isthmus (nil or empty = disabled, otherwise enabled at specified block)")
 	flags.Uint64Var(&o.blockTime, "block-time", defaultOpBlockTimeSeconds, "Block time to use for the rollup")
+	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
 	return flags
 }
 
@@ -79,9 +84,10 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		UseDeterministicP2PKey: o.externalBuilder != "",
 	})
 	svcManager.AddService("op-batcher", &OpBatcher{
-		L1Node:     "el",
-		L2Node:     "op-geth",
-		RollupNode: "op-node",
+		L1Node:             "el",
+		L2Node:             "op-geth",
+		RollupNode:         "op-node",
+		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
 	return svcManager
 }
