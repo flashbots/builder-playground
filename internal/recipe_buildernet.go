@@ -52,12 +52,10 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
 		postgres: "builder-hub-postgres",
 	})
 
-	// Optionally add mock proxy for testing
-	if b.includeMockProxy {
-		svcManager.AddService("builder-hub-proxy", &BuilderHubMockProxy{
-			TargetService: "builder-hub",
-		})
-	}
+	// Add mock proxy for testing
+	svcManager.AddService("builder-hub-proxy", &BuilderHubMockProxy{
+		TargetService: "builder-hub",
+	})
 
 	return svcManager
 }

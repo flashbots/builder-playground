@@ -257,7 +257,8 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--datadir", "{{.Dir}}/data_reth",
 			"--color", "never",
 			"--ipcpath", "{{.Dir}}/reth.ipc",
-			"--addr", "127.0.0.1",
+			"--addr", "0.0.0.0",
+			"--nat", "extip:172.17.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
@@ -308,23 +309,26 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
-			"--enr-address", "127.0.0.1",
+			"--enr-address", "10.0.2.2",
 			"--enr-udp-port", `{{PortUDP "p2p" 9000}}`,
 			"--enr-tcp-port", `{{Port "p2p" 9000}}`,
-			"--enr-quic-port", `{{Port "quic-p2p" 9100}}`,
-			"--port", `{{Port "p2p" 9000}}`,
-			"--quic-port", `{{Port "quic-p2p" 9100}}`,
+			"--enr-quic-port", `{{PortUDP "quic-p2p" 9100}}`,
+			"--port", `{{PortUDP "p2p" 9000}}`,
+			"--quic-port", `{{PortUDP "quic-p2p" 9100}}`,
 			"--http",
 			"--http-port", `{{Port "http" 3500}}`,
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
-			"--target-peers", "0",
+			"--target-peers", "5",
 			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
+			"--subscribe-all-subnets",
+			"--import-all-attestations",
+			"--debug-level", "trace",
 		).
 		WithReady(ReadyCheck{
 			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
@@ -443,7 +447,7 @@ type BuilderHubPostgres struct {
 func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub-db").
-		WithTag("latest").
+		WithTag("0.2.1").
 		WithPort("postgres", 5432).
 		WithEnv("POSTGRES_USER", "postgres").
 		WithEnv("POSTGRES_PASSWORD", "postgres").
@@ -468,13 +472,14 @@ type BuilderHub struct {
 func (b *BuilderHub) Run(service *service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub").
-		WithTag("latest").
+		WithTag("0.2.1").
 		WithEntrypoint("/app/builder-hub").
 		WithEnv("POSTGRES_DSN", "postgres://postgres:postgres@"+ConnectRaw(b.postgres, "postgres", "")+"/postgres?sslmode=disable").
 		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
 		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
 		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
 		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
+		WithEnv("MOCK_SECRETS", "true").
 		DependsOnHealthy(b.postgres)
 }
 
@@ -488,13 +493,26 @@ type BuilderHubMockProxy struct {
 
 func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
 	service.
-		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
-		WithTag("latest").
-		WithPort("http", 8888)
-
-	if b.TargetService != "" {
-		service.DependsOnHealthy(b.TargetService)
-	}
+		WithImage("nginx").
+		WithTag("1.27").
+		WithPort("http", 8888).
+		DependsOnRunning(b.TargetService).
+		WithEntrypoint("/bin/sh").
+		WithArgs("-c", fmt.Sprintf(`cat > /etc/nginx/conf.d/default.conf << 'EOF'
+server {
+  listen 80;
+  listen 8888;
+  
+  location / {
+    proxy_pass http://%s:8080;
+    proxy_set_header X-Flashbots-Attestation-Type 'test';
+    proxy_set_header X-Flashbots-Measurement '{}';
+    proxy_set_header X-Forwarded-For '1.2.3.4';
+  }
+}
+EOF
+nginx -g 'daemon off;'
+`, b.TargetService))
 }
 
 func (b *BuilderHubMockProxy) Name() string {
