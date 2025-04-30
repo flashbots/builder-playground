@@ -1,0 +1,241 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: builderplaygrounddeployments.playground.flashbots.io
+spec:
+  group: playground.flashbots.io
+  names:
+    kind: BuilderPlaygroundDeployment
+    plural: builderplaygrounddeployments
+    singular: builderplaygrounddeployment
+    shortNames:
+      - bpd
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - services
+              properties:
+                # Recipe/origin information
+                recipe:
+                  type: string
+                  description: "The recipe used to generate this deployment (e.g., l1, opstack)"
+                
+                # Storage configuration for the deployment
+                storage:
+                  type: object
+                  description: "Storage configuration for the deployment"
+                  properties:
+                    type:
+                      type: string
+                      enum: [local-path, pvc]
+                      description: "Storage type (local-path for development, pvc for cluster deployments)"
+                    path:
+                      type: string
+                      description: "Path on host for local-path storage"
+                    storageClass:
+                      type: string
+                      description: "StorageClass to use for PVC (if type is pvc)"
+                    size:
+                      type: string
+                      description: "Size of storage (if type is pvc)"
+                
+                # Network configuration
+                network:
+                  type: object
+                  description: "Network configuration"
+                  properties:
+                    name:
+                      type: string
+                      description: "Network name, similar to docker-compose network"
+                
+                # Service definitions
+                services:
+                  type: array
+                  description: "List of services in this deployment"
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - image
+                    properties:
+                      name:
+                        type: string
+                        description: "Service name"
+                      
+                      image:
+                        type: string
+                        description: "Container image for the service"
+                      
+                      tag:
+                        type: string
+                        description: "Image tag"
+                      
+                      entrypoint:
+                        type: array
+                        description: "Container entrypoint command"
+                        items:
+                          type: string
+                      
+                      args:
+                        type: array
+                        description: "Container command arguments"
+                        items:
+                          type: string
+                      
+                      env:
+                        type: object
+                        description: "Environment variables"
+                        additionalProperties:
+                          type: string
+                      
+                      ports:
+                        type: array
+                        description: "Ports exposed by the service"
+                        items:
+                          type: object
+                          required:
+                            - name
+                            - port
+                          properties:
+                            name:
+                              type: string
+                              description: "Port name"
+                            port:
+                              type: integer
+                              description: "Container port"
+                            protocol:
+                              type: string
+                              enum: [tcp, udp]
+                              default: tcp
+                              description: "Port protocol"
+                            hostPort:
+                              type: integer
+                              description: "Port on host machine (if applicable)"
+                      
+                      dependencies:
+                        type: array
+                        description: "Service dependencies"
+                        items:
+                          type: object
+                          required:
+                            - name
+                          properties:
+                            name:
+                              type: string
+                              description: "Name of the dependent service"
+                            condition:
+                              type: string
+                              enum: [running, healthy]
+                              default: running
+                              description: "Condition for dependency"
+                      
+                      readyCheck:
+                        type: object
+                        description: "Service readiness check"
+                        properties:
+                          queryURL:
+                            type: string
+                            description: "URL to query for readiness"
+                          test:
+                            type: array
+                            items:
+                              type: string
+                            description: "Command to run for readiness test"
+                          interval:
+                            type: string
+                            description: "Interval between readiness checks"
+                          timeout:
+                            type: string
+                            description: "Timeout for readiness checks"
+                          retries:
+                            type: integer
+                            description: "Number of retries for readiness checks"
+                          startPeriod:
+                            type: string
+                            description: "Initial delay before starting readiness checks"
+                      
+                      labels:
+                        type: object
+                        description: "Service labels"
+                        additionalProperties:
+                          type: string
+                      
+                      useHostExecution:
+                        type: boolean
+                        description: "Whether to run the service on the host instead of in k8s"
+                        default: false
+                      
+                      volumes:
+                        type: array
+                        description: "Volume mounts for the service"
+                        items:
+                          type: object
+                          required:
+                            - name
+                            - mountPath
+                          properties:
+                            name:
+                              type: string
+                              description: "Volume name"
+                            mountPath:
+                              type: string
+                              description: "Path in container to mount volume"
+                            subPath:
+                              type: string
+                              description: "Sub-path within the volume to mount"
+                
+              # Status section for the operator to update
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  description: "Deployment phase (Pending, Running, Failed, etc.)"
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                serviceStatuses:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      ready:
+                        type: boolean
+                      status:
+                        type: string
+                      logs:
+                        type: string
+                        description: "Path to service logs"
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Status
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

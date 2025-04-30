@@ -27,6 +27,11 @@ var logLevelFlag string
 var bindExternal bool
 var withPrometheus bool
 var networkName string
+var k8sFlag bool
+var storageType string
+var storagePath string
+var storageClass string
+var storageSize string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -173,6 +178,11 @@ func main() {
 		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
 		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
+		recipeCmd.Flags().BoolVar(&k8sFlag, "k8s", false, "Generate Kubernetes manifests")
+		recipeCmd.Flags().StringVar(&storageType, "storage-type", "local-path", "Storage type for k8s: local-path or pvc")
+		recipeCmd.Flags().StringVar(&storagePath, "storage-path", "/data/builder-playground", "Path for local-path storage type")
+		recipeCmd.Flags().StringVar(&storageClass, "storage-class", "standard", "Storage class for pvc storage type")
+		recipeCmd.Flags().StringVar(&storageSize, "storage-size", "10Gi", "Storage size for pvc storage type")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -227,6 +237,24 @@ func runIt(recipe internal.Recipe) error {
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
+	}
+
+	// Generate Kubernetes manifests if --k8s flag is set
+	if k8sFlag {
+		storageParams := map[string]string{
+			"path":    storagePath,
+			"class":   storageClass,
+			"size":    storageSize,
+			"network": networkName,
+		}
+		
+		if err := internal.GenerateK8sManifest(svcManager, recipe.Name(), artifacts.Out, 
+			storageType, storageParams); err != nil {
+			return fmt.Errorf("failed to generate Kubernetes manifest: %w", err)
+		}
+		
+		outputDir, _ := artifacts.Out.AbsoluteDstPath()
+		fmt.Printf("Kubernetes manifest generated at %s/k8s-manifest.yaml\n", outputDir)
 	}
 
 	if withPrometheus {
