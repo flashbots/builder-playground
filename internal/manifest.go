@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
@@ -207,6 +208,21 @@ func (s *Manifest) Validate() error {
 			s.overrides[ss.Name] = bin
 		}
 	}
+
+	// validate that the mounts are correct
+	for _, ss := range s.services {
+		for _, fileNameRef := range ss.filesMapped {
+			fileLoc := filepath.Join(s.out.dst, fileNameRef)
+
+			if _, err := os.Stat(fileLoc); err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Errorf("service %s includes an unknown file %s does not exist", ss.Name, fileLoc)
+				}
+				return fmt.Errorf("failed to stat file %s: %w", fileLoc, err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -281,6 +297,9 @@ type service struct {
 
 	ports    []*Port
 	nodeRefs []*NodeRef
+
+	filesMapped   map[string]string
+	volumesMapped map[string]string
 
 	tag        string
 	image      string
@@ -408,6 +427,22 @@ func (s *service) WithArgs(args ...string) *service {
 		s.applyTemplate(arg)
 	}
 	s.args = append(s.args, args...)
+	return s
+}
+
+func (s *service) WithVolume(name string, localPath string) *service {
+	if s.volumesMapped == nil {
+		s.volumesMapped = make(map[string]string)
+	}
+	s.volumesMapped[localPath] = name
+	return s
+}
+
+func (s *service) WithArtifact(artifactName string, localPath string) *service {
+	if s.filesMapped == nil {
+		s.filesMapped = make(map[string]string)
+	}
+	s.filesMapped[localPath] = artifactName
 	return s
 }
 

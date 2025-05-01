@@ -433,6 +433,19 @@ func (o *output) Remove(path string) error {
 	return os.RemoveAll(filepath.Join(o.dst, path))
 }
 
+// CreateDir creates a new dir in the output folder and returns the
+// absolute file path
+func (o *output) CreateDir(path string) (string, error) {
+	absPath, err := filepath.Abs(filepath.Join(o.dst, path))
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(absPath, 0755); err != nil {
+		return "", fmt.Errorf("failed to create directory: %w", err)
+	}
+	return absPath, nil
+}
+
 func (o *output) CopyFile(src string, dst string) error {
 	// Open the source file
 	sourceFile, err := os.Open(src)

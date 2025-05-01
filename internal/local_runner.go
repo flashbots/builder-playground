@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -562,14 +563,34 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		labels[fmt.Sprintf("port.%s", port.Name)] = fmt.Sprintf("%d", port.Port)
 	}
 
+	// Use files mapped to figure out which files from the artifacts is using the service
+	volumes := map[string]string{
+		outputFolder: "/artifacts", // placeholder
+	}
+	for k, v := range s.filesMapped {
+		volumes[filepath.Join(outputFolder, v)] = k
+	}
+
+	// create the bind volumes
+	for localPath, volumeName := range s.volumesMapped {
+		volumeDirAbsPath, err := d.out.CreateDir(fmt.Sprintf("volume-%s-%s", s.Name, volumeName))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create volume dir %s: %w", volumeName, err)
+		}
+		volumes[volumeDirAbsPath] = localPath
+	}
+
+	volumesInLine := []string{}
+	for k, v := range volumes {
+		volumesInLine = append(volumesInLine, fmt.Sprintf("%s:%s", k, v))
+	}
+
 	// add the ports to the labels as well
 	service := map[string]interface{}{
 		"image":   imageName,
 		"command": args,
 		// Add volume mount for the output directory
-		"volumes": []string{
-			fmt.Sprintf("%s:/artifacts", outputFolder),
-		},
+		"volumes": volumesInLine,
 		// Add the ethereum network
 		"networks": []string{d.networkName},
 		"labels":   labels,
