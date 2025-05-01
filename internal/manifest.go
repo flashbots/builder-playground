@@ -438,7 +438,7 @@ func (s *service) WithVolume(name string, localPath string) *service {
 	return s
 }
 
-func (s *service) WithArtifact(artifactName string, localPath string) *service {
+func (s *service) WithArtifact(localPath string, artifactName string) *service {
 	if s.filesMapped == nil {
 		s.filesMapped = make(map[string]string)
 	}
