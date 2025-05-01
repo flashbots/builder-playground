@@ -191,8 +191,8 @@ func (o *OpGeth) Name() string {
 
 var _ ServiceReady = &OpGeth{}
 
-func (o *OpGeth) Ready(service *service) error {
-	enodeLine, err := service.logs.FindLog("enode://")
+func (o *OpGeth) Ready(instance *instance) error {
+	enodeLine, err := instance.logs.FindLog("enode://")
 	if err != nil {
 		return err
 	}
@@ -200,15 +200,15 @@ func (o *OpGeth) Ready(service *service) error {
 	parts := strings.Split(enodeLine, "enode://")[1]
 	enodeID := strings.Split(parts, "@")[0]
 
-	enode := fmt.Sprintf("enode://%s@127.0.0.1:%d?discport=0", enodeID, service.MustGetPort("rpc").HostPort)
+	enode := fmt.Sprintf("enode://%s@127.0.0.1:%d?discport=0", enodeID, instance.service.MustGetPort("rpc").HostPort)
 	o.Enode = enode
 	return nil
 }
 
 var _ ServiceWatchdog = &OpGeth{}
 
-func (o *OpGeth) Watchdog(out io.Writer, service *service, ctx context.Context) error {
-	gethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+func (o *OpGeth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+	gethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 	return watchChainHead(out, gethURL, 2*time.Second)
 }
 
@@ -296,8 +296,8 @@ func (r *RethEL) Name() string {
 
 var _ ServiceWatchdog = &RethEL{}
 
-func (r *RethEL) Watchdog(out io.Writer, service *service, ctx context.Context) error {
-	rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+func (r *RethEL) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 	return watchChainHead(out, rethURL, 12*time.Second)
 }
 
@@ -438,8 +438,8 @@ func (m *MevBoostRelay) Name() string {
 
 var _ ServiceWatchdog = &MevBoostRelay{}
 
-func (m *MevBoostRelay) Watchdog(out io.Writer, service *service, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+func (m *MevBoostRelay) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+	beaconNodeURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 
 	watchGroup := newWatchGroup()
 	watchGroup.watch(func() error {
@@ -567,7 +567,7 @@ func (o *OpReth) ReleaseArtifact() *release {
 
 var _ ServiceWatchdog = &OpReth{}
 
-func (p *OpReth) Watchdog(out io.Writer, service *service, ctx context.Context) error {
-	rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+func (p *OpReth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 	return watchChainHead(out, rethURL, 2*time.Second)
 }

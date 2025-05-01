@@ -57,6 +57,9 @@ type LocalRunner struct {
 	// signals whether we are running in interactive mode
 	interactive bool
 
+	// TODO: Merge instance with tasks
+	instances []*instance
+
 	// tasks tracks the status of each service
 	tasksMtx     sync.Mutex
 	tasks        map[string]*task
@@ -115,6 +118,49 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		overrides[k] = v
 	}
 
+	// Create the concrete instances to run
+	instances := []*instance{}
+	for _, service := range manifest.Services() {
+		log_output, err := out.LogOutput(service.Name)
+		if err != nil {
+			return nil, fmt.Errorf("error getting log output: %w", err)
+		}
+		logs := &serviceLogs{
+			logRef: log_output,
+			path:   log_output.Name(),
+		}
+		component := FindComponent(service.componentName)
+		if component == nil {
+			return nil, fmt.Errorf("component not found '%s'", service.componentName)
+		}
+		instance := &instance{
+			service:   service,
+			logs:      logs,
+			component: component,
+		}
+		instances = append(instances, instance)
+	}
+
+	// download any local release artifacts for the services that require them
+	// TODO: it feels a bit weird to have all this logic on the new command. We should split it later on.
+	for _, instance := range instances {
+		ss := instance.service
+		if ss.labels[useHostExecutionLabel] == "true" {
+			// If the service wants to run on the host, it must implement the ReleaseService interface
+			// which provides functions to download the release artifact.
+			releaseService, ok := instance.component.(ReleaseService)
+			if !ok {
+				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
+			}
+			releaseArtifact := releaseService.ReleaseArtifact()
+			bin, err := DownloadRelease(out.homeDir, releaseArtifact)
+			if err != nil {
+				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
+			}
+			overrides[ss.Name] = bin
+		}
+	}
+
 	// Now, the override can either be one of two things (we are overloading the override map):
 	// - docker image: In that case, change the manifest and remove from override map
 	// - a path to an executable: In that case, we need to run it on the host machine
@@ -162,6 +208,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		bindHostPortsLocally: bindHostPortsLocally,
 		sessionID:            uuid.New().String(),
 		networkName:          networkName,
+		instances:            instances,
 	}
 
 	if interactive {
@@ -174,6 +221,10 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	}
 
 	return d, nil
+}
+
+func (d *LocalRunner) Instances() []*instance {
+	return d.instances
 }
 
 func (d *LocalRunner) printStatus() {
@@ -884,15 +935,8 @@ func (d *LocalRunner) Run() error {
 	}
 
 	// generate the output log file for each service so that it is available after Run is done
-	for _, svc := range d.manifest.services {
-		log_output, err := d.out.LogOutput(svc.Name)
-		if err != nil {
-			return fmt.Errorf("error getting log output: %w", err)
-		}
-		svc.logs = &serviceLogs{
-			path: log_output.Name(),
-		}
-		d.tasks[svc.Name].logs = log_output
+	for _, instance := range d.instances {
+		d.tasks[instance.service.Name].logs = instance.logs.logRef
 	}
 
 	// First start the services that are running in docker-compose

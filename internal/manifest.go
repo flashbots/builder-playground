@@ -1,9 +1,7 @@
 package internal
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,47 +79,7 @@ type Service interface {
 }
 
 type ServiceReady interface {
-	Ready(ouservice *service) error
-}
-
-func (m *Manifest) CompleteReady() error {
-	for _, s := range m.services {
-		if readyFn, ok := s.component.(ServiceReady); ok {
-			if err := readyFn.Ready(s); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-type ServiceWatchdog interface {
-	Watchdog(out io.Writer, service *service, ctx context.Context) error
-}
-
-func RunWatchdog(manifest *Manifest) error {
-	watchdogErr := make(chan error, len(manifest.Services()))
-
-	output, err := manifest.out.LogOutput("watchdog")
-	if err != nil {
-		return fmt.Errorf("failed to create log output: %w", err)
-	}
-
-	for _, s := range manifest.Services() {
-		if watchdogFn, ok := s.component.(ServiceWatchdog); ok {
-			go func() {
-				if err := watchdogFn.Watchdog(output, s, context.Background()); err != nil {
-					watchdogErr <- fmt.Errorf("service %s watchdog failed: %w", s.Name, err)
-				}
-			}()
-		}
-	}
-
-	// If any of the watchdogs fail, we return the error
-	if err := <-watchdogErr; err != nil {
-		return fmt.Errorf("failed to run watchdog: %w", err)
-	}
-	return nil
+	Ready(instance *instance) error
 }
 
 func (s *Manifest) Services() []*service {
@@ -135,7 +93,7 @@ type ReleaseService interface {
 
 func (s *Manifest) AddService(name string, srv Service) {
 	service := s.NewService(name)
-	service.component = srv
+	service.componentName = srv.Name()
 	srv.Run(service, s.ctx)
 
 	s.services = append(s.services, service)
@@ -191,24 +149,6 @@ func (s *Manifest) Validate() error {
 		}
 	}
 
-	// download any local release artifacts for the services that require them
-	for _, ss := range s.services {
-		if ss.labels[useHostExecutionLabel] == "true" {
-			// If the service wants to run on the host, it must implement the ReleaseService interface
-			// which provides functions to download the release artifact.
-			releaseService, ok := ss.component.(ReleaseService)
-			if !ok {
-				return fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
-			}
-			releaseArtifact := releaseService.ReleaseArtifact()
-			bin, err := DownloadRelease(s.out.homeDir, releaseArtifact)
-			if err != nil {
-				return fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
-			}
-			s.overrides[ss.Name] = bin
-		}
-	}
-
 	// validate that the mounts are correct
 	for _, ss := range s.services {
 		for _, fileNameRef := range ss.filesMapped {
@@ -256,7 +196,8 @@ type NodeRef struct {
 
 // serviceLogs is a service to access the logs of the running service
 type serviceLogs struct {
-	path string
+	logRef *os.File
+	path   string
 }
 
 func (s *serviceLogs) readLogs() (string, error) {
@@ -301,9 +242,15 @@ type service struct {
 	filesMapped   map[string]string
 	volumesMapped map[string]string
 
+	componentName string
+
 	tag        string
 	image      string
 	entrypoint string
+}
+
+type instance struct {
+	service *service
 
 	logs      *serviceLogs
 	component Service
@@ -438,7 +385,7 @@ func (s *service) WithVolume(name string, localPath string) *service {
 	return s
 }
 
-func (s *service) WithArtifact(artifactName string, localPath string) *service {
+func (s *service) WithArtifact(localPath string, artifactName string) *service {
 	if s.filesMapped == nil {
 		s.filesMapped = make(map[string]string)
 	}
