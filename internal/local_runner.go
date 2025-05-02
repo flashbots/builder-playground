@@ -457,19 +457,6 @@ func (d *LocalRunner) getService(name string) *Service {
 func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, error) {
 	var input map[string]interface{}
 
-	// For {{.Dir}}:
-	// - Service runs on host: bind to the output folder
-	// - Service runs inside docker: bind to /artifacts
-	if d.isHostService(s.Name) {
-		input = map[string]interface{}{
-			"Dir": d.out.dst,
-		}
-	} else {
-		input = map[string]interface{}{
-			"Dir": "/artifacts",
-		}
-	}
-
 	resolvePort := func(name string, defaultPort int, protocol string) int {
 		// For {{Port "name" "defaultPort"}}:
 		// - Service runs on host: return the host port
@@ -952,8 +939,9 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	srv := manifest.NewService("prometheus").
 		WithImage("prom/prometheus").
 		WithTag("latest").
-		WithArgs("--config.file", "{{.Dir}}/prometheus.yaml").
-		WithPort("metrics", 9090, "tcp")
+		WithArgs("--config.file", "/data/prometheus.yaml").
+		WithPort("metrics", 9090, "tcp").
+		WithArtifact("/data/prometheus.yml", "prometheus.yaml")
 	manifest.services = append(manifest.services, srv)
 
 	return nil
