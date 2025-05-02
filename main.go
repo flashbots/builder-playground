@@ -291,7 +291,7 @@ func runIt(recipe internal.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
-	if err := svcManager.CompleteReady(); err != nil {
+	if err := internal.CompleteReady(dockerRunner.Instances()); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to complete ready: %w", err)
 	}
@@ -308,7 +308,7 @@ func runIt(recipe internal.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			if err := internal.RunWatchdog(svcManager); err != nil {
+			if err := internal.RunWatchdog(artifacts.Out, dockerRunner.Instances()); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
 		}()
