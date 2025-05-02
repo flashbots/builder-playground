@@ -22,11 +22,11 @@ func (r *RollupBoost) Run(service *service, ctx *ExContext) {
 		WithTag("0.4rc1").
 		WithArgs(
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
-			"--l2-jwt-path", "{{.Dir}}/jwtsecret",
+			"--l2-jwt-path", "/data/jwtsecret",
 			"--l2-url", Connect(r.ELNode, "authrpc"),
-			"--builder-jwt-path", "{{.Dir}}/jwtsecret",
+			"--builder-jwt-path", "/data/jwtsecret",
 			"--builder-url", r.Builder,
-		)
+		).WithArtifact("/data/jwtsecret", "jwtsecret")
 }
 
 func (r *RollupBoost) Name() string {
@@ -82,12 +82,12 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 			"--l1.epoch-poll-interval", "12s",
 			"--l1.http-poll-interval", "6s",
 			"--l2", Connect(o.L2Node, "authrpc"),
-			"--l2.jwt-secret", "{{.Dir}}/jwtsecret",
+			"--l2.jwt-secret", "/data/jwtsecret",
 			"--sequencer.enabled",
 			"--sequencer.l1-confs", "0",
 			"--verifier.l1-confs", "0",
 			"--p2p.sequencer.key", "8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
-			"--rollup.config", "{{.Dir}}/rollup.json",
+			"--rollup.config", "/data/rollup.json",
 			"--rpc.addr", "0.0.0.0",
 			"--rpc.port", `{{Port "http" 8549}}`,
 			"--p2p.listen.ip", "0.0.0.0",
@@ -100,8 +100,11 @@ func (o *OpNode) Run(service *service, ctx *ExContext) {
 			"--metrics.port", `{{Port "metrics" 7300}}`,
 			"--pprof.enabled",
 			"--rpc.enable-admin",
-			"--safedb.path", "{{.Dir}}/db",
-		)
+			"--safedb.path", "/data_db",
+		).
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithArtifact("/data/rollup.json", "rollup.json").
+		WithVolume("data", "/data_db")
 }
 
 func (o *OpNode) Name() string {
@@ -135,7 +138,7 @@ func logLevelToGethVerbosity(logLevel LogLevel) string {
 func (o *OpGeth) Run(service *service, ctx *ExContext) {
 	var nodeKeyFlag string
 	if o.UseDeterministicP2PKey {
-		nodeKeyFlag = "--nodekey {{.Dir}}/deterministic_p2p_key.txt "
+		nodeKeyFlag = "--nodekey /data/deterministic_p2p_key.txt "
 	}
 
 	service.
@@ -145,9 +148,9 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 		WithLabel("metrics_path", "/debug/metrics/prometheus").
 		WithArgs(
 			"-c",
-			"geth init --datadir {{.Dir}}/data_opgeth --state.scheme hash {{.Dir}}/l2-genesis.json && "+
+			"geth init --datadir /data_opgeth --state.scheme hash /data/l2-genesis.json && "+
 				"exec geth "+
-				"--datadir {{.Dir}}/data_opgeth "+
+				"--datadir /data_opgeth "+
 				"--verbosity "+logLevelToGethVerbosity(ctx.LogLevel)+" "+
 				"--http "+
 				"--http.corsdomain \"*\" "+
@@ -167,7 +170,7 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 				"--authrpc.addr 0.0.0.0 "+
 				"--authrpc.port "+`{{Port "authrpc" 8551}} `+
 				"--authrpc.vhosts \"*\" "+
-				"--authrpc.jwtsecret {{.Dir}}/jwtsecret "+
+				"--authrpc.jwtsecret /data/jwtsecret "+
 				"--gcmode archive "+
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
@@ -175,7 +178,11 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
-		)
+		).
+		WithVolume("data", "/data_opgeth").
+		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithArtifact("/data/deterministic_p2p_key.txt", "deterministic_p2p_key.txt")
 }
 
 func (o *OpGeth) Name() string {
@@ -253,10 +260,10 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",
-			"--chain", "{{.Dir}}/genesis.json",
-			"--datadir", "{{.Dir}}/data_reth",
+			"--chain", "/data/genesis.json",
+			"--datadir", "/data_reth",
 			"--color", "never",
-			"--ipcpath", "{{.Dir}}/reth.ipc",
+			"--ipcpath", "/data_reth/reth.ipc",
 			"--addr", "127.0.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
@@ -267,12 +274,15 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--http.port", `{{Port "http" 8545}}`,
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
-			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"--authrpc.jwtsecret", "/data/jwtsecret",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
 			logLevelToRethVerbosity(ctx.LogLevel),
-		)
+		).
+		WithArtifact("/data/genesis.json", "genesis.json").
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithVolume("data", "/data_reth")
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -303,8 +313,8 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 		WithEntrypoint("lighthouse").
 		WithArgs(
 			"bn",
-			"--datadir", "{{.Dir}}/data_beacon_node",
-			"--testnet-dir", "{{.Dir}}/testnet",
+			"--datadir", "/data_beacon",
+			"--testnet-dir", "/data/testnet-dir",
 			"--enable-private-discovery",
 			"--disable-peer-scoring",
 			"--staking",
@@ -321,11 +331,14 @@ func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
 			"--disable-packet-filter",
 			"--target-peers", "0",
 			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
-			"--execution-jwt", "{{.Dir}}/jwtsecret",
+			"--execution-jwt", "/data/jwtsecret",
 			"--always-prepare-payload",
 			"--prepare-payload-lookahead", "8000",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 		).
+		WithArtifact("/data/testnet-dir", "testnet").
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithVolume("data", "/data_beacon").
 		WithReady(ReadyCheck{
 			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
 			Interval:    1 * time.Second,
@@ -359,14 +372,16 @@ func (l *LighthouseValidator) Run(service *service, ctx *ExContext) {
 		WithEntrypoint("lighthouse").
 		WithArgs(
 			"vc",
-			"--datadir", "{{.Dir}}/data_validator",
-			"--testnet-dir", "{{.Dir}}/testnet",
+			"--datadir", "/data/validator",
+			"--testnet-dir", "/data/testnet-dir",
 			"--init-slashing-protection",
 			"--beacon-nodes", Connect(l.BeaconNode, "http"),
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 			"--builder-proposals",
 			"--prefer-builder-proposals",
-		)
+		).
+		WithArtifact("/data/validator", "data_validator").
+		WithArtifact("/data/testnet-dir", "testnet")
 }
 
 func (l *LighthouseValidator) Name() string {
@@ -512,16 +527,19 @@ func (o *OpReth) Run(service *service, ctx *ExContext) {
 			"node",
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
-			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"--authrpc.jwtsecret", "/data/jwtsecret",
 			"--http",
 			"--http.addr", "0.0.0.0",
 			"--http.port", `{{Port "http" 8545}}`,
-			"--chain", "{{.Dir}}/l2-genesis.json",
-			"--datadir", "{{.Dir}}/data_op_reth",
+			"--chain", "/data/l2-genesis.json",
+			"--datadir", "/data_op_reth",
 			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
-			"--port", `{{Port "rpc" 30303}}`)
+			"--port", `{{Port "rpc" 30303}}`).
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
+		WithVolume("data", "/data_op_reth")
 }
 
 func (o *OpReth) Name() string {
