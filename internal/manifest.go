@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -555,4 +556,24 @@ func (m *Manifest) SaveJson() error {
 		"services": m.services,
 	}
 	return m.out.WriteFile("manifest.json", format)
+}
+
+func ReadManifest(outputDir string) (*Manifest, error) {
+	data, err := os.ReadFile(filepath.Join(outputDir, "manifest.json"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read manifest: %w", err)
+	}
+
+	var manifestFile struct {
+		Services []*Service `json:"services"` // Only doing this right now because Manifest has more stuff than services. TODO
+	}
+	if err := json.Unmarshal(data, &manifestFile); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
+	}
+
+	manifest := &Manifest{}
+	manifest.services = manifestFile.Services
+	manifest.out = &output{dst: outputDir}
+
+	return manifest, nil
 }

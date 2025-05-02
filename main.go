@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ferranbt/builder-playground/internal"
+	"github.com/ferranbt/builder-playground/internal/k8s"
 	"github.com/spf13/cobra"
 )
 
@@ -185,6 +186,7 @@ func main() {
 	rootCmd.AddCommand(artifactsCmd)
 	rootCmd.AddCommand(artifactsAllCmd)
 	rootCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(k8s.K8sCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
