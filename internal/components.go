@@ -16,7 +16,7 @@ type RollupBoost struct {
 	Builder string
 }
 
-func (r *RollupBoost) Run(service *service, ctx *ExContext) {
+func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("0.4rc1").
@@ -40,7 +40,7 @@ type OpBatcher struct {
 	MaxChannelDuration uint64
 }
 
-func (o *OpBatcher) Run(service *service, ctx *ExContext) {
+func (o *OpBatcher) Run(service *Service, ctx *ExContext) {
 	if o.MaxChannelDuration == 0 {
 		o.MaxChannelDuration = 2
 	}
@@ -70,7 +70,7 @@ type OpNode struct {
 	L2Node   string
 }
 
-func (o *OpNode) Run(service *service, ctx *ExContext) {
+func (o *OpNode) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.13.0-rc.1").
@@ -135,7 +135,7 @@ func logLevelToGethVerbosity(logLevel LogLevel) string {
 	}
 }
 
-func (o *OpGeth) Run(service *service, ctx *ExContext) {
+func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 	var nodeKeyFlag string
 	if o.UseDeterministicP2PKey {
 		nodeKeyFlag = "--nodekey /data/deterministic_p2p_key.txt "
@@ -252,7 +252,7 @@ func logLevelToRethVerbosity(logLevel LogLevel) string {
 	}
 }
 
-func (r *RethEL) Run(svc *service, ctx *ExContext) {
+func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 	// start the reth el client
 	svc.
 		WithImage("ghcr.io/paradigmxyz/reth").
@@ -306,7 +306,7 @@ type LighthouseBeaconNode struct {
 	MevBoostNode  string
 }
 
-func (l *LighthouseBeaconNode) Run(svc *service, ctx *ExContext) {
+func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 	svc.
 		WithImage("sigp/lighthouse").
 		WithTag("v7.0.0-beta.0").
@@ -364,7 +364,7 @@ type LighthouseValidator struct {
 	BeaconNode string
 }
 
-func (l *LighthouseValidator) Run(service *service, ctx *ExContext) {
+func (l *LighthouseValidator) Run(service *Service, ctx *ExContext) {
 	// start validator client
 	service.
 		WithImage("sigp/lighthouse").
@@ -393,7 +393,7 @@ type ClProxy struct {
 	SecondaryBuilder string
 }
 
-func (c *ClProxy) Run(service *service, ctx *ExContext) {
+func (c *ClProxy) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
@@ -414,7 +414,7 @@ type MevBoostRelay struct {
 	ValidationServer string
 }
 
-func (m *MevBoostRelay) Run(service *service, ctx *ExContext) {
+func (m *MevBoostRelay) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
@@ -455,7 +455,7 @@ func (m *MevBoostRelay) Watchdog(out io.Writer, instance *instance, ctx context.
 type BuilderHubPostgres struct {
 }
 
-func (b *BuilderHubPostgres) Run(service *service, ctx *ExContext) {
+func (b *BuilderHubPostgres) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub-db").
 		WithTag("latest").
@@ -480,7 +480,7 @@ type BuilderHub struct {
 	postgres string
 }
 
-func (b *BuilderHub) Run(service *service, ctx *ExContext) {
+func (b *BuilderHub) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("latest").
@@ -501,7 +501,7 @@ type BuilderHubMockProxy struct {
 	TargetService string
 }
 
-func (b *BuilderHubMockProxy) Run(service *service, ctx *ExContext) {
+func (b *BuilderHubMockProxy) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
 		WithTag("latest").
@@ -519,7 +519,7 @@ func (b *BuilderHubMockProxy) Name() string {
 type OpReth struct {
 }
 
-func (o *OpReth) Run(service *service, ctx *ExContext) {
+func (o *OpReth) Run(service *Service, ctx *ExContext) {
 	service.WithImage("ghcr.io/paradigmxyz/op-reth").
 		WithTag("nightly").
 		WithEntrypoint("op-reth").

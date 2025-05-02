@@ -1,8 +1,8 @@
 package internal
 
-var Components = []Service{}
+var Components = []ServiceGen{}
 
-func register(component Service) {
+func register(component ServiceGen) {
 	Components = append(Components, component)
 }
 
@@ -22,7 +22,7 @@ func init() {
 	register(&BuilderHubMockProxy{})
 }
 
-func FindComponent(name string) Service {
+func FindComponent(name string) ServiceGen {
 	for _, component := range Components {
 		if component.Name() == name {
 			return component

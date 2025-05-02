@@ -27,7 +27,7 @@ type Manifest struct {
 	ctx *ExContext
 
 	// list of services
-	services []*service
+	services []*Service
 
 	// overrides is a map of service name to the path of the executable to run
 	// on the host machine instead of a container.
@@ -73,8 +73,8 @@ type ExContext struct {
 	LogLevel LogLevel
 }
 
-type Service interface {
-	Run(service *service, ctx *ExContext)
+type ServiceGen interface {
+	Run(service *Service, ctx *ExContext)
 	Name() string
 }
 
@@ -82,7 +82,7 @@ type ServiceReady interface {
 	Ready(instance *instance) error
 }
 
-func (s *Manifest) Services() []*service {
+func (s *Manifest) Services() []*Service {
 	return s.services
 }
 
@@ -91,15 +91,15 @@ type ReleaseService interface {
 	ReleaseArtifact() *release
 }
 
-func (s *Manifest) AddService(name string, srv Service) {
+func (s *Manifest) AddService(name string, srv ServiceGen) {
 	service := s.NewService(name)
-	service.componentName = srv.Name()
+	service.ComponentName = srv.Name()
 	srv.Run(service, s.ctx)
 
 	s.services = append(s.services, service)
 }
 
-func (s *Manifest) MustGetService(name string) *service {
+func (s *Manifest) MustGetService(name string) *Service {
 	service, ok := s.GetService(name)
 	if !ok {
 		panic(fmt.Sprintf("service %s not found", name))
@@ -107,7 +107,7 @@ func (s *Manifest) MustGetService(name string) *service {
 	return service
 }
 
-func (s *Manifest) GetService(name string) (*service, bool) {
+func (s *Manifest) GetService(name string) (*Service, bool) {
 	for _, ss := range s.services {
 		if ss.Name == name {
 			return ss, true
@@ -122,7 +122,7 @@ func (s *Manifest) GetService(name string) (*service, bool) {
 func (s *Manifest) Validate() error {
 	for _, ss := range s.services {
 		// validate node port references
-		for _, nodeRef := range ss.nodeRefs {
+		for _, nodeRef := range ss.NodeRefs {
 			targetService, ok := s.GetService(nodeRef.Service)
 			if !ok {
 				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.Name, nodeRef.Service)
@@ -134,7 +134,7 @@ func (s *Manifest) Validate() error {
 		}
 
 		// validate depends_on statements
-		for _, dep := range ss.dependsOn {
+		for _, dep := range ss.DependsOn {
 			service, ok := s.GetService(dep.Name)
 			if !ok {
 				return fmt.Errorf("service %s depends on service %s, but it is not defined", ss.Name, dep.Name)
@@ -151,7 +151,7 @@ func (s *Manifest) Validate() error {
 
 	// validate that the mounts are correct
 	for _, ss := range s.services {
-		for _, fileNameRef := range ss.filesMapped {
+		for _, fileNameRef := range ss.FilesMapped {
 			fileLoc := filepath.Join(s.out.dst, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
@@ -165,7 +165,7 @@ func (s *Manifest) Validate() error {
 
 	// validate that the mounts are correct
 	for _, ss := range s.services {
-		for _, fileNameRef := range ss.filesMapped {
+		for _, fileNameRef := range ss.FilesMapped {
 			fileLoc := filepath.Join(s.out.dst, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
@@ -237,37 +237,37 @@ func (s *serviceLogs) FindLog(pattern string) (string, error) {
 	return "", fmt.Errorf("log pattern %s not found", pattern)
 }
 
-type service struct {
-	Name string
-	args []string
+type Service struct {
+	Name string   `json:"name"`
+	Args []string `json:"args"`
 
-	labels map[string]string
+	Labels map[string]string `json:"labels,omitempty"`
 
 	// list of environment variables to set for the service
-	env map[string]string
+	Env map[string]string `json:"env,omitempty"`
 
 	readyCheck *ReadyCheck
 
-	dependsOn []DependsOn
+	DependsOn []DependsOn `json:"depends_on,omitempty"`
 
-	ports    []*Port
-	nodeRefs []*NodeRef
+	Ports    []*Port    `json:"ports,omitempty"`
+	NodeRefs []*NodeRef `json:"node_refs,omitempty"`
 
-	filesMapped   map[string]string
-	volumesMapped map[string]string
+	FilesMapped   map[string]string `json:"files_mapped,omitempty"`
+	VolumesMapped map[string]string `json:"volumes_mapped,omitempty"`
 
-	componentName string
+	ComponentName string `json:"component_name,omitempty"`
 
-	tag        string
-	image      string
-	entrypoint string
+	Tag        string `json:"tag,omitempty"`
+	Image      string `json:"image,omitempty"`
+	Entrypoint string `json:"entrypoint,omitempty"`
 }
 
 type instance struct {
-	service *service
+	service *Service
 
 	logs      *serviceLogs
-	component Service
+	component ServiceGen
 }
 
 type DependsOnCondition string
@@ -282,11 +282,11 @@ type DependsOn struct {
 	Condition DependsOnCondition
 }
 
-func (s *service) Ports() []*Port {
-	return s.ports
+func (s *Service) GetPorts() []*Port {
+	return s.Ports
 }
 
-func (s *service) MustGetPort(name string) *Port {
+func (s *Service) MustGetPort(name string) *Port {
 	port, ok := s.GetPort(name)
 	if !ok {
 		panic(fmt.Sprintf("port %s not found", name))
@@ -294,8 +294,8 @@ func (s *service) MustGetPort(name string) *Port {
 	return port
 }
 
-func (s *service) GetPort(name string) (*Port, bool) {
-	for _, p := range s.ports {
+func (s *Service) GetPort(name string) (*Port, bool) {
+	for _, p := range s.Ports {
 		if p.Name == name {
 			return p, true
 		}
@@ -303,48 +303,48 @@ func (s *service) GetPort(name string) (*Port, bool) {
 	return nil, false
 }
 
-func (s *service) UseHostExecution() *service {
+func (s *Service) UseHostExecution() *Service {
 	s.WithLabel(useHostExecutionLabel, "true")
 	return s
 }
 
-func (s *service) WithEnv(key, value string) *service {
-	if s.env == nil {
-		s.env = make(map[string]string)
+func (s *Service) WithEnv(key, value string) *Service {
+	if s.Env == nil {
+		s.Env = make(map[string]string)
 	}
 	s.applyTemplate(value)
-	s.env[key] = value
+	s.Env[key] = value
 	return s
 }
 
-func (s *service) WithLabel(key, value string) *service {
-	if s.labels == nil {
-		s.labels = make(map[string]string)
+func (s *Service) WithLabel(key, value string) *Service {
+	if s.Labels == nil {
+		s.Labels = make(map[string]string)
 	}
-	s.labels[key] = value
+	s.Labels[key] = value
 	return s
 }
 
-func (s *Manifest) NewService(name string) *service {
-	return &service{Name: name, args: []string{}, ports: []*Port{}, nodeRefs: []*NodeRef{}}
+func (s *Manifest) NewService(name string) *Service {
+	return &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
 }
 
-func (s *service) WithImage(image string) *service {
-	s.image = image
+func (s *Service) WithImage(image string) *Service {
+	s.Image = image
 	return s
 }
 
-func (s *service) WithEntrypoint(entrypoint string) *service {
-	s.entrypoint = entrypoint
+func (s *Service) WithEntrypoint(entrypoint string) *Service {
+	s.Entrypoint = entrypoint
 	return s
 }
 
-func (s *service) WithTag(tag string) *service {
-	s.tag = tag
+func (s *Service) WithTag(tag string) *Service {
+	s.Tag = tag
 	return s
 }
 
-func (s *service) WithPort(name string, portNumber int, protocolVar ...string) *service {
+func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *Service {
 	protocol := ProtocolTCP
 	if len(protocolVar) > 0 {
 		if protocolVar[0] != ProtocolTCP && protocolVar[0] != ProtocolUDP {
@@ -355,7 +355,7 @@ func (s *service) WithPort(name string, portNumber int, protocolVar ...string) *
 
 	// add the port if not already present with the same name.
 	// if preset with the same name, they must have same port number
-	for _, p := range s.ports {
+	for _, p := range s.Ports {
 		if p.Name == name {
 			if p.Port != portNumber {
 				panic(fmt.Sprintf("port %s already defined with different port number", name))
@@ -367,11 +367,11 @@ func (s *service) WithPort(name string, portNumber int, protocolVar ...string) *
 			return s
 		}
 	}
-	s.ports = append(s.ports, &Port{Name: name, Port: portNumber, Protocol: protocol})
+	s.Ports = append(s.Ports, &Port{Name: name, Port: portNumber, Protocol: protocol})
 	return s
 }
 
-func (s *service) applyTemplate(arg string) {
+func (s *Service) applyTemplate(arg string) {
 	var port []Port
 	var nodeRef []NodeRef
 	_, port, nodeRef = applyTemplate(arg)
@@ -379,35 +379,35 @@ func (s *service) applyTemplate(arg string) {
 		s.WithPort(p.Name, p.Port, p.Protocol)
 	}
 	for _, n := range nodeRef {
-		s.nodeRefs = append(s.nodeRefs, &n)
+		s.NodeRefs = append(s.NodeRefs, &n)
 	}
 }
 
-func (s *service) WithArgs(args ...string) *service {
+func (s *Service) WithArgs(args ...string) *Service {
 	for _, arg := range args {
 		s.applyTemplate(arg)
 	}
-	s.args = append(s.args, args...)
+	s.Args = append(s.Args, args...)
 	return s
 }
 
-func (s *service) WithVolume(name string, localPath string) *service {
-	if s.volumesMapped == nil {
-		s.volumesMapped = make(map[string]string)
+func (s *Service) WithVolume(name string, localPath string) *Service {
+	if s.VolumesMapped == nil {
+		s.VolumesMapped = make(map[string]string)
 	}
-	s.volumesMapped[localPath] = name
+	s.VolumesMapped[localPath] = name
 	return s
 }
 
-func (s *service) WithArtifact(localPath string, artifactName string) *service {
-	if s.filesMapped == nil {
-		s.filesMapped = make(map[string]string)
+func (s *Service) WithArtifact(localPath string, artifactName string) *Service {
+	if s.FilesMapped == nil {
+		s.FilesMapped = make(map[string]string)
 	}
-	s.filesMapped[localPath] = artifactName
+	s.FilesMapped[localPath] = artifactName
 	return s
 }
 
-func (s *service) WithReady(check ReadyCheck) *service {
+func (s *Service) WithReady(check ReadyCheck) *Service {
 	s.readyCheck = &check
 	return s
 }
@@ -421,13 +421,13 @@ type ReadyCheck struct {
 	Retries     int
 }
 
-func (s *service) DependsOnHealthy(name string) *service {
-	s.dependsOn = append(s.dependsOn, DependsOn{Name: name, Condition: DependsOnConditionHealthy})
+func (s *Service) DependsOnHealthy(name string) *Service {
+	s.DependsOn = append(s.DependsOn, DependsOn{Name: name, Condition: DependsOnConditionHealthy})
 	return s
 }
 
-func (s *service) DependsOnRunning(name string) *service {
-	s.dependsOn = append(s.dependsOn, DependsOn{Name: name, Condition: DependsOnConditionRunning})
+func (s *Service) DependsOnRunning(name string) *Service {
+	s.DependsOn = append(s.DependsOn, DependsOn{Name: name, Condition: DependsOnConditionRunning})
 	return s
 }
 
@@ -494,7 +494,7 @@ func (s *Manifest) GenerateDotGraph() string {
 	b.WriteString("  node [shape=record];\n\n")
 
 	// Create a map of services for easy lookup
-	servicesMap := make(map[string]*service)
+	servicesMap := make(map[string]*Service)
 	for _, ss := range s.services {
 		servicesMap[ss.Name] = ss
 	}
@@ -502,7 +502,7 @@ func (s *Manifest) GenerateDotGraph() string {
 	// Add nodes (services) with their ports as labels
 	for _, ss := range s.services {
 		var ports []string
-		for _, p := range ss.ports {
+		for _, p := range ss.Ports {
 			ports = append(ports, fmt.Sprintf("%s:%d", p.Name, p.Port))
 		}
 		portLabel := ""
@@ -519,7 +519,7 @@ func (s *Manifest) GenerateDotGraph() string {
 	// Add edges (connections between services)
 	for _, ss := range s.services {
 		sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
-		for _, ref := range ss.nodeRefs {
+		for _, ref := range ss.NodeRefs {
 			targetNode := strings.ReplaceAll(ref.Service, "-", "_")
 			b.WriteString(fmt.Sprintf("  %s -> %s [label=\"%s\"];\n",
 				sourceNode,
@@ -531,7 +531,7 @@ func (s *Manifest) GenerateDotGraph() string {
 
 	// Add edges for dependws_on
 	for _, ss := range s.services {
-		for _, dep := range ss.dependsOn {
+		for _, dep := range ss.DependsOn {
 			sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
 			targetNode := strings.ReplaceAll(dep.Name, "-", "_")
 			b.WriteString(fmt.Sprintf("  %s -> %s [style=dashed, color=gray, constraint=true, label=\"depends_on\"];\n",
@@ -548,4 +548,11 @@ func (s *Manifest) GenerateDotGraph() string {
 func saveDotGraph(svcManager *Manifest, out *output) error {
 	dotGraph := svcManager.GenerateDotGraph()
 	return out.WriteFile("services.dot", dotGraph)
+}
+
+func (m *Manifest) SaveJson() error {
+	format := map[string]interface{}{
+		"services": m.services,
+	}
+	return m.out.WriteFile("manifest.json", format)
 }
