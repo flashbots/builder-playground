@@ -229,6 +229,11 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
+	// save the manifest.json file
+	if err := svcManager.SaveJson(); err != nil {
+		return fmt.Errorf("failed to save manifest: %w", err)
+	}
+
 	if withPrometheus {
 		if err := internal.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
 			return fmt.Errorf("failed to create prometheus services: %w", err)
@@ -269,7 +274,7 @@ func runIt(recipe internal.Recipe) error {
 		// print services info
 		fmt.Printf("\n========= Services started =========\n")
 		for _, ss := range svcManager.Services() {
-			ports := ss.Ports()
+			ports := ss.GetPorts()
 			sort.Slice(ports, func(i, j int) bool {
 				return ports[i].Name < ports[j].Name
 			})

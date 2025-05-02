@@ -129,9 +129,9 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 			logRef: log_output,
 			path:   log_output.Name(),
 		}
-		component := FindComponent(service.componentName)
+		component := FindComponent(service.ComponentName)
 		if component == nil {
-			return nil, fmt.Errorf("component not found '%s'", service.componentName)
+			return nil, fmt.Errorf("component not found '%s'", service.ComponentName)
 		}
 		instance := &instance{
 			service:   service,
@@ -145,7 +145,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	// TODO: it feels a bit weird to have all this logic on the new command. We should split it later on.
 	for _, instance := range instances {
 		ss := instance.service
-		if ss.labels[useHostExecutionLabel] == "true" {
+		if ss.Labels[useHostExecutionLabel] == "true" {
 			// If the service wants to run on the host, it must implement the ReleaseService interface
 			// which provides functions to download the release artifact.
 			releaseService, ok := instance.component.(ReleaseService)
@@ -176,8 +176,8 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 			}
 
 			srv := manifest.MustGetService(k)
-			srv.image = parts[0]
-			srv.tag = parts[1]
+			srv.Image = parts[0]
+			srv.Tag = parts[1]
 
 			delete(overrides, k)
 			continue
@@ -443,7 +443,7 @@ func (d *LocalRunner) reservePort(startPort int, protocol string) int {
 	panic("BUG: could not reserve a port")
 }
 
-func (d *LocalRunner) getService(name string) *service {
+func (d *LocalRunner) getService(name string) *Service {
 	for _, svc := range d.manifest.services {
 		if svc.Name == name {
 			return svc
@@ -454,7 +454,7 @@ func (d *LocalRunner) getService(name string) *service {
 
 // applyTemplate resolves the templates from the manifest (Dir, Port, Connect) into
 // the actual values for this specific docker execution.
-func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, error) {
+func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, error) {
 	var input map[string]interface{}
 
 	// For {{.Dir}}:
@@ -535,7 +535,7 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 
 	// apply the templates to the arguments
 	var argsResult []string
-	for _, arg := range s.args {
+	for _, arg := range s.Args {
 		newArg, err := runTemplate(arg)
 		if err != nil {
 			return nil, nil, err
@@ -545,7 +545,7 @@ func (d *LocalRunner) applyTemplate(s *service) ([]string, map[string]string, er
 
 	// apply the templates to the environment variables
 	envs := map[string]string{}
-	for k, v := range s.env {
+	for k, v := range s.Env {
 		newV, err := runTemplate(v)
 		if err != nil {
 			return nil, nil, err
@@ -577,7 +577,7 @@ func (d *LocalRunner) validateImageExists(image string) error {
 	return fmt.Errorf("image %s not found: %w", image)
 }
 
-func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}, error) {
+func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}, error) {
 	// apply the template again on the arguments to figure out the connections
 	// at this point all of them are valid, we just have to resolve them again. We assume for now
 	// everyone is going to be on docker at the same network.
@@ -594,7 +594,7 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 	}
 
 	// Validate that the image exists
-	imageName := fmt.Sprintf("%s:%s", s.image, s.tag)
+	imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
 	if err := d.validateImageExists(imageName); err != nil {
 		return nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
 	}
@@ -610,7 +610,7 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 	// add the local ports exposed by the service as labels
 	// we have to do this for now since we do not store the manifest in JSON yet.
 	// Otherwise, we could use that directly
-	for _, port := range s.ports {
+	for _, port := range s.Ports {
 		labels[fmt.Sprintf("port.%s", port.Name)] = fmt.Sprintf("%d", port.Port)
 	}
 
@@ -618,12 +618,12 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 	volumes := map[string]string{
 		outputFolder: "/artifacts", // placeholder
 	}
-	for k, v := range s.filesMapped {
+	for k, v := range s.FilesMapped {
 		volumes[filepath.Join(outputFolder, v)] = k
 	}
 
 	// create the bind volumes
-	for localPath, volumeName := range s.volumesMapped {
+	for localPath, volumeName := range s.VolumesMapped {
 		volumeDirAbsPath, err := d.createVolume(s.Name, volumeName)
 		if err != nil {
 			return nil, err
@@ -669,10 +669,10 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		}
 	}
 
-	if s.dependsOn != nil {
+	if s.DependsOn != nil {
 		depends := map[string]interface{}{}
 
-		for _, d := range s.dependsOn {
+		for _, d := range s.DependsOn {
 			if d.Condition == "" {
 				depends[d.Name] = struct{}{}
 			} else {
@@ -694,13 +694,13 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 		}
 	}
 
-	if s.entrypoint != "" {
-		service["entrypoint"] = s.entrypoint
+	if s.Entrypoint != "" {
+		service["entrypoint"] = s.Entrypoint
 	}
 
-	if len(s.ports) > 0 {
+	if len(s.Ports) > 0 {
 		ports := []string{}
-		for _, p := range s.ports {
+		for _, p := range s.Ports {
 			protocol := ""
 			if p.Protocol == ProtocolUDP {
 				protocol = "/udp"
@@ -740,7 +740,7 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	// both to have access to the services from localhost but also to do communication
 	// between services running inside docker and the ones running on the host machine.
 	for _, svc := range d.manifest.services {
-		for _, port := range svc.ports {
+		for _, port := range svc.Ports {
 			port.HostPort = d.reservePort(port.Port, port.Protocol)
 		}
 	}
@@ -775,7 +775,7 @@ func (d *LocalRunner) createVolume(service, volumeName string) (string, error) {
 }
 
 // runOnHost runs the service on the host machine
-func (d *LocalRunner) runOnHost(ss *service) error {
+func (d *LocalRunner) runOnHost(ss *Service) error {
 	// TODO: Use env vars in host processes
 	args, _, err := d.applyTemplate(ss)
 	if err != nil {
@@ -784,7 +784,7 @@ func (d *LocalRunner) runOnHost(ss *service) error {
 
 	// Create the volumes for this service
 	volumesMapped := map[string]string{}
-	for pathInDocker, volumeName := range ss.volumesMapped {
+	for pathInDocker, volumeName := range ss.VolumesMapped {
 		volumeDirAbsPath, err := d.createVolume(ss.Name, volumeName)
 		if err != nil {
 			return err
@@ -796,7 +796,7 @@ func (d *LocalRunner) runOnHost(ss *service) error {
 	// Just a string replacement should be enough
 	for i, arg := range args {
 		// If any of the args contains any of the files mapped, we need to replace it
-		for pathInDocker, artifactName := range ss.filesMapped {
+		for pathInDocker, artifactName := range ss.FilesMapped {
 			if strings.Contains(arg, pathInDocker) {
 				args[i] = strings.ReplaceAll(arg, pathInDocker, filepath.Join(d.out.dst, artifactName))
 			}
@@ -914,10 +914,10 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	})
 
 	for _, c := range manifest.services {
-		for _, port := range c.ports {
+		for _, port := range c.Ports {
 			if port.Name == "metrics" {
 				metricsPath := "/metrics"
-				if overrideMetricsPath, ok := c.labels["metrics_path"]; ok {
+				if overrideMetricsPath, ok := c.Labels["metrics_path"]; ok {
 					metricsPath = overrideMetricsPath
 				}
 
