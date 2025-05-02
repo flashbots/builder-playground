@@ -436,9 +436,7 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 
 	// use template substitution to load constants
 	// pass-through the Dir template because it has to be resolved at the runtime
-	input := map[string]interface{}{
-		"Dir": "{{.Dir}}",
-	}
+	input := map[string]interface{}{}
 
 	var portRef []Port
 	var nodeRef []NodeRef
