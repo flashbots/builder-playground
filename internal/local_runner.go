@@ -624,9 +624,9 @@ func (d *LocalRunner) toDockerComposeService(s *service) (map[string]interface{}
 
 	// create the bind volumes
 	for localPath, volumeName := range s.volumesMapped {
-		volumeDirAbsPath, err := d.out.CreateDir(fmt.Sprintf("volume-%s-%s", s.Name, volumeName))
+		volumeDirAbsPath, err := d.createVolume(s.Name, volumeName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create volume dir %s: %w", volumeName, err)
+			return nil, err
 		}
 		volumes[volumeDirAbsPath] = localPath
 	}
@@ -765,12 +765,49 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	return yamlData, nil
 }
 
+func (d *LocalRunner) createVolume(service, volumeName string) (string, error) {
+	// create the volume in the output folder
+	volumeDirAbsPath, err := d.out.CreateDir(fmt.Sprintf("volume-%s-%s", service, volumeName))
+	if err != nil {
+		return "", fmt.Errorf("failed to create volume dir %s: %w", volumeName, err)
+	}
+	return volumeDirAbsPath, nil
+}
+
 // runOnHost runs the service on the host machine
 func (d *LocalRunner) runOnHost(ss *service) error {
 	// TODO: Use env vars in host processes
 	args, _, err := d.applyTemplate(ss)
 	if err != nil {
 		return fmt.Errorf("failed to apply template, err: %w", err)
+	}
+
+	// Create the volumes for this service
+	volumesMapped := map[string]string{}
+	for pathInDocker, volumeName := range ss.volumesMapped {
+		volumeDirAbsPath, err := d.createVolume(ss.Name, volumeName)
+		if err != nil {
+			return err
+		}
+		volumesMapped[pathInDocker] = volumeDirAbsPath
+	}
+
+	// We have to replace the names of the files it is using as artifacts for the full names
+	// Just a string replacement should be enough
+	for i, arg := range args {
+		// If any of the args contains any of the files mapped, we need to replace it
+		for pathInDocker, artifactName := range ss.filesMapped {
+			if strings.Contains(arg, pathInDocker) {
+				args[i] = strings.ReplaceAll(arg, pathInDocker, filepath.Join(d.out.dst, artifactName))
+			}
+		}
+		// If any of the args contains any of the volumes mapped, we need to create
+		// the volume and replace it
+		for pathInDocker, volumeAbsPath := range volumesMapped {
+			if strings.Contains(arg, pathInDocker) {
+				args[i] = strings.ReplaceAll(arg, pathInDocker, volumeAbsPath)
+			}
+		}
 	}
 
 	execPath := d.overrides[ss.Name]

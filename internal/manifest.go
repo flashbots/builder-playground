@@ -163,6 +163,20 @@ func (s *Manifest) Validate() error {
 		}
 	}
 
+	// validate that the mounts are correct
+	for _, ss := range s.services {
+		for _, fileNameRef := range ss.filesMapped {
+			fileLoc := filepath.Join(s.out.dst, fileNameRef)
+
+			if _, err := os.Stat(fileLoc); err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Errorf("service %s includes an unknown file %s does not exist", ss.Name, fileLoc)
+				}
+				return fmt.Errorf("failed to stat file %s: %w", fileLoc, err)
+			}
+		}
+	}
+
 	return nil
 }
 
