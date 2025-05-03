@@ -620,11 +620,16 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 
 	// create the bind volumes
 	for localPath, volumeName := range s.VolumesMapped {
-		volumeDirAbsPath, err := d.createVolume(s.Name, volumeName)
-		if err != nil {
-			return nil, err
+		// If the volume name is an absolute path, use it directly
+		if filepath.IsAbs(volumeName) {
+			volumes[volumeName] = localPath
+		} else {
+			volumeDirAbsPath, err := d.createVolume(s.Name, volumeName)
+			if err != nil {
+				return nil, err
+			}
+			volumes[volumeDirAbsPath] = localPath
 		}
-		volumes[volumeDirAbsPath] = localPath
 	}
 
 	volumesInLine := []string{}
@@ -641,6 +646,10 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// Add the ethereum network
 		"networks": []string{d.networkName},
 		"labels":   labels,
+	}
+
+	if s.Privileged {
+		service["privileged"] = true
 	}
 
 	if len(envs) > 0 {

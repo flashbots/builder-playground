@@ -148,6 +148,7 @@ var recipes = []internal.Recipe{
 	&internal.L1Recipe{},
 	&internal.OpRecipe{},
 	&internal.BuilderNetRecipe{},
+	&internal.OpTalosRecipe{},
 }
 
 func main() {
