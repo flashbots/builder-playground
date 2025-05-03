@@ -1,4 +1,4 @@
-module github.com/flashbots/builder-playground
+module github.com/phylaxsystems/builder-playground
 
 go 1.24.0
 
