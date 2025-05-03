@@ -21,6 +21,8 @@ func init() {
 	register(&BuilderHubPostgres{})
 	register(&BuilderHubMockProxy{})
 	register(&nullService{})
+	register(&OpTalos{})
+	register(&AssertionDA{})
 }
 
 func FindComponent(name string) ServiceGen {

@@ -1,7 +1,7 @@
 # Builder Playground
 
-[![Goreport status](https://goreportcard.com/badge/github.com/flashbots/builder-playground)](https://goreportcard.com/report/github.com/flashbots/builder-playground)
-[![Test status](https://github.com/flashbots/builder-playground/actions/workflows/checks.yaml/badge.svg?branch=main)](https://github.com/flashbots/builder-playground/actions?query=workflow%3A%22Checks%22)
+[![Goreport status](https://goreportcard.com/badge/github.com/odyslam/builder-playground)](https://goreportcard.com/report/github.com/odyslam/builder-playground)
+[![Test status](https://github.com/odyslam/builder-playground/actions/workflows/checks.yaml/badge.svg?branch=main)](https://github.com/odyslam/builder-playground/actions?query=workflow%3A%22Checks%22)
 
 The builder playground is a tool to deploy an end-to-end environment to locally test EVM block builders.
 
@@ -14,6 +14,28 @@ $ builder-playground cook <recipe>
 ```
 
 Currently available recipes:
+
+### Phylax Credible Layer (PCL) Recipe
+
+Deploys a complete OP Stack Credible Layer environment with:
+
+- Complete L1 setup (beacon node, validator, and execution client)
+- A complete sequencer with op-node, op-geth and op-batcher
+- Rollup-Boost
+- OP-Talos (either external or part of the playground)
+- Assertion-DA (either external or part of the playground)
+
+```bash
+$ builder-playground cook pcl [flags]
+```
+
+Flags:
+
+- `--external-builder`: URL of an external builder to use
+- `--external-da`: URL of an external DA to use (use "dev" for development mode)
+- `--enable-latest-fork`: Enable the latest fork (isthmus) at startup (0) or n blocks after genesis
+- `--block-time`: Block time to use for the rollup (default: 2 seconds)
+- `--batcher-max-channel-duration`: Maximum channel duration to use for the batcher (default: 2 seconds)
 
 ### L1 Recipe
 
