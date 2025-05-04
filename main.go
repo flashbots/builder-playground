@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ferranbt/builder-playground/internal"
+	"github.com/flashbots/builder-playground/internal"
 	"github.com/spf13/cobra"
 )
 
