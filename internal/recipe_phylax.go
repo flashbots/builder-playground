@@ -26,6 +26,9 @@ type OpTalosRecipe struct {
 	// externalDA is the URL of the external DA to use. If enabled, the recipe deploys
 	// a new assertion-da service and connects it to the external DA.
 	externalDA string
+
+	// assexGasLimit is the gas limit of the Assertion Execution
+	assexGasLimit uint64
 }
 
 func (o *OpTalosRecipe) Name() string {
@@ -43,6 +46,7 @@ func (o *OpTalosRecipe) Flags() *flag.FlagSet {
 	flags.Var(&nullableUint64Value{&o.enableLatestFork}, "enable-latest-fork", "Enable latest fork isthmus (nil or empty = disabled, otherwise enabled at specified block)")
 	flags.Uint64Var(&o.blockTime, "block-time", defaultOpBlockTimeSeconds, "Block time to use for the rollup")
 	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
+	flags.Uint64Var(&o.assexGasLimit, "assex-gas-limit", 30000000, "Gas limit of the Assertion Execution")
 	return flags
 }
 
@@ -76,7 +80,8 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	if o.externalBuilder == "" {
 		// Add a new op-reth service and connect it to Rollup-boost
 		svcManager.AddService("op-talos", &OpTalos{
-			AssertionDA: externalDaRef,
+			AssertionDA:   externalDaRef,
+			AssexGasLimit: o.assexGasLimit,
 		})
 		externalBuilderRef = Connect("op-talos", "authrpc")
 	}

@@ -1,5 +1,7 @@
 package internal
 
+import "strconv"
+
 type AssertionDA struct {
 	DevMode bool
 	Pk      string
@@ -17,6 +19,7 @@ func (a *AssertionDA) Run(service *Service, ctx *ExContext) {
 		WithTag("main").
 		WithArgs("--listen-addr", "0.0.0.0:"+`{{Port "http" 5001}}`, "--private-key", a.Pk).
 		WithAbsoluteVolume("/var/run/docker.sock", "/var/run/docker.sock").
+		WithAbsoluteVolume("/tmp", "/tmp").
 		WithPrivileged()
 }
 
@@ -28,7 +31,8 @@ func (a *AssertionDA) Name() string {
 }
 
 type OpTalos struct {
-	AssertionDA string
+	AssertionDA   string
+	AssexGasLimit uint64
 }
 
 func (o *OpTalos) Run(service *Service, ctx *ExContext) {
@@ -52,7 +56,9 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth")
+		WithVolume("data", "/data_op_reth").
+		WithEnv("AE_ASSERTION_GAS_LIMIT", strconv.FormatUint(o.AssexGasLimit, 10)).
+		WithEnv("AE_BLOCK_TAG", "latest")
 }
 
 func (o *OpTalos) Name() string {
