@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -394,7 +395,7 @@ func (s *Service) WithArgs(args ...string) *Service {
 }
 
 func (s *Service) WithPrivileged() *Service {
-	fmt.Println("Service", s.Name, "is privileged. This is not recommended for production use.")
+	log.Printf("Service %s is privileged. This is not recommended for production use.", s.Name)
 	s.Privileged = true
 	return s
 }
