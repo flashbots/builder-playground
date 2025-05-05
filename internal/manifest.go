@@ -142,7 +142,7 @@ func (s *Manifest) Validate() error {
 
 			if dep.Condition == DependsOnConditionHealthy {
 				// if we depedn on the service to be healthy, it must have a ready check
-				if service.readyCheck == nil {
+				if service.ReadyCheck == nil {
 					return fmt.Errorf("service %s depends on service %s, but it does not have a ready check", ss.Name, dep.Name)
 				}
 			}
@@ -246,7 +246,7 @@ type Service struct {
 	// list of environment variables to set for the service
 	Env map[string]string `json:"env,omitempty"`
 
-	readyCheck *ReadyCheck
+	ReadyCheck *ReadyCheck `json:"ready_check,omitempty"`
 
 	DependsOn []DependsOn `json:"depends_on,omitempty"`
 
@@ -408,17 +408,17 @@ func (s *Service) WithArtifact(localPath string, artifactName string) *Service {
 }
 
 func (s *Service) WithReady(check ReadyCheck) *Service {
-	s.readyCheck = &check
+	s.ReadyCheck = &check
 	return s
 }
 
 type ReadyCheck struct {
-	QueryURL    string
-	Test        []string
-	Interval    time.Duration
-	StartPeriod time.Duration
-	Timeout     time.Duration
-	Retries     int
+	QueryURL    string        `json:"query_url"`
+	Test        []string      `json:"test"`
+	Interval    time.Duration `json:"interval"`
+	StartPeriod time.Duration `json:"start_period"`
+	Timeout     time.Duration `json:"timeout"`
+	Retries     int           `json:"retries"`
 }
 
 func (s *Service) DependsOnHealthy(name string) *Service {
