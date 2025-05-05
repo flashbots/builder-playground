@@ -47,10 +47,10 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 			"--http.addr", "0.0.0.0",
 			"--http.port", `{{Port "http" 8545}}`,
 			"--ws",
-			"--ws.addr", "0.0.0.0",
+			"--ws.origins", "*",
 			"--ws.port", `{{Port "ws" 8546}}`,
 			"--chain", "/data/l2-genesis.json",
-			"--datadir", "/data_op_reth",
+			"--datadir", "/data_op_talos",
 			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
@@ -62,9 +62,27 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth").
 		WithEnv("AE_ASSERTION_GAS_LIMIT", strconv.FormatUint(o.AssexGasLimit, 10)).
-		WithEnv("AE_BLOCK_TAG", "latest")
+		WithEnv("AE_BLOCK_TAG", "latest").
+		WithEnv("RUST_LOG", logLevelToTalosVerbosity(ctx.LogLevel))
 }
 
 func (o *OpTalos) Name() string {
 	return "op-talos"
+}
+
+func logLevelToTalosVerbosity(logLevel LogLevel) string {
+	switch logLevel {
+	case LevelTrace:
+		return "trace"
+	case LevelDebug:
+		return "debug"
+	case LevelInfo:
+		return "info"
+	case LevelWarn:
+		return "warn"
+	case LevelError:
+		return "error"
+	default:
+		return "info"
+	}
 }

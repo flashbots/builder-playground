@@ -72,7 +72,7 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		svcManager.AddService("assertion-da", &AssertionDA{
 			DevMode: o.externalDA == "dev",
 			// cast keccak "credible-layer-sandbox-assertion-da"
-			Pk:      "0xb14a93020522e378f565ebd6d1032b06af46dc778a1bfea9602a9641547c4673",
+			Pk: "0xb14a93020522e378f565ebd6d1032b06af46dc778a1bfea9602a9641547c4673",
 		})
 		externalDaRef = Connect("assertion-da", "http")
 	}
