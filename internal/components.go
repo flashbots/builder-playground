@@ -571,3 +571,13 @@ func (p *OpReth) Watchdog(out io.Writer, instance *instance, ctx context.Context
 	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 	return watchChainHead(out, rethURL, 2*time.Second)
 }
+
+type nullService struct {
+}
+
+func (n *nullService) Run(service *Service, ctx *ExContext) {
+}
+
+func (n *nullService) Name() string {
+	return "null"
+}

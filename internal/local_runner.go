@@ -950,7 +950,8 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 		WithTag("latest").
 		WithArgs("--config.file", "/data/prometheus.yaml").
 		WithPort("metrics", 9090, "tcp").
-		WithArtifact("/data/prometheus.yml", "prometheus.yaml")
+		WithArtifact("/data/prometheus.yaml", "prometheus.yaml")
+	srv.ComponentName = "null" // For now, later on we can create a Prometheus component
 	manifest.services = append(manifest.services, srv)
 
 	return nil
