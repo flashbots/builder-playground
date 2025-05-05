@@ -74,6 +74,9 @@ type LocalRunner struct {
 
 	// networkName is the name of the network to use for the services
 	networkName string
+
+	// labels is the list of labels to apply to each resource being created
+	labels map[string]string
 }
 
 type task struct {
@@ -104,7 +107,7 @@ func newDockerClient() (*client.Client, error) {
 }
 
 // TODO: add a runner config struct
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool, networkName string) (*LocalRunner, error) {
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool, networkName string, labels map[string]string) (*LocalRunner, error) {
 	client, err := newDockerClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
@@ -209,6 +212,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		sessionID:            uuid.New().String(),
 		networkName:          networkName,
 		instances:            instances,
+		labels:               labels,
 	}
 
 	if interactive {
@@ -592,6 +596,11 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		"playground":         "true",
 		"playground.session": d.sessionID,
 		"service":            s.Name,
+	}
+
+	// apply the user defined labels
+	for k, v := range d.labels {
+		labels[k] = v
 	}
 
 	// add the local ports exposed by the service as labels
