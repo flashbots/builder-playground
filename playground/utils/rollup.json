@@ -22,7 +22,7 @@
   "seq_window_size": 3600,
   "channel_timeout": 300,
   "l1_chain_id": 1337,
-  "l2_chain_id": 13,
+  "l2_chain_id": 2151908,
   "regolith_time": 0,
   "canyon_time": 0,
   "delta_time": 0,
