@@ -313,7 +313,7 @@ func (d *LocalRunner) AreReady() bool {
 
 		// then ensure it is ready if it has a ready function
 		svc := d.getService(name)
-		if svc.readyCheck != nil {
+		if svc.ReadyCheck != nil {
 			if !task.ready {
 				return false
 			}
@@ -647,21 +647,21 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		service["environment"] = envs
 	}
 
-	if s.readyCheck != nil {
+	if s.ReadyCheck != nil {
 		var test []string
-		if s.readyCheck.QueryURL != "" {
+		if s.ReadyCheck.QueryURL != "" {
 			// This is pretty much hardcoded for now.
-			test = []string{"CMD-SHELL", "chmod +x /artifacts/scripts/query.sh && /artifacts/scripts/query.sh " + s.readyCheck.QueryURL}
+			test = []string{"CMD-SHELL", "chmod +x /artifacts/scripts/query.sh && /artifacts/scripts/query.sh " + s.ReadyCheck.QueryURL}
 		} else {
-			test = s.readyCheck.Test
+			test = s.ReadyCheck.Test
 		}
 
 		service["healthcheck"] = map[string]interface{}{
 			"test":         test,
-			"interval":     s.readyCheck.Interval.String(),
-			"timeout":      s.readyCheck.Timeout.String(),
-			"retries":      s.readyCheck.Retries,
-			"start_period": s.readyCheck.StartPeriod.String(),
+			"interval":     s.ReadyCheck.Interval.String(),
+			"timeout":      s.ReadyCheck.Timeout.String(),
+			"retries":      s.ReadyCheck.Retries,
+			"start_period": s.ReadyCheck.StartPeriod.String(),
 		}
 	}
 
