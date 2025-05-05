@@ -681,6 +681,9 @@ var prefundedAccounts = []string{
 	"0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
 	"0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
 	"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+	// Phylax Depoloyer contract
+	// Private key for deploying contracts: keccak256("credible-layer-sandbox-deployer")
+	"0xac431098061ca49f5b36121d01a17d30e1d0624227d08b583ff328f1efe0d4a2",
 }
 
 func applyTemplate2(templateStr []byte, input interface{}) ([]byte, error) {
