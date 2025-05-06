@@ -1,7 +1,8 @@
 package internal
 
-import "strconv"
-import "fmt"
+import (
+	"strconv"
+)
 
 type AssertionDA struct {
 	DevMode bool
@@ -47,12 +48,17 @@ func (f *Faucet) Run(service *Service, ctx *ExContext) {
 		WithTag("1.2.0").
 		WithArgs(
 			"--wallet.provider", f.Rpc,
-			"--wallet.private-key", f.FaucetPk,
+			"--wallet.privkey", f.FaucetPk,
 			"--faucet.name", f.FaucetName,
 			"--faucet.symbol", f.Symbol,
 			"--httpport", `{{Port "faucet" 6942}}`,
 		)
-	fmt.Printf("faucet service: %+v\n", service)
+	service.DependsOn = []DependsOn{
+		{
+			Name:      "op-talos",
+			Condition: DependsOnConditionRunning,
+		},
+	}
 }
 
 type OpTalos struct {
