@@ -1,6 +1,7 @@
 package internal
 
 import "strconv"
+import "fmt"
 
 type AssertionDA struct {
 	DevMode bool
@@ -28,6 +29,30 @@ func (a *AssertionDA) Name() string {
 		return "assertion-da-dev"
 	}
 	return "assertion-da"
+}
+
+type Faucet struct {
+	Rpc        string
+	FaucetPk   string
+	FaucetName string
+	Symbol     string
+}
+
+func (f *Faucet) Name() string {
+	return "eth-faucet"
+}
+
+func (f *Faucet) Run(service *Service, ctx *ExContext) {
+	service.WithImage("chainflag/eth-faucet").
+		WithTag("1.2.0").
+		WithArgs(
+			"--wallet.provider", f.Rpc,
+			"--wallet.private-key", f.FaucetPk,
+			"--faucet.name", f.FaucetName,
+			"--faucet.symbol", f.Symbol,
+			"--httpport", `{{Port "faucet" 6942}}`,
+		)
+	fmt.Printf("faucet service: %+v\n", service)
 }
 
 type OpTalos struct {
