@@ -32,6 +32,9 @@ type OpTalosRecipe struct {
 
 	// oracleContract is the address of the State Oracle contract
 	oracleContract string
+
+	// faucet is the private key of the faucet address
+	faucet bool
 }
 
 func (o *OpTalosRecipe) Name() string {
@@ -51,6 +54,7 @@ func (o *OpTalosRecipe) Flags() *flag.FlagSet {
 	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
 	flags.Uint64Var(&o.assexGasLimit, "assex-gas-limit", 30000000, "Gas limit of the Assertion Execution")
 	flags.StringVar(&o.oracleContract, "oracle-contract", "0xD5a4c0230f7946f3C43970012976C80EBf012b33", "State Oracle contract address")
+	flags.BoolVar(&o.faucet, "faucet", false, "Enable the faucet")
 	return flags
 }
 
@@ -90,6 +94,18 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			OracleContract: o.oracleContract,
 		})
 		externalBuilderRef = Connect("op-talos", "authrpc")
+	}
+
+	externalHttpRef := Connect("op-talos", "http")
+	if o.faucet {
+		svcManager.AddService("eth-faucet", &Faucet{
+			Rpc:        externalHttpRef,
+			FaucetName: "",
+			Symbol:     "Phylax Demo ETH",
+			// genesis.json #1 alloc
+			// address: 0x5BD98A46AB10Fc0f57817b6B7d5f00e0BA29F97E
+			FaucetPk: "0x3d7a6a06a968f4184e2c8a65509167080a6e82fcbd3a52fcfaaa6b401125f8ad",
+		})
 	}
 
 	elNode := "rollup-boost"
