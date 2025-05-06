@@ -29,6 +29,9 @@ type OpTalosRecipe struct {
 
 	// assexGasLimit is the gas limit of the Assertion Execution
 	assexGasLimit uint64
+
+	// oracleContract is the address of the State Oracle contract
+	oracleContract string
 }
 
 func (o *OpTalosRecipe) Name() string {
@@ -47,6 +50,7 @@ func (o *OpTalosRecipe) Flags() *flag.FlagSet {
 	flags.Uint64Var(&o.blockTime, "block-time", defaultOpBlockTimeSeconds, "Block time to use for the rollup")
 	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
 	flags.Uint64Var(&o.assexGasLimit, "assex-gas-limit", 30000000, "Gas limit of the Assertion Execution")
+	flags.StringVar(&o.oracleContract, "oracle-contract", "0xD5a4c0230f7946f3C43970012976C80EBf012b33", "State Oracle contract address")
 	return flags
 }
 
@@ -81,8 +85,9 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	if o.externalBuilder == "" {
 		// Add a new op-reth service and connect it to Rollup-boost
 		svcManager.AddService("op-talos", &OpTalos{
-			AssertionDA:   externalDaRef,
-			AssexGasLimit: o.assexGasLimit,
+			AssertionDA:    externalDaRef,
+			AssexGasLimit:  o.assexGasLimit,
+			OracleContract: o.oracleContract,
 		})
 		externalBuilderRef = Connect("op-talos", "authrpc")
 	}
