@@ -31,8 +31,9 @@ func (a *AssertionDA) Name() string {
 }
 
 type OpTalos struct {
-	AssertionDA   string
-	AssexGasLimit uint64
+	AssertionDA    string
+	AssexGasLimit  uint64
+	OracleContract string
 }
 
 func (o *OpTalos) Run(service *Service, ctx *ExContext) {
@@ -57,6 +58,7 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 			"--port", `{{Port "rpc" 30303}}`,
 			"--ae.rpc_da_url", o.AssertionDA,
 			"--ae.rpc_url", "ws://localhost:8546",
+			"--ae.oracle_contract", o.OracleContract,
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
