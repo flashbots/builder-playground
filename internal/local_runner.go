@@ -711,13 +711,20 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 				protocol = "/udp"
 			}
 
-			if d.bindHostPortsLocally {
-				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d%s", p.HostPort, p.Port, protocol))
-			} else {
-				ports = append(ports, fmt.Sprintf("%d:%d%s", p.HostPort, p.Port, protocol))
+			// Only expose ports if Caddy is not enabled or this is the Caddy service itself
+			shouldExpose := !d.manifest.ctx.CaddyEnabled || s.Name == "caddy"
+
+			if shouldExpose {
+				if d.bindHostPortsLocally {
+					ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d%s", p.HostPort, p.Port, protocol))
+				} else {
+					ports = append(ports, fmt.Sprintf("%d:%d%s", p.HostPort, p.Port, protocol))
+				}
 			}
 		}
-		service["ports"] = ports
+		if len(ports) > 0 {
+			service["ports"] = ports
+		}
 	}
 
 	return service, nil
@@ -745,11 +752,21 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	// both to have access to the services from localhost but also to do communication
 	// between services running inside docker and the ones running on the host machine.
 	for _, svc := range d.manifest.services {
-		for _, port := range svc.Ports {
-			port.HostPort = d.reservePort(port.Port, port.Protocol)
+		if d.manifest.ctx.CaddyEnabled {
+			if svc.Name == "caddy" {
+				// caddy is a special case. We need to reserve the ports for http, https and admin
+				// and then we need to add the routes to the Caddyfile
+				for _, port := range svc.Ports {
+					port.HostPort = d.reservePort(port.Port, port.Protocol)
+				}
+				continue
+			} else {
+				for _, port := range svc.Ports {
+					port.HostPort = d.reservePort(port.Port, port.Protocol)
+				}
+			}
 		}
 	}
-
 	for _, svc := range d.manifest.services {
 		if d.isHostService(svc.Name) {
 			// skip services that are going to be launched on host
@@ -961,6 +978,83 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 		WithPort("metrics", 9090, "tcp").
 		WithArtifact("/data/prometheus.yaml", "prometheus.yaml")
 	srv.ComponentName = "null" // For now, later on we can create a Prometheus component
+	manifest.services = append(manifest.services, srv)
+
+	return nil
+}
+
+func CreateCaddyServices(manifest *Manifest, out *output) error {
+	// Create a Caddyfile configuration for reverse proxying all services with HTTP or WS ports
+	var routes []string
+	manifest.ctx.CaddyEnabled = true
+
+	// Add a routes for each service with http or ws ports
+	for _, service := range manifest.services {
+		for _, port := range service.Ports {
+			// Only look for HTTP and WebSocket ports
+			if port.Name == "http" || port.Name == "ws" {
+
+				// Create a route for the service with port type in the path
+				// Format: /<service-name>/<port-type>/* -> http://<service-name>:<port>/{path}
+				route := fmt.Sprintf("  handle_path /%s/%s {\n", service.Name, port.Name)
+				route += fmt.Sprintf("    uri strip_prefix /%s/%s\n", service.Name, port.Name)
+				route += fmt.Sprintf("    reverse_proxy %s:%d\n", service.Name, port.Port)
+				route += "  }\n\n"
+
+				routes = append(routes, route)
+			}
+		}
+	}
+
+	if len(routes) == 0 {
+		// No HTTP or WS services to proxy, skip creating Caddy
+		return nil
+	}
+
+	// Create the Caddyfile
+	caddyfile := ":8888 {\n"
+	caddyfile += "  # Automatically generated routes for HTTP and WebSocket services\n\n"
+
+	// Add a root route that lists available services
+	caddyfile += "  # Root route showing available services\n"
+	caddyfile += "  respond / 200 {\n"
+
+	// Build a single body content string
+	bodyContent := "Available services:\\n"
+
+	for _, service := range manifest.services {
+		for _, port := range service.Ports {
+			if port.Name == "http" || port.Name == "ws" {
+				bodyContent += fmt.Sprintf("%s (%s): /%s/%s\\n", service.Name, port.Name, service.Name, port.Name)
+			}
+		}
+	}
+
+	// Add the single body directive
+	caddyfile += fmt.Sprintf("    body %q\n", bodyContent)
+	caddyfile += "  }\n\n"
+
+	// Add all the routes
+	for _, route := range routes {
+		caddyfile += route
+	}
+
+	caddyfile += "}\n"
+
+	// Write the Caddyfile
+	if err := out.WriteFile("Caddyfile", caddyfile); err != nil {
+		return fmt.Errorf("failed to write Caddyfile: %w", err)
+	}
+
+	// Add Caddy service to the manifest
+	srv := manifest.NewService("caddy").
+		WithImage("caddy").
+		WithTag("2").
+		WithPort("http", 8888, "tcp").
+		WithArtifact("/etc/caddy/Caddyfile", "Caddyfile")
+
+	// Add the service to the manifest
+	srv.ComponentName = "null" // Using null since there's no dedicated Caddy component
 	manifest.services = append(manifest.services, srv)
 
 	return nil

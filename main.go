@@ -26,6 +26,7 @@ var timeout time.Duration
 var logLevelFlag string
 var bindExternal bool
 var withPrometheus bool
+var caddyEnabled bool
 var networkName string
 var labels internal.MapStringFlag
 
@@ -174,6 +175,7 @@ func main() {
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
 		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
 		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
+		recipeCmd.Flags().BoolVar(&caddyEnabled, "caddy-enabled", false, "enable caddy")
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		cookCmd.AddCommand(recipeCmd)
@@ -220,7 +222,7 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(&internal.ExContext{LogLevel: logLevel}, artifacts)
+	svcManager := recipe.Apply(&internal.ExContext{LogLevel: logLevel, CaddyEnabled: caddyEnabled}, artifacts)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
@@ -239,6 +241,11 @@ func runIt(recipe internal.Recipe) error {
 	if withPrometheus {
 		if err := internal.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
 			return fmt.Errorf("failed to create prometheus services: %w", err)
+		}
+	}
+	if caddyEnabled {
+		if err := internal.CreateCaddyServices(svcManager, artifacts.Out); err != nil {
+			return fmt.Errorf("failed to create caddy services: %w", err)
 		}
 	}
 
