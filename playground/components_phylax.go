@@ -26,9 +26,6 @@ func (a *AssertionDA) Run(service *Service, ctx *ExContext) {
 }
 
 func (a *AssertionDA) Name() string {
-	if a.DevMode {
-		return "assertion-da-dev"
-	}
 	return "assertion-da"
 }
 
