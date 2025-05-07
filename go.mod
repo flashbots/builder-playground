@@ -10,6 +10,7 @@ require (
 	github.com/ethereum/go-ethereum v1.15.3
 	github.com/flashbots/go-boost-utils v1.9.0
 	github.com/flashbots/mev-boost-relay v0.30.0-rc1
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/holiman/uint256 v1.3.2
 	github.com/prysmaticlabs/prysm/v5 v5.3.0
@@ -70,7 +71,6 @@ require (
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
