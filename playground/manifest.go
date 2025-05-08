@@ -79,6 +79,7 @@ type ExContext struct {
 	// access to the output.
 	Output       *output
 	AlloyEnabled bool
+	CaddyEnabled bool
 }
 
 type ServiceGen interface {

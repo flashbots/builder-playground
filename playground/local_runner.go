@@ -724,13 +724,22 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 				protocol = "/udp"
 			}
 
-			if d.bindHostPortsLocally {
-				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d%s", p.HostPort, p.Port, protocol))
-			} else {
-				ports = append(ports, fmt.Sprintf("%d:%d%s", p.HostPort, p.Port, protocol))
+			// CADDY Modification
+			// TODO(Odysseas): This feels like a hack here
+			// Only expose ports if Caddy is not enabled or this is the Caddy service itself
+			shouldExpose := !d.manifest.ctx.CaddyEnabled || s.Name == "caddy"
+
+			if shouldExpose {
+				if d.bindHostPortsLocally {
+					ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d%s", p.HostPort, p.Port, protocol))
+				} else {
+					ports = append(ports, fmt.Sprintf("%d:%d%s", p.HostPort, p.Port, protocol))
+				}
 			}
 		}
-		service["ports"] = ports
+		if len(ports) > 0 {
+			service["ports"] = ports
+		}
 	}
 
 	return service, nil
@@ -758,11 +767,24 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	// both to have access to the services from localhost but also to do communication
 	// between services running inside docker and the ones running on the host machine.
 	for _, svc := range d.manifest.services {
-		for _, port := range svc.Ports {
-			port.HostPort = d.reservePort(port.Port, port.Protocol)
+		// CADDY Modification
+		// TODO(Odysseas): This feels like a hack here
+		// If caddy is enabled, then reserve ports only for caddy
+		// else, reserve for all services
+		if d.manifest.ctx.CaddyEnabled {
+			if svc.Name == "caddy" {
+				// caddy is a special case. We need to reserve the ports for http, https and admin
+				// and then we need to add the routes to the Caddyfile
+				for _, port := range svc.Ports {
+					port.HostPort = d.reservePort(port.Port, port.Protocol)
+				}
+			}
+		} else {
+			for _, port := range svc.Ports {
+				port.HostPort = d.reservePort(port.Port, port.Protocol)
+			}
 		}
 	}
-
 	for _, svc := range d.manifest.services {
 		if d.isHostService(svc.Name) {
 			// skip services that are going to be launched on host
