@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/phylaxsystems/builder-playground/playground"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +28,7 @@ var withPrometheus bool
 var networkName string
 var labels playground.MapStringFlag
 var disableLogs bool
+var withGrafanaAlloy bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -174,6 +174,7 @@ func main() {
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
 		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
 		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
+		recipeCmd.Flags().BoolVar(&withGrafanaAlloy, "with-grafana-alloy", false, "whether to spawn a grafana alloy to agent for metrics, logs, traces")
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
@@ -223,8 +224,26 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel}, artifacts)
+
+	if withPrometheus {
+		if err := playground.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
+			return fmt.Errorf("failed to create prometheus services: %w", err)
+		}
+	}
+
+	if withGrafanaAlloy {
+		if err := playground.CreateGrafanaAlloyServices(svcManager, artifacts.Out); err != nil {
+			return fmt.Errorf("failed to create grafana alloy services: %w", err)
+		}
+	}
+
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
+	}
+
+	// save the manifest.json file
+	if err := svcManager.SaveJson(); err != nil {
+		return fmt.Errorf("failed to save manifest: %w", err)
 	}
 
 	// generate the dot graph

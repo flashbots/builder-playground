@@ -35,6 +35,7 @@ Flags:
 - `--external-da`: URL of an external DA to use (use "dev" for development mode)
 - `--enable-latest-fork`: Enable the latest fork (isthmus) at startup (0) or n blocks after genesis
 - `--block-time`: Block time to use for the rollup (default: 2 seconds)
+- `--with-grafana-alloy`: Enable grafana alloy and initialize from `.env.grafana` (default: false)
 - `--batcher-max-channel-duration`: Maximum channel duration to use for the batcher (default: 2 seconds)
 
 ### L1 Recipe

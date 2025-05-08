@@ -77,7 +77,8 @@ type ExContext struct {
 	// This dependency is not ideal. Doing it so that I do not
 	// have to modify the serviceDesc interface to give services
 	// access to the output.
-	Output *output
+	Output       *output
+	AlloyEnabled bool
 }
 
 type ServiceGen interface {
