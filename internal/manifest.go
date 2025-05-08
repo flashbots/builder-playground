@@ -71,7 +71,8 @@ func (l *LogLevel) Unmarshal(s string) error {
 
 // Execution context
 type ExContext struct {
-	LogLevel LogLevel
+	LogLevel     LogLevel
+	AlloyEnabled bool
 }
 
 type ServiceGen interface {

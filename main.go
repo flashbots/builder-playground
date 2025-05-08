@@ -28,6 +28,7 @@ var bindExternal bool
 var withPrometheus bool
 var networkName string
 var labels internal.MapStringFlag
+var withGrafanaAlloy bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -174,6 +175,7 @@ func main() {
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
 		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
 		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
+		recipeCmd.Flags().BoolVar(&withGrafanaAlloy, "with-grafana-alloy", false, "whether to spawn a grafana alloy to agent for metrics, logs, traces")
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		cookCmd.AddCommand(recipeCmd)
@@ -221,14 +223,21 @@ func runIt(recipe internal.Recipe) error {
 	}
 
 	svcManager := recipe.Apply(&internal.ExContext{LogLevel: logLevel}, artifacts)
-	if err := svcManager.Validate(); err != nil {
-		return fmt.Errorf("failed to validate manifest: %w", err)
+
+	if withPrometheus {
+		if err := internal.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
+			return fmt.Errorf("failed to create prometheus services: %w", err)
+		}
 	}
 
-	// generate the dot graph
-	dotGraph := svcManager.GenerateDotGraph()
-	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
-		return err
+	if withGrafanaAlloy {
+		if err := internal.CreateGrafanaAlloyServices(svcManager, artifacts.Out); err != nil {
+			return fmt.Errorf("failed to create grafana alloy services: %w", err)
+		}
+	}
+
+	if err := svcManager.Validate(); err != nil {
+		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
 
 	// save the manifest.json file
@@ -236,10 +245,10 @@ func runIt(recipe internal.Recipe) error {
 		return fmt.Errorf("failed to save manifest: %w", err)
 	}
 
-	if withPrometheus {
-		if err := internal.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
-			return fmt.Errorf("failed to create prometheus services: %w", err)
-		}
+	// generate the dot graph
+	dotGraph := svcManager.GenerateDotGraph()
+	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
+		return err
 	}
 
 	if dryRun {

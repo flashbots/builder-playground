@@ -1,2 +1,3 @@
 local-testnet
 output
+.env.grafana
