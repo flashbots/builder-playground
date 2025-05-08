@@ -22,10 +22,12 @@ func (a *AssertionDA) Run(service *Service, ctx *ExContext) {
 		WithArgs("--listen-addr", "0.0.0.0:"+`{{Port "http" 5001}}`, "--private-key", a.Pk).
 		WithAbsoluteVolume("/var/run/docker.sock", "/var/run/docker.sock").
 		WithAbsoluteVolume("/tmp", "/tmp").
-		WithPrivileged().
-		WithEnv("OTEL_EXPORTER_OTLP_ENDPOINT", Connect("grafana-alloy", "otlp-http")).
-		WithEnv("OTEL_ENVIRONMENT_NAME", "PCL_DA").
-		WithEnv("OTEL_SERVICE_NAME", "ASSERTION_DA")
+		WithPrivileged()
+	if ctx.AlloyEnabled {
+		service.WithEnv("OTEL_EXPORTER_OTLP_ENDPOINT", Connect("grafana-alloy", "otlp-http")).
+			WithEnv("OTEL_ENVIRONMENT_NAME", "PCL_DA").
+			WithEnv("OTEL_SERVICE_NAME", "ASSERTION_DA")
+	}
 
 }
 
@@ -97,10 +99,12 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 		WithVolume("data", "/data_op_reth").
 		WithEnv("AE_ASSERTION_GAS_LIMIT", strconv.FormatUint(o.AssexGasLimit, 10)).
 		WithEnv("AE_BLOCK_TAG", "latest").
-		WithEnv("RUST_LOG", logLevelToTalosVerbosity(ctx.LogLevel)).
-		WithEnv("OTEL_EXPORTER_OTLP_ENDPOINT", Connect("grafana-alloy", "otlp-http")).
-		WithEnv("OTEL_ENVIRONMENT_NAME", "PCL_TALOS").
-		WithEnv("OTEL_SERVICE_NAME", "OP_TALOS")
+		WithEnv("RUST_LOG", logLevelToTalosVerbosity(ctx.LogLevel))
+	if ctx.AlloyEnabled {
+		service.WithEnv("OTEL_EXPORTER_OTLP_ENDPOINT", Connect("grafana-alloy", "otlp-http")).
+			WithEnv("OTEL_ENVIRONMENT_NAME", "PCL_TALOS").
+			WithEnv("OTEL_SERVICE_NAME", "OP_TALOS")
+	}
 }
 
 func (o *OpTalos) Name() string {

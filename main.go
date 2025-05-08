@@ -29,6 +29,7 @@ var withPrometheus bool
 var networkName string
 var labels internal.MapStringFlag
 var withGrafanaAlloy bool
+var withCaddy []string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -176,6 +177,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
 		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
 		recipeCmd.Flags().BoolVar(&withGrafanaAlloy, "with-grafana-alloy", false, "whether to spawn a grafana alloy to agent for metrics, logs, traces")
+		recipeCmd.Flags().StringArrayVar(&withCaddy, "with-caddy", []string{}, "Enable caddy and expose the services with the given names")
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		cookCmd.AddCommand(recipeCmd)
@@ -236,6 +238,13 @@ func runIt(recipe internal.Recipe) error {
 		}
 	}
 
+	if len(withCaddy) > 0 {
+		log.Printf("Spawning a caddy reverse proxy for the services: %v\n", withCaddy)
+		if err := internal.CreateCaddyServices(withCaddy, svcManager, artifacts.Out); err != nil {
+			return fmt.Errorf("failed to create caddy services: %w", err)
+		}
+	}
+
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
@@ -249,6 +258,11 @@ func runIt(recipe internal.Recipe) error {
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
+	}
+
+	// save the manifest.json file
+	if err := svcManager.SaveJson(); err != nil {
+		return fmt.Errorf("failed to save manifest: %w", err)
 	}
 
 	if dryRun {
@@ -299,6 +313,20 @@ func runIt(recipe internal.Recipe) error {
 				portsStr = append(portsStr, fmt.Sprintf("%s: %d/%d%s", p.Name, p.Port, p.HostPort, protocol))
 			}
 			fmt.Printf("- %s (%s)\n", ss.Name, strings.Join(portsStr, ", "))
+		}
+		if len(withCaddy) > 0 {
+			fmt.Printf("\n========= Caddy Exposed Services =========\n")
+			for _, serviceName := range withCaddy {
+				service, ok := svcManager.GetService(serviceName)
+				if ok {
+					for _, port := range service.GetPorts() {
+						if port.Name == "http" || port.Name == "ws" {
+							fmt.Printf("- %s (%s): http://localhost:8888/%s/%s\n",
+								service.Name, port.Name, service.Name, port.Name)
+						}
+					}
+				}
+			}
 		}
 	}
 
