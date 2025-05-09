@@ -26,7 +26,8 @@ func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 			"--l2-url", Connect(r.ELNode, "authrpc"),
 			"--builder-jwt-path", "/data/jwtsecret",
 			"--builder-url", r.Builder,
-		).WithArtifact("/data/jwtsecret", "jwtsecret")
+		).WithArtifact("/data/jwtsecret", "jwtsecret").
+		withEnv("RUST_LOG", "WARN")
 	if ctx.AlloyEnabled {
 		service.
 			WithArgs(
@@ -64,7 +65,8 @@ func (o *OpBatcher) Run(service *Service, ctx *ExContext) {
 			"--poll-interval=1s",
 			"--num-confirmations=1",
 			"--private-key=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
-		)
+		).
+		WithEnv("RUST_LOG", "WARN")
 }
 
 func (o *OpBatcher) Name() string {
@@ -189,7 +191,8 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 		WithVolume("data", "/data_opgeth").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithArtifact("/data/deterministic_p2p_key.txt", "deterministic_p2p_key.txt")
+		WithArtifact("/data/deterministic_p2p_key.txt", "deterministic_p2p_key.txt").
+		WithEnv("RUST_LOG", "WARN")
 }
 
 func (o *OpGeth) Name() string {
@@ -289,7 +292,8 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 		).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth")
+		WithVolume("data", "/data_reth").
+		WithEnv("RUST_LOG", "WARN")
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -352,7 +356,8 @@ func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 			Timeout:     30 * time.Second,
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
-		})
+		}).
+		WithEnv("RUST_LOG", "WARN")
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -388,7 +393,8 @@ func (l *LighthouseValidator) Run(service *Service, ctx *ExContext) {
 			"--prefer-builder-proposals",
 		).
 		WithArtifact("/data/validator", "data_validator").
-		WithArtifact("/data/testnet-dir", "testnet")
+		WithArtifact("/data/testnet-dir", "testnet").
+		WithEnv("RUST_LOG", "WARN")
 }
 
 func (l *LighthouseValidator) Name() string {
@@ -546,7 +552,8 @@ func (o *OpReth) Run(service *Service, ctx *ExContext) {
 			"--port", `{{Port "rpc" 30303}}`).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth")
+		WithVolume("data", "/data_op_reth").
+		WithEnv("RUST_LOG", "WARN")
 }
 
 func (o *OpReth) Name() string {

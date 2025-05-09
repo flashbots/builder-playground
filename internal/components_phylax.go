@@ -22,7 +22,8 @@ func (a *AssertionDA) Run(service *Service, ctx *ExContext) {
 		WithArgs("--listen-addr", "0.0.0.0:"+`{{Port "http" 5001}}`, "--private-key", a.Pk).
 		WithAbsoluteVolume("/var/run/docker.sock", "/var/run/docker.sock").
 		WithAbsoluteVolume("/tmp", "/tmp").
-		WithPrivileged()
+		WithPrivileged().
+		withEnv("RUST_LOG", logLevelToTalosVerbosity(ctx.LogLevel)).
 	if ctx.AlloyEnabled {
 		service.WithEnv("OTEL_EXPORTER_OTLP_ENDPOINT", Connect("grafana-alloy", "otlp-http")).
 			WithEnv("OTEL_ENVIRONMENT_NAME", "PCL_DA").
