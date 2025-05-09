@@ -643,6 +643,12 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		"labels":   labels,
 	}
 
+	if runtime.GOOS == "linux" {
+		uid := os.Getuid()
+		gid := os.Getgid()
+		service["user"] = fmt.Sprintf("%d:%d", uid, gid)
+	}
+
 	if len(envs) > 0 {
 		service["environment"] = envs
 	}
