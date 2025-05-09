@@ -30,6 +30,7 @@ var networkName string
 var labels internal.MapStringFlag
 var withGrafanaAlloy bool
 var withCaddy []string
+var detach bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -179,6 +180,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&withGrafanaAlloy, "with-grafana-alloy", false, "whether to spawn a grafana alloy to agent for metrics, logs, traces")
 		recipeCmd.Flags().StringArrayVar(&withCaddy, "with-caddy", []string{}, "Enable caddy and expose the services with the given names")
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
+		recipeCmd.Flags().BoolVar(&detach, "detach", false, "detach the services")
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -361,6 +363,10 @@ func runIt(recipe internal.Recipe) error {
 	var timerCh <-chan time.Time
 	if timeout > 0 {
 		timerCh = time.After(timeout)
+	}
+
+	if detach {
+		return nil
 	}
 
 	select {
