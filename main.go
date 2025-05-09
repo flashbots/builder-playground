@@ -28,6 +28,7 @@ var bindExternal bool
 var withPrometheus bool
 var networkName string
 var labels internal.MapStringFlag
+var disableLogs bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -175,6 +176,8 @@ func main() {
 		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
+		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
+
 		cookCmd.AddCommand(recipeCmd)
 	}
 
@@ -252,7 +255,7 @@ func runIt(recipe internal.Recipe) error {
 		}
 	}
 
-	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, overrides, interactive, !bindExternal, networkName, labels)
+	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, overrides, interactive, !bindExternal, networkName, labels, !disableLogs)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}

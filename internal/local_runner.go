@@ -77,6 +77,9 @@ type LocalRunner struct {
 
 	// labels is the list of labels to apply to each resource being created
 	labels map[string]string
+
+	// logInternally outputs the logs of the service to the artifacts folder
+	logInternally bool
 }
 
 type task struct {
@@ -107,7 +110,7 @@ func newDockerClient() (*client.Client, error) {
 }
 
 // TODO: add a runner config struct
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool, networkName string, labels map[string]string) (*LocalRunner, error) {
+func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool, networkName string, labels map[string]string, logInternally bool) (*LocalRunner, error) {
 	client, err := newDockerClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
@@ -124,22 +127,23 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	// Create the concrete instances to run
 	instances := []*instance{}
 	for _, service := range manifest.Services() {
-		log_output, err := out.LogOutput(service.Name)
-		if err != nil {
-			return nil, fmt.Errorf("error getting log output: %w", err)
-		}
-		logs := &serviceLogs{
-			logRef: log_output,
-			path:   log_output.Name(),
-		}
 		component := FindComponent(service.ComponentName)
 		if component == nil {
 			return nil, fmt.Errorf("component not found '%s'", service.ComponentName)
 		}
 		instance := &instance{
 			service:   service,
-			logs:      logs,
 			component: component,
+		}
+		if logInternally {
+			log_output, err := out.LogOutput(service.Name)
+			if err != nil {
+				return nil, fmt.Errorf("error getting log output: %w", err)
+			}
+			instance.logs = &serviceLogs{
+				logRef: log_output,
+				path:   log_output.Name(),
+			}
 		}
 		instances = append(instances, instance)
 	}
@@ -213,6 +217,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 		networkName:          networkName,
 		instances:            instances,
 		labels:               labels,
+		logInternally:        logInternally,
 	}
 
 	if interactive {
@@ -872,12 +877,14 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 			case events.ActionStart:
 				d.updateTaskStatus(name, taskStatusStarted)
 
-				// the container has started, we can track the logs now
-				go func() {
-					if err := d.trackLogs(name, event.Actor.ID); err != nil {
-						log.Warn("error tracking logs", "error", err)
-					}
-				}()
+				if d.logInternally {
+					// the container has started, we can track the logs now
+					go func() {
+						if err := d.trackLogs(name, event.Actor.ID); err != nil {
+							log.Warn("error tracking logs", "error", err)
+						}
+					}()
+				}
 			case events.ActionDie:
 				d.updateTaskStatus(name, taskStatusDie)
 				log.Info("container died", "name", name)
@@ -971,7 +978,9 @@ func (d *LocalRunner) Run() error {
 
 	// generate the output log file for each service so that it is available after Run is done
 	for _, instance := range d.instances {
-		d.tasks[instance.service.Name].logs = instance.logs.logRef
+		if instance.logs != nil {
+			d.tasks[instance.service.Name].logs = instance.logs.logRef
+		}
 	}
 
 	// First start the services that are running in docker-compose
