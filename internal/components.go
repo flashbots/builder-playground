@@ -11,6 +11,24 @@ import (
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 
+// logLevelToRustLogEnv converts LogLevel to the RUST_LOG string format.
+func logLevelToRustLogEnv(logLevel LogLevel) string {
+	switch logLevel {
+	case LevelTrace:
+		return "trace"
+	case LevelDebug:
+		return "debug"
+	case LevelInfo:
+		return "info"
+	case LevelWarn:
+		return "warn"
+	case LevelError:
+		return "error"
+	default:
+		return "info"
+	}
+}
+
 type RollupBoost struct {
 	ELNode  string
 	Builder string
@@ -65,7 +83,7 @@ func (o *OpBatcher) Run(service *Service, ctx *ExContext) {
 			"--num-confirmations=1",
 			"--private-key=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
 		).
-		WithEnv("RUST_LOG", "WARN")
+		WithEnv("RUST_LOG", logLevelToRustLogEnv(ctx.LogLevel))
 }
 
 func (o *OpBatcher) Name() string {
@@ -109,6 +127,7 @@ func (o *OpNode) Run(service *Service, ctx *ExContext) {
 			"--pprof.enabled",
 			"--rpc.enable-admin",
 			"--safedb.path", "/data_db",
+			"--log.level="+logLevelToRustLogEnv(ctx.LogLevel),
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/rollup.json", "rollup.json").
@@ -190,8 +209,7 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 		WithVolume("data", "/data_opgeth").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithArtifact("/data/deterministic_p2p_key.txt", "deterministic_p2p_key.txt").
-		WithEnv("RUST_LOG", "WARN")
+		WithArtifact("/data/deterministic_p2p_key.txt", "deterministic_p2p_key.txt")
 }
 
 func (o *OpGeth) Name() string {
@@ -292,7 +310,7 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth").
-		WithEnv("RUST_LOG", "WARN")
+		WithEnv("RUST_LOG", logLevelToRustLogEnv(ctx.LogLevel))
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -356,7 +374,7 @@ func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
 		}).
-		WithEnv("RUST_LOG", "WARN")
+		WithEnv("RUST_LOG", logLevelToRustLogEnv(ctx.LogLevel))
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -393,7 +411,7 @@ func (l *LighthouseValidator) Run(service *Service, ctx *ExContext) {
 		).
 		WithArtifact("/data/validator", "data_validator").
 		WithArtifact("/data/testnet-dir", "testnet").
-		WithEnv("RUST_LOG", "WARN")
+		WithEnv("RUST_LOG", logLevelToRustLogEnv(ctx.LogLevel))
 }
 
 func (l *LighthouseValidator) Name() string {
@@ -552,7 +570,7 @@ func (o *OpReth) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth").
-		WithEnv("RUST_LOG", "WARN")
+		WithEnv("RUST_LOG", logLevelToRustLogEnv(ctx.LogLevel))
 }
 
 func (o *OpReth) Name() string {

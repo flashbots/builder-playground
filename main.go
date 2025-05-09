@@ -30,6 +30,7 @@ var networkName string
 var labels internal.MapStringFlag
 var withGrafanaAlloy bool
 var withCaddy []string
+var componentsLogLevelFlag string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -174,6 +175,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
 		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
+		recipeCmd.Flags().StringVar(&componentsLogLevelFlag, "components-log-level", "", "log level for non-core components")
 		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
 		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
 		recipeCmd.Flags().BoolVar(&withGrafanaAlloy, "with-grafana-alloy", false, "whether to spawn a grafana alloy to agent for metrics, logs, traces")
@@ -199,12 +201,26 @@ func main() {
 }
 
 func runIt(recipe internal.Recipe) error {
-	var logLevel internal.LogLevel
-	if err := logLevel.Unmarshal(logLevelFlag); err != nil {
+	var primaryLogLevel internal.LogLevel
+	if err := primaryLogLevel.Unmarshal(logLevelFlag); err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
 
-	log.Printf("Log level: %s\n", logLevel)
+	contextLogLevel := primaryLogLevel
+	if componentsLogLevelFlag != "" {
+		var componentsLogLevel internal.LogLevel
+		if err := componentsLogLevel.Unmarshal(componentsLogLevelFlag); err != nil {
+			return fmt.Errorf("failed to parse components log level: %w", err)
+		}
+		contextLogLevel = componentsLogLevel
+	}
+
+	log.Printf("Primary Log level: %s\n", primaryLogLevel)
+	if componentsLogLevelFlag != "" {
+		log.Printf("Components Log level: %s\n", contextLogLevel)
+	} else {
+		log.Printf("Log level for all components: %s\n", contextLogLevel)
+	}
 
 	// parse the overrides
 	overrides := map[string]string{}
@@ -224,7 +240,7 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(&internal.ExContext{LogLevel: logLevel}, artifacts)
+	svcManager := recipe.Apply(&internal.ExContext{LogLevel: contextLogLevel}, artifacts)
 
 	if withPrometheus {
 		if err := internal.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {

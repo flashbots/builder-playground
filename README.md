@@ -87,7 +87,8 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 - `--genesis-delay` (int): The delay in seconds before the genesis block is created. Defaults to `10` seconds
 - `--watchdog` (bool): Enable the watchdog service to monitor the specific chain
 - `--dry-run` (bool): Generates the artifacts and manifest but does not deploy anything (also enabled with the `--mise-en-place` flag)
-- `--log-level` (string): Log level to use (debug, info, warn, error, fatal). Defaults to `info`.
+- `--log-level` (string): Log level to use (trace, debug, info, warn, error). Defaults to `info`. This is the default log level for all components and is specifically used by Phylax components (e.g., OpTalos).
+- `--components-log-level` (string): Log level to use (trace, debug, info, warn, error) for non-Phylax components (e.g., OpGeth, RethEL, OpBatcher, Lighthouse, OpReth). If not provided, the value of `--log-level` is used.
 - `--labels` (key=val): Custom labels to apply to your deployment.
 
 To stop the playground, press `Ctrl+C`.
