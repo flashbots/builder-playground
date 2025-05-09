@@ -66,6 +66,7 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 - `--dry-run` (bool): Generates the artifacts and manifest but does not deploy anything (also enabled with the `--mise-en-place` flag)
 - `--log-level` (string): Log level to use (debug, info, warn, error, fatal). Defaults to `info`.
 - `--labels` (key=val): Custom labels to apply to your deployment.
+- `--disable-logs` (bool): Disable the logs for the services. Defaults to `false`.
 
 To stop the playground, press `Ctrl+C`.
 
