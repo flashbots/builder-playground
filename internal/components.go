@@ -44,6 +44,7 @@ func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 			"--l2-url", Connect(r.ELNode, "authrpc"),
 			"--builder-jwt-path", "/data/jwtsecret",
 			"--builder-url", r.Builder,
+			"--log-level", logLevelToRustLogEnv(ctx.LogLevel),
 		).WithArtifact("/data/jwtsecret", "jwtsecret")
 	// if ctx.AlloyEnabled {
 	// 	service.
