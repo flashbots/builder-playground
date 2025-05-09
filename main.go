@@ -240,7 +240,10 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(&internal.ExContext{LogLevel: contextLogLevel}, artifacts)
+	svcManager := recipe.Apply(&internal.ExContext{
+		LogLevel:       contextLogLevel,
+		PhylaxLogLevel: primaryLogLevel,
+	}, artifacts)
 
 	if withPrometheus {
 		if err := internal.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {

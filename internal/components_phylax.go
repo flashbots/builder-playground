@@ -26,7 +26,8 @@ func (a *AssertionDA) Run(service *Service, ctx *ExContext) {
 	if ctx.AlloyEnabled {
 		service.WithEnv("OTEL_EXPORTER_OTLP_ENDPOINT", Connect("grafana-alloy", "otlp-http")).
 			WithEnv("OTEL_ENVIRONMENT_NAME", "PCL_DA").
-			WithEnv("OTEL_SERVICE_NAME", "ASSERTION_DA")
+			WithEnv("OTEL_SERVICE_NAME", "ASSERTION_DA").
+			WithEnv("OTEL_LEVEL", logLevelToRustLogEnv(ctx.PhylaxLogLevel))
 	}
 
 }
@@ -99,11 +100,11 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 		WithVolume("data", "/data_op_reth").
 		WithEnv("AE_ASSERTION_GAS_LIMIT", strconv.FormatUint(o.AssexGasLimit, 10)).
 		WithEnv("AE_BLOCK_TAG", "latest").
-		WithEnv("RUST_LOG", logLevelToTalosVerbosity(ctx.LogLevel))
+		WithEnv("RUST_LOG", logLevelToTalosVerbosity(ctx.PhylaxLogLevel))
 	if ctx.AlloyEnabled {
 		service.WithEnv("OTEL_EXPORTER_OTLP_ENDPOINT", Connect("grafana-alloy", "otlp-http")).
 			WithEnv("OTEL_ENVIRONMENT_NAME", "PCL_TALOS").
-			WithEnv("OTEL_LEVEL", "INFO").
+			WithEnv("OTEL_LEVEL", logLevelToRustLogEnv(ctx.PhylaxLogLevel)).
 			WithEnv("OTEL_SERVICE_NAME", "OP_TALOS")
 	}
 }
