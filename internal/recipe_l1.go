@@ -63,19 +63,20 @@ func (m *Manifest) AddServiceWithDeps(name string, service Service, deps ...stri
 func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	svcManager := NewManifest(ctx, artifacts.Out)
 
-	// Register bootnode without dependency
+	// Register bootnode
 	bootnode := &Bootnode{
 		DiscoveryPort: 30301,
 		PrivateKey:    l.bootnodePrivKey,
 	}
 	svcManager.AddService("bootnode", bootnode)
 
-	// Register 'el' service with dependency on bootnode
+	// Register 'el' service
 	el := &RethEL{
 		UseRethForValidation: l.useRethForValidation,
 		UseNativeReth:        l.useNativeReth,
+		BootnodeService:      "bootnode",
 	}
-	svcManager.AddServiceWithDeps("el", el, "bootnode")
+	svcManager.AddService("el", el)
 
 	var elService string
 	if l.secondaryELPort != 0 {
@@ -89,30 +90,30 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		elService = "el"
 	}
 
-	// Register beacon with dependency on bootnode
+	// Register beacon
 	beacon := &LighthouseBeaconNode{
 		ExecutionNode: elService,
 		MevBoostNode:  "mev-boost",
 	}
-	svcManager.AddServiceWithDeps("beacon", beacon, "bootnode")
+	svcManager.AddService("beacon", beacon)
 
-	// Register validator with dependency on beacon
+	// Register validator
 	validator := &LighthouseValidator{
 		BeaconNode: "beacon",
 	}
-	svcManager.AddServiceWithDeps("validator", validator, "beacon")
+	svcManager.AddService("validator", validator)
 
 	mevBoostValidationServer := ""
 	if l.useRethForValidation {
 		mevBoostValidationServer = "el"
 	}
 
-	// Register mev-boost with dependency on beacon
+	// Register mev-boost
 	mevBoost := &MevBoostRelay{
 		BeaconClient:     "beacon",
 		ValidationServer: mevBoostValidationServer,
 	}
-	svcManager.AddServiceWithDeps("mev-boost", mevBoost, "beacon")
+	svcManager.AddService("mev-boost", mevBoost)
 
 	return svcManager
 }

@@ -105,6 +105,7 @@ func (o *OpNode) Name() string {
 
 type OpGeth struct {
 	UseDeterministicP2PKey bool
+	BootnodeService        string
 
 	// outputs
 	Enode string
@@ -165,7 +166,7 @@ func (o *OpGeth) Run(service *service, ctx *ExContext) {
 				"--gcmode archive "+
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
-				"--bootnodes enode://"+defaultDiscoveryEnodeID+"@bootnode:30301 "+
+				"--bootnodes enode://"+defaultDiscoveryEnodeID+"@"+o.BootnodeService+":30301 "+
 				nodeKeyFlag+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
@@ -203,6 +204,7 @@ func (o *OpGeth) Watchdog(out io.Writer, service *service, ctx context.Context) 
 type RethEL struct {
 	UseRethForValidation bool
 	UseNativeReth        bool
+	BootnodeService      string
 }
 
 func (r *RethEL) ReleaseArtifact() *release {
@@ -254,7 +256,7 @@ func (r *RethEL) Run(svc *service, ctx *ExContext) {
 			"--ipcpath", "{{.Dir}}/reth.ipc",
 			"--addr", "127.0.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
-			"--bootnodes", "enode://"+defaultDiscoveryEnodeID+"@bootnode:30301",
+			"--bootnodes", "enode://"+defaultDiscoveryEnodeID+"@"+r.BootnodeService+":30301",
 			// "--disable-discovery",
 			// http config
 			"--http",
@@ -587,4 +589,34 @@ func (b *Bootnode) Run(service *service, ctx *ExContext) {
 
 func (b *Bootnode) Name() string {
 	return "bootnode"
+}
+
+// ServiceDependencies defines the interface for components that have dependencies
+type ServiceDependencies interface {
+	GetDependencies() []string
+}
+
+func (r *RethEL) GetDependencies() []string {
+	return []string{"bootnode"}
+}
+
+func (l *LighthouseBeaconNode) GetDependencies() []string {
+	return []string{"bootnode"}
+}
+
+func (l *LighthouseValidator) GetDependencies() []string {
+	return []string{"beacon"}
+}
+
+func (m *MevBoostRelay) GetDependencies() []string {
+	return []string{"beacon"}
+}
+
+func (m *Manifest) AddService(name string, service Service) {
+	m.Services[name] = service
+	if deps, ok := service.(ServiceDependencies); ok {
+		for _, dep := range deps.GetDependencies() {
+			m.MustGetService(name).DependsOnHealthy(dep)
+		}
+	}
 }
