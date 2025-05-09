@@ -176,8 +176,14 @@ discovery.relabel "logs_integrations_docker" {
 
   rule {
     source_labels = ["__meta_docker_container_name"]
-    regex = "/(.*)"
-    target_label = "service_name"
+    regex         = "/(devnet-op-talos-1)"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "service_name"
+    replacement   = "$1"
   }
   rule {
 	target_label = "instance"
