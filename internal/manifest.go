@@ -37,6 +37,7 @@ type Manifest struct {
 }
 
 func NewManifest(ctx *ExContext, out *output) *Manifest {
+	ctx.Output = out
 	return &Manifest{ctx: ctx, out: out, overrides: make(map[string]string)}
 }
 
@@ -71,6 +72,11 @@ func (l *LogLevel) Unmarshal(s string) error {
 // Execution context
 type ExContext struct {
 	LogLevel LogLevel
+
+	// This dependency is not ideal. Doing it so that I do not
+	// have to modify the serviceDesc interface to give services
+	// access to the output.
+	Output *output
 }
 
 type ServiceGen interface {
