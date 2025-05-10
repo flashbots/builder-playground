@@ -485,7 +485,7 @@ func (b *BuilderHub) Run(service *Service, ctx *ExContext) {
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("latest").
 		WithEntrypoint("/app/builder-hub").
-		WithEnv("POSTGRES_DSN", "postgres://postgres:postgres@"+ConnectRaw(b.postgres, "postgres", "")+"/postgres?sslmode=disable").
+		WithEnv("POSTGRES_DSN", ConnectRaw(b.postgres, "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
 		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
 		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
 		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).

@@ -206,6 +206,8 @@ type Port struct {
 type NodeRef struct {
 	Service   string
 	PortLabel string
+	Protocol  string
+	User      string
 }
 
 // serviceLogs is a service to access the logs of the running service
@@ -443,7 +445,7 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 	// ther can be multiple port and nodere because in the case of op-geth we pass a whole string as nested command args
 
 	funcs := template.FuncMap{
-		"Service": func(name string, portLabel, protocol string) string {
+		"Service": func(name string, portLabel, protocol, user string) string {
 			if name == "" {
 				panic("BUG: service name cannot be empty")
 			}
@@ -455,8 +457,8 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 			// here we only keep the references to the services to be checked if they are valid and an be resolved
 			// later on for the runtime we will do the resolve stage.
 			// TODO: this will get easier when we move away from templates and use interface and structs.
-			nodeRef = append(nodeRef, NodeRef{Service: name, PortLabel: portLabel})
-			return fmt.Sprintf(`{{Service "%s" "%s"}}`, name, portLabel)
+			nodeRef = append(nodeRef, NodeRef{Service: name, PortLabel: portLabel, Protocol: protocol, User: user})
+			return fmt.Sprintf(`{{Service "%s" "%s" "%s" "%s"}}`, name, portLabel, protocol, user)
 		},
 		"Port": func(name string, defaultPort int) string {
 			portRef = append(portRef, Port{Name: name, Port: defaultPort, Protocol: ProtocolTCP})

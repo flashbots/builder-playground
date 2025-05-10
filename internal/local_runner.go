@@ -477,12 +477,7 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 	}
 
 	funcs := template.FuncMap{
-		"Service": func(name string, portLabel, protocol string) string {
-			protocolPrefix := ""
-			if protocol == "http" {
-				protocolPrefix = "http://"
-			}
-
+		"Service": func(name string, portLabel, protocol, user string) string {
 			// For {{Service "name" "portLabel"}}:
 			// - Service runs on host:
 			//   A: target is inside docker: access with localhost:hostPort
@@ -497,14 +492,14 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 
 			if d.isHostService(s.Name) {
 				// A and B
-				return fmt.Sprintf("%slocalhost:%d", protocolPrefix, port.HostPort)
+				return printAddr(protocol, "localhost", port.HostPort, user)
 			} else {
 				if d.isHostService(svc.Name) {
 					// D
-					return fmt.Sprintf("%shost.docker.internal:%d", protocolPrefix, port.HostPort)
+					return printAddr(protocol, "host.docker.internal", port.HostPort, user)
 				}
 				// C
-				return fmt.Sprintf("%s%s:%d", protocolPrefix, svc.Name, port.Port)
+				return printAddr(protocol, svc.Name, port.Port, user)
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
@@ -552,6 +547,19 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 	return argsResult, envs, nil
 }
 
+func printAddr(protocol, serviceName string, port int, user string) string {
+	var protocolPrefix string
+	if protocol != "" {
+		protocolPrefix = protocol + "://"
+	}
+
+	if user != "" {
+		return fmt.Sprintf("%s%s@%s:%s", protocolPrefix, user, serviceName, serviceName)
+	}
+
+	return fmt.Sprintf("%s%s:%d", protocolPrefix, serviceName, port)
+}
+
 func (d *LocalRunner) validateImageExists(image string) error {
 	// check locally
 	_, err := d.client.ImageInspect(context.Background(), image)
@@ -570,7 +578,7 @@ func (d *LocalRunner) validateImageExists(image string) error {
 		return err
 	}
 
-	return fmt.Errorf("image %s not found: %w", image)
+	return fmt.Errorf("image %s not found", image)
 }
 
 func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}, error) {
