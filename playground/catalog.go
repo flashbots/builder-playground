@@ -1,4 +1,4 @@
-package internal
+package playground
 
 var Components = []ServiceGen{}
 
