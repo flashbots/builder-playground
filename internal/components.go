@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -112,10 +111,8 @@ func (o *OpNode) Name() string {
 }
 
 type OpGeth struct {
-	UseDeterministicP2PKey bool
-
 	// outputs
-	Enode string
+	Enode *EnodeAddr
 }
 
 func logLevelToGethVerbosity(logLevel LogLevel) string {
@@ -136,10 +133,7 @@ func logLevelToGethVerbosity(logLevel LogLevel) string {
 }
 
 func (o *OpGeth) Run(service *Service, ctx *ExContext) {
-	var nodeKeyFlag string
-	if o.UseDeterministicP2PKey {
-		nodeKeyFlag = "--nodekey /data/deterministic_p2p_key.txt "
-	}
+	o.Enode = ctx.Output.GetEnodeAddr()
 
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
@@ -174,7 +168,7 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 				"--gcmode archive "+
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
-				nodeKeyFlag+
+				"--nodekey /data/p2p_key.txt "+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
@@ -182,27 +176,11 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 		WithVolume("data", "/data_opgeth").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithArtifact("/data/deterministic_p2p_key.txt", "deterministic_p2p_key.txt")
+		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 }
 
 func (o *OpGeth) Name() string {
 	return "op-geth"
-}
-
-var _ ServiceReady = &OpGeth{}
-
-func (o *OpGeth) Ready(instance *instance) error {
-	enodeLine, err := instance.logs.FindLog("enode://")
-	if err != nil {
-		return err
-	}
-
-	parts := strings.Split(enodeLine, "enode://")[1]
-	enodeID := strings.Split(parts, "@")[0]
-
-	enode := fmt.Sprintf("enode://%s@127.0.0.1:%d?discport=0", enodeID, instance.service.MustGetPort("rpc").HostPort)
-	o.Enode = enode
-	return nil
 }
 
 var _ ServiceWatchdog = &OpGeth{}

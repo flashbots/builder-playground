@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/hashicorp/go-uuid"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
@@ -37,8 +38,6 @@ import (
 
 var (
 	defaultOpBlockTimeSeconds = uint64(2)
-	defaultDiscoveryPrivKey   = "a11ac89899cd86e36b6fb881ec1255b8a92a688790b7d950f8b7d8dd626671fb"
-	defaultDiscoveryEnodeID   = "3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f"
 )
 
 // minimumGenesisDelay is the minimum delay for the genesis time. This is required
@@ -246,7 +245,6 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		"testnet/deposit_contract_block.txt":  "0",
 		"testnet/genesis_validators_root.txt": hex.EncodeToString(state.GenesisValidatorsRoot()),
 		"data_validator/":                     &lighthouseKeystore{privKeys: priv},
-		"deterministic_p2p_key.txt":           defaultDiscoveryPrivKey,
 		"scripts/query.sh":                    queryReadyCheck,
 	})
 	if err != nil {
@@ -418,6 +416,8 @@ type output struct {
 
 	homeDir string
 	lock    sync.Mutex
+
+	enodeAddrSeq *big.Int
 }
 
 func (o *output) AbsoluteDstPath() (string, error) {
@@ -695,4 +695,39 @@ func applyTemplate2(templateStr []byte, input interface{}) ([]byte, error) {
 	}
 
 	return []byte(out.String()), nil
+}
+
+type EnodeAddr struct {
+	PrivKey  *ecdsa.PrivateKey
+	Artifact string
+}
+
+func (e *EnodeAddr) ID() enode.ID {
+	return enode.PubkeyToIDV4(&e.PrivKey.PublicKey)
+}
+
+func (o *output) GetEnodeAddr() *EnodeAddr {
+	// TODO: This is a bit enshrined here
+	if o.enodeAddrSeq == nil {
+		o.enodeAddrSeq = big.NewInt(0)
+	}
+
+	// always start with 1 since 0 is not a valid private key for an enode address
+	o.enodeAddrSeq.Add(o.enodeAddrSeq, big.NewInt(1))
+	privKeyBytes := gethcommon.LeftPadBytes(o.enodeAddrSeq.Bytes(), 32)
+
+	privKey, err := ecrypto.ToECDSA(privKeyBytes)
+	if err != nil {
+		panic(fmt.Sprintf("BUG: failed to convert private key to ECDSA: %v", err))
+	}
+
+	privKeyBytesHex := hex.EncodeToString(privKeyBytes)
+
+	// write the key to an artifact file
+	fileName := fmt.Sprintf("enode-key-%d.txt", o.enodeAddrSeq.Int64())
+	if err := o.WriteFile(fileName, privKeyBytesHex); err != nil {
+		panic(fmt.Sprintf("BUG: failed to write enode key to artifact file: %v", err))
+	}
+
+	return &EnodeAddr{PrivKey: privKey, Artifact: fileName}
 }
