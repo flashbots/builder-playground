@@ -702,6 +702,10 @@ type EnodeAddr struct {
 	Artifact string
 }
 
+func (e *EnodeAddr) PrivKeyHex() string {
+	return hex.EncodeToString(gethcommon.LeftPadBytes(e.PrivKey.D.Bytes(), 32))
+}
+
 func (e *EnodeAddr) ID() enode.ID {
 	return enode.PubkeyToIDV4(&e.PrivKey.PublicKey)
 }

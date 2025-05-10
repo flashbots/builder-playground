@@ -193,6 +193,7 @@ func (o *OpGeth) Watchdog(out io.Writer, instance *instance, ctx context.Context
 type RethEL struct {
 	UseRethForValidation bool
 	UseNativeReth        bool
+	Bootnode             *EnodeAddr
 }
 
 func (r *RethEL) ReleaseArtifact() *release {
@@ -261,6 +262,10 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
+
+	if r.Bootnode != nil {
+
+	}
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -558,4 +563,27 @@ func (n *nullService) Run(service *Service, ctx *ExContext) {
 
 func (n *nullService) Name() string {
 	return "null"
+}
+
+type Bootnode struct {
+	Enode *EnodeAddr
+}
+
+func (b *Bootnode) Run(service *Service, ctx *ExContext) {
+	// bootnode is not available in modern versions of Geth anymore https://github.com/ethereum/go-ethereum/pull/30813
+	b.Enode = ctx.Output.GetEnodeAddr()
+
+	service.
+		WithImage("ethereum/client-go").
+		WithTag("alltools-release-1.10").
+		WithEntrypoint("bootnode").
+		WithArgs(
+			"--nodekeyhex", b.Enode.PrivKeyHex(),
+			"--addr", `0.0.0.0:{{Port "p2p" 33333}}`,
+			"--verbosity", logLevelToGethVerbosity(ctx.LogLevel),
+		)
+}
+
+func (b *Bootnode) Name() string {
+	return "bootnode"
 }

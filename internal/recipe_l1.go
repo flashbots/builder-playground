@@ -52,6 +52,8 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	svcManager := NewManifest(ctx, artifacts.Out)
 
+	svcManager.AddService("bootnode", &Bootnode{})
+
 	svcManager.AddService("el", &RethEL{
 		UseRethForValidation: l.useRethForValidation,
 		UseNativeReth:        l.useNativeReth,
