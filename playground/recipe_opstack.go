@@ -1,4 +1,4 @@
-package internal
+package playground
 
 import (
 	flag "github.com/spf13/pflag"

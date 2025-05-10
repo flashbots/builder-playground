@@ -1,4 +1,4 @@
-package internal
+package playground
 
 import (
 	"fmt"
