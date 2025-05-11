@@ -1,4 +1,4 @@
-package internal
+package playground
 
 import (
 	flag "github.com/spf13/pflag"
@@ -121,9 +121,7 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		L1Beacon: "beacon",
 		L2Node:   elNode,
 	})
-	svcManager.AddService("op-geth", &OpGeth{
-		UseDeterministicP2PKey: o.externalBuilder != "",
-	})
+	svcManager.AddService("op-geth", &OpGeth{})
 	svcManager.AddService("op-batcher", &OpBatcher{
 		L1Node:             "el",
 		L2Node:             "op-geth",

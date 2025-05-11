@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	internal "github.com/phylaxsystems/builder-playground/playground"
+	"github.com/phylaxsystems/builder-playground/playground"
 	"github.com/spf13/cobra"
 )
 
@@ -152,6 +152,7 @@ var recipes = []playground.Recipe{
 	&playground.L1Recipe{},
 	&playground.OpRecipe{},
 	&playground.BuilderNetRecipe{},
+	&playground.OpTalosRecipe{},
 }
 
 func main() {
@@ -230,12 +231,6 @@ func runIt(recipe playground.Recipe) error {
 
 	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel, AlloyEnabled: withGrafanaAlloy, CaddyEnabled: len(withCaddy) > 0}, artifacts)
 
-	if withPrometheus {
-		if err := playground.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
-			return fmt.Errorf("failed to create prometheus services: %w", err)
-		}
-	}
-
 	if withGrafanaAlloy {
 		if err := playground.CreateGrafanaAlloyServices(svcManager, artifacts.Out); err != nil {
 			return fmt.Errorf("failed to create grafana alloy services: %w", err)
@@ -244,7 +239,7 @@ func runIt(recipe playground.Recipe) error {
 
 	if len(withCaddy) > 0 {
 		log.Printf("Spawning a caddy reverse proxy for the services: %v\n", withCaddy)
-		if err := internal.CreateCaddyServices(withCaddy, svcManager, artifacts.Out); err != nil {
+		if err := playground.CreateCaddyServices(withCaddy, svcManager, artifacts.Out); err != nil {
 			return fmt.Errorf("failed to create caddy services: %w", err)
 		}
 	}
