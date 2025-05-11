@@ -228,7 +228,7 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel}, artifacts)
+	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel, AlloyEnabled: withGrafanaAlloy, CaddyEnabled: len(withCaddy) > 0}, artifacts)
 
 	if withPrometheus {
 		if err := playground.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {

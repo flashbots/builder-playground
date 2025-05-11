@@ -147,12 +147,12 @@ otelcol.processor.resourcedetection "container_detector" {
   timeout = "5s"
 
   output {
-    traces = [otelcol.exporter.otlp.grafanacloud.input]
+    traces = [otelcol.exporter.otlphttp.grafanacloud.input]
   }
 }
 
 // Export traces
-otelcol.exporter.otlp "grafanacloud" {
+otelcol.exporter.otlphttp "grafanacloud" {
   client {
     endpoint = sys.env("GRAFANA_TRACES_URL")
     auth = otelcol.auth.basic.grafanacloud.handler
