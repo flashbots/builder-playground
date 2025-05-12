@@ -8,7 +8,7 @@ var _ Recipe = &OpTalosRecipe{}
 
 // OpRecipe is a recipe that deploys an OP stack
 type OpTalosRecipe struct {
-	// externalBuilder is the URL of the external builder to use. If enabled, the recipe deploys
+	// externalBuilder is the URL of the external builder to use. If set, the recipe deploys
 	// rollup-boost on the sequencer and uses this URL as the external builder.
 	externalBuilder string
 
@@ -23,9 +23,12 @@ type OpTalosRecipe struct {
 	// (default is 2 seconds)
 	batcherMaxChannelDuration uint64
 
-	// externalDA is the URL of the external DA to use. If enabled, the recipe deploys
+	// externalDA is the URL of the external DA to use. If unset or set to "dev", the recipe deploys
 	// a new assertion-da service and connects it to the external DA.
 	externalDA string
+
+	// assertionDAPrivateKey is the private key of the assertion DA
+	assertionDAPrivateKey string
 
 	// assexGasLimit is the gas limit of the Assertion Execution
 	assexGasLimit uint64
@@ -35,6 +38,9 @@ type OpTalosRecipe struct {
 
 	// faucet is the private key of the faucet address
 	faucet bool
+
+	// faucetPrivateKey is the private key of the faucet address
+	faucetPrivateKey string
 }
 
 func (o *OpTalosRecipe) Name() string {
@@ -49,12 +55,14 @@ func (o *OpTalosRecipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("pcl", flag.ContinueOnError)
 	flags.StringVar(&o.externalBuilder, "external-builder", "", "External builder URL")
 	flags.StringVar(&o.externalDA, "external-da", "", "External DA URL")
+	flags.StringVar(&o.assertionDAPrivateKey, "assertion-da-private-key", "", "Private key for assertion DA (required if external-da is unset, empty, or 'dev')")
 	flags.Var(&nullableUint64Value{&o.enableLatestFork}, "enable-latest-fork", "Enable latest fork isthmus (nil or empty = disabled, otherwise enabled at specified block)")
 	flags.Uint64Var(&o.blockTime, "block-time", defaultOpBlockTimeSeconds, "Block time to use for the rollup")
 	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
 	flags.Uint64Var(&o.assexGasLimit, "assex-gas-limit", 30000000, "Gas limit of the Assertion Execution")
 	flags.StringVar(&o.oracleContract, "oracle-contract", "0x6dD3f12ce435f69DCeDA7e31605C02Bb5422597b", "State Oracle contract address")
 	flags.BoolVar(&o.faucet, "faucet", false, "Enable the faucet")
+	flags.StringVar(&o.faucetPrivateKey, "faucet-private-key", "", "Private key for faucet (required if faucet is enabled)")
 	return flags
 }
 
@@ -66,6 +74,17 @@ func (o *OpTalosRecipe) Artifacts() *ArtifactsBuilder {
 }
 
 func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+	// Validate required flags
+	if o.externalDA == "" || o.externalDA == "dev" {
+		if o.assertionDAPrivateKey == "" {
+			panic("assertion-da-private-key is required when external-da is unset, empty, or 'dev'")
+		}
+	}
+	
+	if o.faucet && o.faucetPrivateKey == "" {
+		panic("faucet-private-key is required when faucet is enabled")
+	}
+
 	svcManager := NewManifest(ctx, artifacts.Out)
 	svcManager.AddService("el", &RethEL{})
 	svcManager.AddService("beacon", &LighthouseBeaconNode{
@@ -77,11 +96,9 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	externalDaRef := o.externalDA
 	if o.externalDA == "" || o.externalDA == "dev" {
-
 		svcManager.AddService("assertion-da", &AssertionDA{
 			DevMode: o.externalDA == "dev",
-			// cast keccak "credible-layer-sandbox-assertion-da"
-			Pk: "0xb14a93020522e378f565ebd6d1032b06af46dc778a1bfea9602a9641547c4673",
+			Pk: o.assertionDAPrivateKey,
 		})
 		externalDaRef = Connect("assertion-da", "http")
 	}
@@ -103,9 +120,7 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			Rpc:        externalHttpRef,
 			FaucetName: "",
 			Symbol:     "Phylax Demo ETH",
-			// genesis.json #1 alloc
-			// address: 0x5BD98A46AB10Fc0f57817b6B7d5f00e0BA29F97E
-			FaucetPk: "0x3d7a6a06a968f4184e2c8a65509167080a6e82fcbd3a52fcfaaa6b401125f8ad",
+			FaucetPk:   o.faucetPrivateKey,
 		})
 	}
 
