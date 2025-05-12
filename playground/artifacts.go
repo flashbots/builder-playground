@@ -66,6 +66,7 @@ type ArtifactsBuilder struct {
 	genesisDelay      uint64
 	applyLatestL2Fork *uint64
 	OpblockTime       uint64
+	prefundedAccounts []string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -74,6 +75,7 @@ func NewArtifactsBuilder() *ArtifactsBuilder {
 		applyLatestL1Fork: false,
 		genesisDelay:      MinimumGenesisDelay,
 		OpblockTime:       defaultOpBlockTimeSeconds,
+		prefundedAccounts: []string{},
 	}
 }
 
@@ -99,6 +101,11 @@ func (b *ArtifactsBuilder) GenesisDelay(genesisDelaySeconds uint64) *ArtifactsBu
 
 func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
 	b.OpblockTime = blockTimeSeconds
+	return b
+}
+
+func (b *ArtifactsBuilder) PrefundedAccounts(accounts []string) *ArtifactsBuilder {
+	b.prefundedAccounts = accounts
 	return b
 }
 
@@ -157,9 +164,10 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	gen.Config.DepositContractAddress = gethcommon.HexToAddress(config.DepositContractAddress)
 
 	// add pre-funded accounts
-	prefundedBalance, _ := new(big.Int).SetString("10000000000000000000000", 16)
+	prefundedBalanceEther := int64(1000000)
+	prefundedBalance := new(big.Int).Mul(big.NewInt(prefundedBalanceEther), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
 
-	for _, privStr := range prefundedAccounts {
+	for _, privStr := range b.prefundedAccounts {
 		priv, err := getPrivKey(privStr)
 		if err != nil {
 			return nil, err
@@ -284,14 +292,14 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		// Update the allocs to include the same prefunded accounts as the L1 genesis.
 		allocs := make(map[string]interface{})
 		input["alloc"] = allocs
-		for _, privStr := range prefundedAccounts {
+		for _, privStr := range b.prefundedAccounts {
 			priv, err := getPrivKey(privStr)
 			if err != nil {
 				return nil, err
 			}
 			addr := ecrypto.PubkeyToAddress(priv.PublicKey)
 			allocs[addr.String()] = map[string]interface{}{
-				"balance": "0x10000000000000000000000",
+				"balance": fmt.Sprintf("0x%x", prefundedBalance),
 				"nonce":   "0x1",
 			}
 		}
@@ -668,22 +676,6 @@ func isByteArray(t reflect.Type) bool {
 
 func isByteSlice(t reflect.Type) bool {
 	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
-}
-
-var prefundedAccounts = []string{
-	"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-	"0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-	"0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
-	"0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
-	"0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
-	"0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
-	"0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
-	"0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
-	"0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
-	"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
-	// Phylax Depoloyer contract
-	// Private key for deploying contracts: keccak256("credible-layer-sandbox-deployer")
-	"0xac431098061ca49f5b36121d01a17d30e1d0624227d08b583ff328f1efe0d4a2",
 }
 
 func applyTemplate2(templateStr []byte, input interface{}) ([]byte, error) {
