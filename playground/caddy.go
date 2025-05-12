@@ -36,6 +36,8 @@ func CreateCaddyServices(exposedServices []string, manifest *Manifest, out *outp
 	// Create the Caddyfile
 	caddyfile := ":8888 {\n"
 
+	caddyfile += "bind 0.0.0.0\n"
+
 	// Add all the routes
 	for _, route := range routes {
 		caddyfile += route
