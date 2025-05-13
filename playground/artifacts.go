@@ -179,8 +179,9 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		}
 	}
 
-	// Note(fredo): This is the predefined Batcher address from utils/intent.toml
-	gen.Alloc[gethcommon.HexToAddress("0xafF0CA253b97e54440965855cec0A8a2E2399896")] = types.Account{
+	// Note(fredo): This is the hardcoded batcher address
+	// https://github.com/phylaxsystems/builder-playground/blob/fd71b73cb191592115d8eea3a2f65aaf3f57728e/playground/components.go#L65
+	gen.Alloc[gethcommon.HexToAddress("0xa0Ee7A142d267C1f36714E4a8F75612F20a79720")] = types.Account{
 		Balance: prefundedBalance,
 		Nonce:   1,
 	}
