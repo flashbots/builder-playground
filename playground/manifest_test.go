@@ -60,9 +60,7 @@ func TestNodeRefString(t *testing.T) {
 }
 
 func TestManifestWriteRead(t *testing.T) {
-	out := &output{
-		dst: "./example",
-	}
+	out := newTestOutput(t)
 
 	recipe := &L1Recipe{}
 

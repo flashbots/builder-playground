@@ -554,10 +554,7 @@ func saveDotGraph(svcManager *Manifest, out *output) error {
 }
 
 func (m *Manifest) SaveJson() error {
-	format := map[string]interface{}{
-		"services": m.Services,
-	}
-	return m.out.WriteFile("manifest.json", format)
+	return m.out.WriteFile("manifest.json", m)
 }
 
 func ReadManifest(outputFolder string) (*Manifest, error) {
