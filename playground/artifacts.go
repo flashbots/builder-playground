@@ -179,6 +179,12 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		}
 	}
 
+	// Note(fredo): This is the predefined Batcher address from utils/intent.toml
+	gen.Alloc[gethcommon.HexToAddress("0xafF0CA253b97e54440965855cec0A8a2E2399896")] = types.Account{
+		Balance: prefundedBalance,
+		Nonce:   1,
+	}
+
 	// Apply Optimism pre-state
 	{
 		var state struct {
@@ -302,12 +308,6 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 				"balance": fmt.Sprintf("0x%x", prefundedBalance),
 				"nonce":   "0x1",
 			}
-		}
-
-		// Note(fredo): This is the predefined Batcher address from utils/intent.toml
-		allocs[gethcommon.HexToAddress("0xafF0CA253b97e54440965855cec0A8a2E2399896").String()] = map[string]interface{}{
-			"balance": fmt.Sprintf("0x%x", prefundedBalance),
-			"nonce":   "0x1",
 		}
 
 		newOpGenesis, err := overrideJSON(opGenesis, input)
