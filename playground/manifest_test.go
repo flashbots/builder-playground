@@ -2,6 +2,8 @@ package playground
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNodeRefString(t *testing.T) {
@@ -54,5 +56,32 @@ func TestNodeRefString(t *testing.T) {
 		if result != testCase.expected {
 			t.Errorf("expected %s, got %s", testCase.expected, result)
 		}
+	}
+}
+
+func TestManifestWriteRead(t *testing.T) {
+	out := newTestOutput(t)
+
+	recipe := &L1Recipe{}
+
+	builder := recipe.Artifacts()
+	builder.OutputDir(out.dst)
+
+	artifacts, err := builder.Build()
+	assert.NoError(t, err)
+
+	manifest := recipe.Apply(&ExContext{}, artifacts)
+	assert.NoError(t, manifest.SaveJson())
+
+	manifest2, err := ReadManifest(out.dst)
+	assert.NoError(t, err)
+
+	for _, svc := range manifest.Services {
+		svc2 := manifest2.MustGetService(svc.Name)
+		assert.Equal(t, svc.Name, svc2.Name)
+		assert.Equal(t, svc.Args, svc2.Args)
+		assert.Equal(t, svc.Env, svc2.Env)
+		assert.Equal(t, svc.Labels, svc2.Labels)
+		assert.Equal(t, svc.VolumesMapped, svc2.VolumesMapped)
 	}
 }
