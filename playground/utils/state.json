@@ -27,7 +27,7 @@
           "l2ProxyAdminOwner": "0xaff0ca253b97e54440965855cec0a8a2e2399896",
           "systemConfigOwner": "0xaff0ca253b97e54440965855cec0a8a2e2399896",
           "unsafeBlockSigner": "0xaff0ca253b97e54440965855cec0a8a2e2399896",
-          "batcher": "0xaff0ca253b97e54440965855cec0a8a2e2399896",
+          "batcher": "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720",
           "proposer": "0xaff0ca253b97e54440965855cec0a8a2e2399896",
           "challenger": "0xaff0ca253b97e54440965855cec0a8a2e2399896"
         },
