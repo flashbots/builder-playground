@@ -87,6 +87,11 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		RollupNode:         "op-node",
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
+	svcManager.AddService("op-proposer", &OpProposer{
+		L1Node:             "el",
+		RollupNode:         "op-node",
+		GameFactoryAddress: artifacts.OpState.OpChainDeployments.DisputeGameFactoryProxy,
+	})
 	return svcManager
 }
 

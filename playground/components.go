@@ -6,6 +6,8 @@ import (
 	"io"
 	"strconv"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
@@ -103,7 +105,14 @@ func (o *OpNode) Run(service *Service, ctx *ExContext) {
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/rollup.json", "rollup.json").
-		WithVolume("data", "/data_db")
+		WithVolume("data", "/data_db").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8549",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 }
 
 func (o *OpNode) Name() string {
@@ -183,6 +192,43 @@ func (o *OpGeth) Name() string {
 	return "op-geth"
 }
 
+var _ ServiceGen = &OpProposer{}
+
+type OpProposer struct {
+	L1Node             string
+	RollupNode         string
+	GameFactoryAddress common.Address
+}
+
+func (o *OpProposer) Name() string {
+	return "op-proposer"
+}
+
+func (o *OpProposer) Run(service *Service, ctx *ExContext) {
+	service.
+		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer").
+		WithTag("develop"). // TODO
+		WithEntrypoint("op-proposer").
+		DependsOnHealthy(o.L1Node).
+		DependsOnHealthy(o.RollupNode).
+		WithArgs(
+			"--proposal-interval", "2m",
+			"--poll-interval", "1s",
+			"--rpc.port", `{{Port "http" 8560}}`,
+			"--rollup-rpc", Connect(o.RollupNode, "http"),
+			"--game-factory-address", o.GameFactoryAddress.String(),
+			// private key for menmonic 'test test ... junk' which is funded in L1
+			"--private-key", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+			"--l1-eth-rpc", Connect(o.L1Node, "http"),
+			"--allow-non-finalized", "true",
+			"--game-type", "1",
+			"--wait-node-sync", "true",
+			"--metrics.enabled",
+			"--metrics.addr=0.0.0.0",
+			"--metrics.port", `{{Port "metrics" 9001}}`,
+		)
+}
+
 var _ ServiceWatchdog = &OpGeth{}
 
 func (o *OpGeth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
@@ -260,7 +306,14 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 		).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth")
+		WithVolume("data", "/data_reth").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     3 * time.Second,
+			Retries:     10,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded

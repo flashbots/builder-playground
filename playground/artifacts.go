@@ -104,6 +104,8 @@ func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 
 type Artifacts struct {
 	Out *output
+
+	OpState *OpState
 }
 
 func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
@@ -251,6 +253,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		return nil, err
 	}
 
+	var opStateObj *OpState
 	{
 		// We have to start slightly ahead of L1 genesis time
 		opTimestamp := genesisTime + 2
@@ -344,9 +347,29 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		if err := out.WriteFile("rollup.json", newOpRollup); err != nil {
 			return nil, err
 		}
+
+		// In the state.json there is a list of opChainDeployments, for now we only
+		// care about the first one
+		var opStateFileFormat struct {
+			OpChainDeployments []OpStateChainDeployments `json:"opChainDeployments"`
+		}
+		if err := json.Unmarshal(opState, &opStateFileFormat); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
+		}
+		opStateObj = &OpState{
+			OpChainDeployments: opStateFileFormat.OpChainDeployments[0],
+		}
 	}
 
-	return &Artifacts{Out: out}, nil
+	return &Artifacts{Out: out, OpState: opStateObj}, nil
+}
+
+type OpState struct {
+	OpChainDeployments OpStateChainDeployments
+}
+
+type OpStateChainDeployments struct {
+	DisputeGameFactoryProxy gethcommon.Address `json:"disputeGameFactoryProxyAddress"`
 }
 
 type OpGenesisTmplInput struct {
