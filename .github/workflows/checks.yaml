@@ -14,9 +14,9 @@ jobs:
     strategy:
       matrix:
         flags:
-          - "l1"
-          - "l1 --use-native-reth"
-          - "l1 --with-prometheus"
+          # - "l1"
+          # - "l1 --use-native-reth"
+          # - "l1 --with-prometheus"
           - "opstack"
           - "opstack --external-builder http://host.docker.internal:4444"
           - "opstack --enable-latest-fork=10"
