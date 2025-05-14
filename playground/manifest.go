@@ -25,6 +25,8 @@ type Recipe interface {
 
 // Manifest describes a list of services and their dependencies
 type Manifest struct {
+	Name string `json:"name"`
+
 	ctx *ExContext
 
 	// list of Services
@@ -328,6 +330,32 @@ func (s *Service) WithLabel(key, value string) *Service {
 	}
 	s.Labels[key] = value
 	return s
+}
+
+func (s *Service) ReplaceArgs(funcs template.FuncMap) ([]string, error) {
+	runTemplate := func(arg string) (string, error) {
+		tpl, err := template.New("").Funcs(funcs).Parse(arg)
+		if err != nil {
+			return "", err
+		}
+
+		var out strings.Builder
+		if err := tpl.Execute(&out, nil); err != nil {
+			return "", err
+		}
+		return out.String(), nil
+	}
+
+	var argsResult []string
+	for _, arg := range s.Args {
+		newArg, err := runTemplate(arg)
+		if err != nil {
+			return nil, err
+		}
+		argsResult = append(argsResult, newArg)
+	}
+
+	return argsResult, nil
 }
 
 func (s *Manifest) NewService(name string) *Service {

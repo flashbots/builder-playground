@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+  labels:
+    app: {{ .Name }}
+    playground: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Name }}
+        playground: "true"
+    spec:
+      containers:
+      - name: {{ .Name }}
+        image: {{ .Image }}:{{ .Tag }}
+        {{- if .Entrypoint }}
+        command: ["{{ .Entrypoint }}"]
+        {{- end }}
+        {{- if .Args }}
+        args: [{{ range $i, $arg := .Args }}{{if $i}}, {{end}}"{{ $arg }}"{{ end }}]
+        {{- end }}
+        {{- if .Env }}
+        env:
+          {{- range $key, $value := .Env }}
+        - name: {{ $key }}
+          value: "{{ $value }}"
+        {{- end }}
+        {{- end }}
+        {{- if .Ports }}
+        ports:
+        {{- range .Ports }}
+        - containerPort: {{ .Port }}
+          protocol: {{ if eq .Protocol "udp" }}UDP{{ else }}TCP{{ end }}
+          name: {{ if eq .Protocol "udp" }}{{ .Name }}-udp{{ else }}{{ .Name }}{{ end }}
+        {{- end }}
+        {{- end }}
+        {{- if .VolumesMapped }}
+        volumeMounts:
+        {{- range $path, $name := .VolumesMapped }}
+        - name: {{ $name }}
+          mountPath: {{ $path }}
+        {{- end }}
+        {{- end }}
+      {{- if .VolumesMapped }}
+      volumes:
+      {{- range $path, $name := .VolumesMapped }}
+      - name: {{ $name }}
+        emptyDir: {}
+      {{- end }}
+      {{- end }}
+---

@@ -492,14 +492,14 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 
 			if d.isHostService(s.Name) {
 				// A and B
-				return printAddr(protocol, "localhost", port.HostPort, user)
+				return PrintAddr(protocol, "localhost", port.HostPort, user)
 			} else {
 				if d.isHostService(svc.Name) {
 					// D
-					return printAddr(protocol, "host.docker.internal", port.HostPort, user)
+					return PrintAddr(protocol, "host.docker.internal", port.HostPort, user)
 				}
 				// C
-				return printAddr(protocol, svc.Name, port.Port, user)
+				return PrintAddr(protocol, svc.Name, port.Port, user)
 			}
 		},
 		"Port": func(name string, defaultPort int) int {
@@ -547,7 +547,7 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 	return argsResult, envs, nil
 }
 
-func printAddr(protocol, serviceName string, port int, user string) string {
+func PrintAddr(protocol, serviceName string, port int, user string) string {
 	var protocolPrefix string
 	if protocol != "" {
 		protocolPrefix = protocol + "://"
