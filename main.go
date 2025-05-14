@@ -301,7 +301,7 @@ func runIt(recipe playground.Recipe) error {
 	if !interactive {
 		// print services info
 		fmt.Printf("\n========= Services started =========\n")
-		for _, ss := range svcManager.Services() {
+		for _, ss := range svcManager.Services {
 			ports := ss.GetPorts()
 			sort.Slice(ports, func(i, j int) bool {
 				return ports[i].Name < ports[j].Name

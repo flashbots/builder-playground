@@ -126,7 +126,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 
 	// Create the concrete instances to run
 	instances := []*instance{}
-	for _, service := range manifest.Services() {
+	for _, service := range manifest.Services {
 		component := FindComponent(service.ComponentName)
 		if component == nil {
 			return nil, fmt.Errorf("component not found '%s'", service.ComponentName)
@@ -192,7 +192,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	}
 
 	tasks := map[string]*task{}
-	for _, svc := range manifest.services {
+	for _, svc := range manifest.Services {
 		tasks[svc.Name] = &task{
 			status: taskStatusPending,
 			logs:   nil,
@@ -241,8 +241,8 @@ func (d *LocalRunner) printStatus() {
 	lineOffset := 0
 
 	// Get ordered service names from manifest
-	orderedServices := make([]string, 0, len(d.manifest.services))
-	for _, svc := range d.manifest.services {
+	orderedServices := make([]string, 0, len(d.manifest.Services))
+	for _, svc := range d.manifest.Services {
 		orderedServices = append(orderedServices, svc.Name)
 	}
 
@@ -453,7 +453,7 @@ func (d *LocalRunner) reservePort(startPort int, protocol string) int {
 }
 
 func (d *LocalRunner) getService(name string) *Service {
-	for _, svc := range d.manifest.services {
+	for _, svc := range d.manifest.Services {
 		if svc.Name == name {
 			return svc
 		}
@@ -766,7 +766,7 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	// for each service, reserve a port on the host machine. We use this ports
 	// both to have access to the services from localhost but also to do communication
 	// between services running inside docker and the ones running on the host machine.
-	for _, svc := range d.manifest.services {
+	for _, svc := range d.manifest.Services {
 		// CADDY Modification
 		// TODO(Odysseas): This feels like a hack here
 		// If caddy is enabled, then reserve ports only for caddy
@@ -955,7 +955,7 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 		},
 	})
 
-	for _, c := range manifest.services {
+	for _, c := range manifest.Services {
 		for _, port := range c.Ports {
 			if port.Name == "metrics" {
 				metricsPath := "/metrics"
@@ -998,7 +998,7 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 		WithPort("metrics", 9090, "tcp").
 		WithArtifact("/data/prometheus.yaml", "prometheus.yaml")
 	srv.ComponentName = "null" // For now, later on we can create a Prometheus component
-	manifest.services = append(manifest.services, srv)
+	manifest.Services = append(manifest.Services, srv)
 
 	return nil
 }
@@ -1035,7 +1035,7 @@ func (d *LocalRunner) Run() error {
 	// Second, start the services that are running on the host machine
 	errCh := make(chan error)
 	go func() {
-		for _, svc := range d.manifest.services {
+		for _, svc := range d.manifest.Services {
 			if d.isHostService(svc.Name) {
 				if err := d.runOnHost(svc); err != nil {
 					errCh <- err

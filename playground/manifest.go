@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -27,8 +28,8 @@ type Recipe interface {
 type Manifest struct {
 	ctx *ExContext
 
-	// list of services
-	services []*Service
+	// list of Services
+	Services []*Service `json:"services"`
 
 	// overrides is a map of service name to the path of the executable to run
 	// on the host machine instead of a container.
@@ -91,10 +92,6 @@ type ServiceReady interface {
 	Ready(instance *instance) error
 }
 
-func (s *Manifest) Services() []*Service {
-	return s.services
-}
-
 // ReleaseService is a service that can also be runned as an artifact in the host machine
 type ReleaseService interface {
 	ReleaseArtifact() *release
@@ -105,7 +102,7 @@ func (s *Manifest) AddService(name string, srv ServiceGen) {
 	service.ComponentName = srv.Name()
 	srv.Run(service, s.ctx)
 
-	s.services = append(s.services, service)
+	s.Services = append(s.Services, service)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -117,7 +114,7 @@ func (s *Manifest) MustGetService(name string) *Service {
 }
 
 func (s *Manifest) GetService(name string) (*Service, bool) {
-	for _, ss := range s.services {
+	for _, ss := range s.Services {
 		if ss.Name == name {
 			return ss, true
 		}
@@ -129,7 +126,7 @@ func (s *Manifest) GetService(name string) (*Service, bool) {
 // - checks if all the port dependencies are met from the service description
 // - downloads any local release artifacts for the services that require host execution
 func (s *Manifest) Validate() error {
-	for _, ss := range s.services {
+	for _, ss := range s.Services {
 		// validate node port references
 		for _, nodeRef := range ss.NodeRefs {
 			targetService, ok := s.GetService(nodeRef.Service)
@@ -159,7 +156,7 @@ func (s *Manifest) Validate() error {
 	}
 
 	// validate that the mounts are correct
-	for _, ss := range s.services {
+	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
 			fileLoc := filepath.Join(s.out.dst, fileNameRef)
 
@@ -173,7 +170,7 @@ func (s *Manifest) Validate() error {
 	}
 
 	// validate that the mounts are correct
-	for _, ss := range s.services {
+	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
 			fileLoc := filepath.Join(s.out.dst, fileNameRef)
 
@@ -197,10 +194,10 @@ const (
 // Port describes a port that a service exposes
 type Port struct {
 	// Name is the name of the port
-	Name string
+	Name string `json:"name"`
 
 	// Port is the port number
-	Port int
+	Port int `json:"port"`
 
 	// Protocol (tcp or udp)
 	Protocol string
@@ -213,10 +210,10 @@ type Port struct {
 
 // NodeRef describes a reference from one service to another
 type NodeRef struct {
-	Service   string
-	PortLabel string
-	Protocol  string
-	User      string
+	Service   string `json:"service"`
+	PortLabel string `json:"port_label"`
+	Protocol  string `json:"protocol"`
+	User      string `json:"user"`
 }
 
 // serviceLogs is a service to access the logs of the running service
@@ -526,12 +523,12 @@ func (s *Manifest) GenerateDotGraph() string {
 
 	// Create a map of services for easy lookup
 	servicesMap := make(map[string]*Service)
-	for _, ss := range s.services {
+	for _, ss := range s.Services {
 		servicesMap[ss.Name] = ss
 	}
 
 	// Add nodes (services) with their ports as labels
-	for _, ss := range s.services {
+	for _, ss := range s.Services {
 		var ports []string
 		for _, p := range ss.Ports {
 			ports = append(ports, fmt.Sprintf("%s:%d", p.Name, p.Port))
@@ -548,7 +545,7 @@ func (s *Manifest) GenerateDotGraph() string {
 	b.WriteString("\n")
 
 	// Add edges (connections between services)
-	for _, ss := range s.services {
+	for _, ss := range s.Services {
 		sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
 		for _, ref := range ss.NodeRefs {
 			targetNode := strings.ReplaceAll(ref.Service, "-", "_")
@@ -561,7 +558,7 @@ func (s *Manifest) GenerateDotGraph() string {
 	}
 
 	// Add edges for dependws_on
-	for _, ss := range s.services {
+	for _, ss := range s.Services {
 		for _, dep := range ss.DependsOn {
 			sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
 			targetNode := strings.ReplaceAll(dep.Name, "-", "_")
@@ -582,8 +579,29 @@ func saveDotGraph(svcManager *Manifest, out *output) error {
 }
 
 func (m *Manifest) SaveJson() error {
-	format := map[string]interface{}{
-		"services": m.services,
+	return m.out.WriteFile("manifest.json", m)
+}
+
+func ReadManifest(outputFolder string) (*Manifest, error) {
+	// read outputFolder/manifest.json file
+	manifestFile := filepath.Join(outputFolder, "manifest.json")
+	if _, err := os.Stat(manifestFile); os.IsNotExist(err) {
+		return nil, fmt.Errorf("manifest file %s does not exist", manifestFile)
 	}
-	return m.out.WriteFile("manifest.json", format)
+	manifest, err := os.ReadFile(manifestFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read manifest file %s: %w", manifestFile, err)
+	}
+
+	// parse the manifest file
+	var manifestData Manifest
+	if err := json.Unmarshal(manifest, &manifestData); err != nil {
+		return nil, fmt.Errorf("failed to parse manifest file %s: %w", manifestFile, err)
+	}
+
+	// set the output folder
+	manifestData.out = &output{
+		dst: outputFolder,
+	}
+	return &manifestData, nil
 }
