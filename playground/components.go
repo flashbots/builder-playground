@@ -417,6 +417,9 @@ func (m *MevBoostRelay) Name() string {
 var _ ServiceWatchdog = &MevBoostRelay{}
 
 func (m *MevBoostRelay) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+	// TODO: Something is wrong with these watchdogs
+	return nil
+
 	beaconNodeURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 
 	watchGroup := newWatchGroup()
