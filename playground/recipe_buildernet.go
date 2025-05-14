@@ -40,9 +40,12 @@ func (b *BuilderNetRecipe) Artifacts() *ArtifactsBuilder {
 	return b.l1Recipe.Artifacts()
 }
 
-func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, error) {
 	// Start with the L1Recipe manifest
-	svcManager := b.l1Recipe.Apply(ctx, artifacts)
+	svcManager, err := b.l1Recipe.Apply(ctx, artifacts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply L1 recipe for BuilderNet: %w", err)
+	}
 
 	// Add builder-hub-postgres service (now includes migrations)
 	svcManager.AddService("builder-hub-postgres", &BuilderHubPostgres{})
@@ -59,7 +62,7 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
 		})
 	}
 
-	return svcManager
+	return svcManager, nil
 }
 
 func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {

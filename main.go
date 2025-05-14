@@ -229,7 +229,10 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel, AlloyEnabled: withGrafanaAlloy, CaddyEnabled: len(withCaddy) > 0}, artifacts)
+	svcManager, err := recipe.Apply(&playground.ExContext{LogLevel: logLevel, AlloyEnabled: withGrafanaAlloy, CaddyEnabled: len(withCaddy) > 0}, artifacts)
+	if err != nil {
+		return fmt.Errorf("failed to apply recipe: %w", err)
+	}
 
 	if withGrafanaAlloy {
 		if err := playground.CreateGrafanaAlloyServices(svcManager, artifacts.Out); err != nil {

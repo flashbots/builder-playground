@@ -49,7 +49,7 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, error) {
 	svcManager := NewManifest(ctx, artifacts.Out)
 
 	svcManager.AddService("el", &RethEL{
@@ -86,7 +86,7 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		BeaconClient:     "beacon",
 		ValidationServer: mevBoostValidationServer,
 	})
-	return svcManager
+	return svcManager, nil
 }
 
 func (l *L1Recipe) Output(manifest *Manifest) map[string]interface{} {

@@ -48,7 +48,7 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, error) {
 	svcManager := NewManifest(ctx, artifacts.Out)
 	svcManager.AddService("el", &RethEL{})
 	svcManager.AddService("beacon", &LighthouseBeaconNode{
@@ -87,7 +87,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		RollupNode:         "op-node",
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
-	return svcManager
+	return svcManager, nil
 }
 
 func (o *OpRecipe) Output(manifest *Manifest) map[string]interface{} {

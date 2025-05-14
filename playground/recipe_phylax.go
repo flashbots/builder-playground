@@ -1,6 +1,9 @@
 package playground
 
 import (
+	"fmt"
+	"strings"
+
 	flag "github.com/spf13/pflag"
 )
 
@@ -41,6 +44,9 @@ type OpTalosRecipe struct {
 
 	// faucetPrivateKey is the private key of the faucet address
 	faucetPrivateKey string
+
+	// opTalosImageTag is the docker image tag for op-talos
+	opTalosImageTag string
 }
 
 func (o *OpTalosRecipe) Name() string {
@@ -65,6 +71,7 @@ func (o *OpTalosRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.faucetUi, "faucet-ui", false, "Enable the faucet UI")
 	// Default: $(cast keccak "credible-layer-sandbox-faucet") -> Address: 0xA242C9e875a3135644a171CE7e0d44A14511F897
 	flags.StringVar(&o.faucetPrivateKey, "faucet-private-key", "0x0263f53e0add655d0caa4daaeaf8aa749689beed953a902fc16adf3b944e7fd4", "Private key for faucet")
+	flags.StringVar(&o.opTalosImageTag, "op-talos-image-tag", "", "op-talos docker image specification in 'imagename:tag' format. If provided, both imagename and tag must be non-empty.")
 	return flags
 }
 
@@ -79,12 +86,24 @@ func (o *OpTalosRecipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, error) {
 	// Validate required flags
 	if o.externalDA == "" || o.externalDA == "dev" {
 		if o.assertionDAPrivateKey == "" {
 			panic("assertion-da-private-key is required when external-da is unset, empty, or 'dev'")
 		}
+	}
+
+	parsedImageName := "ghcr.io/phylaxsystems/op-talos/op-rbuilder" // Default image name
+	parsedImageTag := "master"                                      // Default image tag
+
+	if o.opTalosImageTag != "" { // If the flag was provided
+		parts := strings.SplitN(o.opTalosImageTag, ":", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return nil, fmt.Errorf("Invalid --op-talos-image-tag value: '%s'. Must be in 'imagename:tag' format with non-empty imagename and tag parts.", o.opTalosImageTag)
+		}
+		parsedImageName = parts[0]
+		parsedImageTag = parts[1]
 	}
 
 	svcManager := NewManifest(ctx, artifacts.Out)
@@ -112,6 +131,8 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			AssertionDA:    externalDaRef,
 			AssexGasLimit:  o.assexGasLimit,
 			OracleContract: o.oracleContract,
+			ImageName:      parsedImageName,
+			ImageTag:       parsedImageTag,
 		})
 		externalBuilderRef = Connect("op-talos", "authrpc")
 	}
@@ -145,7 +166,7 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		RollupNode:         "op-node",
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
-	return svcManager
+	return svcManager, nil
 }
 
 func (o *OpTalosRecipe) Output(manifest *Manifest) map[string]interface{} {

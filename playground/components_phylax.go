@@ -72,11 +72,13 @@ type OpTalos struct {
 	AssertionDA    string
 	AssexGasLimit  uint64
 	OracleContract string
+	ImageName      string
+	ImageTag       string
 }
 
 func (o *OpTalos) Run(service *Service, ctx *ExContext) {
-	service.WithImage("ghcr.io/phylaxsystems/op-talos/op-rbuilder").
-		WithTag("master").
+	service.WithImage(o.ImageName).
+		WithTag(o.ImageTag).
 		WithArgs(
 			"node",
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
