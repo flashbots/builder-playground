@@ -84,7 +84,7 @@ prometheus.scrape "playground" {
 `
 	// Add a scrape target for each service that exposes metrics
 	scrapeTargets := []string{}
-	for _, service := range manifest.services {
+	for _, service := range manifest.Services {
 		for _, port := range service.Ports {
 			if port.Name == "metrics" {
 				metricsPath := "/metrics"
@@ -250,7 +250,7 @@ loki.write "grafanacloud" {
 	}
 
 	srv.ComponentName = "null" // For now, later on we can create a Grafana Alloy component
-	manifest.services = append(manifest.services, srv)
+	manifest.Services = append(manifest.Services, srv)
 
 	return nil
 }

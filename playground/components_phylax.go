@@ -74,6 +74,7 @@ type OpTalos struct {
 	OracleContract string
 	ImageName      string
 	ImageTag       string
+	BlockTag       string
 }
 
 func (o *OpTalos) Run(service *Service, ctx *ExContext) {
@@ -104,7 +105,7 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth").
 		WithEnv("AE_ASSERTION_GAS_LIMIT", strconv.FormatUint(o.AssexGasLimit, 10)).
-		WithEnv("AE_BLOCK_TAG", "latest").
+		WithEnv("AE_BLOCK_TAG", o.BlockTag).
 		WithEnv("RUST_LOG", logLevelToTalosVerbosity(ctx.LogLevel))
 	if ctx.AlloyEnabled {
 		service.WithEnv("OTEL_EXPORTER_OTLP_ENDPOINT", Connect("grafana-alloy", "otlp-http")).

@@ -47,6 +47,9 @@ type OpTalosRecipe struct {
 
 	// opTalosImageTag is the docker image tag for op-talos
 	opTalosImageTag string
+
+	// opTalosBlockTag is the block tag to be used by OP-Talos for Assertion Indexing
+	opTalosBlockTag string
 }
 
 func (o *OpTalosRecipe) Name() string {
@@ -72,6 +75,7 @@ func (o *OpTalosRecipe) Flags() *flag.FlagSet {
 	// Default: $(cast keccak "credible-layer-sandbox-faucet") -> Address: 0xA242C9e875a3135644a171CE7e0d44A14511F897
 	flags.StringVar(&o.faucetPrivateKey, "faucet-private-key", "0x0263f53e0add655d0caa4daaeaf8aa749689beed953a902fc16adf3b944e7fd4", "Private key for faucet")
 	flags.StringVar(&o.opTalosImageTag, "op-talos-image-tag", "", "op-talos docker image specification in 'imagename:tag' format. If provided, both imagename and tag must be non-empty.")
+	flags.StringVar(&o.opTalosBlockTag, "op-talos-block-tag", "latest", "The block tag (finalized, latest) to be used by OP-Talos for Assertion Indexing")
 	return flags
 }
 
@@ -133,6 +137,7 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, 
 			OracleContract: o.oracleContract,
 			ImageName:      parsedImageName,
 			ImageTag:       parsedImageTag,
+			BlockTag:       o.opTalosBlockTag,
 		})
 		externalBuilderRef = Connect("op-talos", "authrpc")
 	}

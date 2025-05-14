@@ -11,7 +11,7 @@ func CreateCaddyServices(exposedServices []string, manifest *Manifest, out *outp
 	manifest.ctx.CaddyEnabled = true
 
 	// Add a routes for each service with http or ws ports
-	for _, service := range manifest.services {
+	for _, service := range manifest.Services {
 		if slices.Contains(exposedServices, service.Name) {
 			for _, port := range service.Ports {
 				// Only look for HTTP and WebSocket ports
@@ -57,6 +57,6 @@ func CreateCaddyServices(exposedServices []string, manifest *Manifest, out *outp
 
 	// Add the service to the manifest
 	srv.ComponentName = "null" // Using null since there's no dedicated Caddy component
-	manifest.services = append(manifest.services, srv)
+	manifest.Services = append(manifest.Services, srv)
 	return nil
 }

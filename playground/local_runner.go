@@ -785,7 +785,7 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 			}
 		}
 	}
-	for _, svc := range d.manifest.services {
+	for _, svc := range d.manifest.Services {
 		if d.isHostService(svc.Name) {
 			// skip services that are going to be launched on host
 			continue
