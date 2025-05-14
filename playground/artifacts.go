@@ -132,13 +132,14 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	}
 
 	// enable the latest fork in config.yaml or not
-	var latestForkEpoch string
+	l1Config := &L1ConfigYamlConfig{}
 	if b.applyLatestL1Fork {
-		latestForkEpoch = "0"
-	} else {
-		latestForkEpoch = "18446744073709551615"
+		l1Config.LatestForkEpoch = 0
 	}
-	clConfigContentStr := strings.Replace(string(clConfigContent), "{{.LatestForkEpoch}}", latestForkEpoch, 1)
+	clConfigContentStr, err := l1Config.Build()
+	if err != nil {
+		return nil, err
+	}
 
 	// load the config.yaml file
 	clConfig, err := params.UnmarshalConfig([]byte(clConfigContentStr), nil)
@@ -347,6 +348,44 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	}
 
 	return &Artifacts{Out: out}, nil
+}
+
+const (
+	defaultSecondsPerSlot = 12
+	defaultPresetBase     = "mainnet"
+)
+
+type L1ConfigYamlConfig struct {
+	LatestForkEpoch            int
+	SecondsPerSlot             int
+	Preset                     string
+	SlotsPerEpoch              *int
+	SafeSlotsToUpdateJustified *int
+}
+
+func (l *L1ConfigYamlConfig) Build() (string, error) {
+	if l.LatestForkEpoch == 0 {
+		// The latest fork is not enabled
+		l.LatestForkEpoch = 1844674407370955161
+	}
+	if l.SecondsPerSlot == 0 {
+		l.SecondsPerSlot = defaultSecondsPerSlot
+	}
+
+	if l.Preset == "" {
+		l.Preset = defaultPresetBase
+	}
+	tmpl, err := template.New("config").Parse(string(clConfigContent))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse config template: %w", err)
+	}
+
+	var buf bytes.Buffer
+
+	if err := tmpl.Execute(&buf, l); err != nil {
+		return "", fmt.Errorf("failed to execute config template: %w", err)
+	}
+	return buf.String(), nil
 }
 
 type OpGenesisTmplInput struct {
