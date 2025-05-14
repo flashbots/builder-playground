@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Name }}
+  labels:
+    playground: "true"
+    name: {{ .Name }}
+---
