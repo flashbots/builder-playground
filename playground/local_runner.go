@@ -659,6 +659,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// Add the ethereum network
 		"networks": []string{d.networkName},
 		"labels":   labels,
+		"restart":  "unless-stopped",
 	}
 
 	if s.Privileged {
