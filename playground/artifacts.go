@@ -22,16 +22,16 @@ import (
 
 	_ "embed"
 
+	"github.com/OffchainLabs/prysm/v6/config/params"
+	"github.com/OffchainLabs/prysm/v6/crypto/bls/common"
+	"github.com/OffchainLabs/prysm/v6/runtime/interop"
+	"github.com/OffchainLabs/prysm/v6/runtime/version"
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/hashicorp/go-uuid"
-	"github.com/prysmaticlabs/prysm/v5/config/params"
-	"github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
-	"github.com/prysmaticlabs/prysm/v5/runtime/interop"
-	"github.com/prysmaticlabs/prysm/v5/runtime/version"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
 )
