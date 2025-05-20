@@ -560,25 +560,29 @@ func printAddr(protocol, serviceName string, port int, user string) string {
 	return fmt.Sprintf("%s%s:%d", protocolPrefix, serviceName, port)
 }
 
-func (d *LocalRunner) validateImageExists(image string) error {
-	// check locally
-	_, err := d.client.ImageInspect(context.Background(), image)
+func (d *LocalRunner) validateImageExists(imageName string) error {
+	// Only check locally - don't attempt to pull
+	_, err := d.client.ImageInspect(context.Background(), imageName)
 	if err == nil {
+		// Image exists locally
 		return nil
 	}
-	if !client.IsErrNotFound(err) {
-		return err
-	}
 
-	// check remotely
-	if _, err = d.client.DistributionInspect(context.Background(), image, ""); err == nil {
-		return nil
-	}
-	if !client.IsErrNotFound(err) {
-		return err
-	}
+	// For all errors, assume docker-compose will handle pulling
+	// This handles several cases:
+	// 1. Private images that need authentication
+	// 2. Images that will be pulled at runtime
+	// 3. Network or timeout issues
 
-	return fmt.Errorf("image %s not found", image)
+	// We could return an error here, but it's better to let docker-compose handle
+	// all image pulling since it respects Docker credentials and has better
+	// handling for retries and timeouts
+
+	// Log that we're assuming the image will be pulled by docker-compose
+	log.Warn("Image not found locally. Assuming docker compose will pull it",
+		"image", imageName)
+
+	return nil
 }
 
 func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}, error) {
