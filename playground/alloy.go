@@ -48,11 +48,34 @@ func CreateGrafanaAlloyServices(manifest *Manifest, out *output) error {
 		errorMsg += "Please either:\n"
 		errorMsg += "1. Set these environment variables in your shell, or\n"
 		errorMsg += fmt.Sprintf("2. Create a .env.grafana file in %s with these variables in KEY=VALUE format\n", out.dst)
-		return fmt.Errorf(errorMsg)
+		return fmt.Errorf("%s", errorMsg)
+	}
+
+	// Add a scrape target for each service that exposes metrics
+	var metricsConfig string
+	for _, service := range manifest.Services {
+		for _, port := range service.Ports {
+			if port.Name == "metrics" {
+				metricsPath := "/metrics"
+				if overrideMetricsPath, ok := service.Labels["metrics_path"]; ok {
+					metricsPath = overrideMetricsPath
+				}
+				blockLabel := strings.ReplaceAll(service.Name, "-", "_")
+				scrapeTarget := fmt.Sprintf(`prometheus.scrape "%s" {
+  targets = [ 
+	{__address__ = "%s:%d", __metrics_path__ = "%s"}, 
+  ]
+  forward_to = [prometheus.remote_write.metrics_service.receiver]
+  scrape_interval = "1s"
+  scrape_timeout = "1s"
+}`, blockLabel, service.Name, port.Port, metricsPath)
+				metricsConfig += scrapeTarget + "\n"
+			}
+		}
 	}
 
 	// Create the Grafana Alloy configuration
-	alloyConfig := `
+	alloyConfig := fmt.Sprintf(`
 // Metrics
 
 prometheus.remote_write "metrics_service" {
@@ -77,43 +100,7 @@ prometheus.scrape "containers" {
   scrape_interval = "10s"
 }
 
-
-// Scrape metrics from services
-prometheus.scrape "playground" {
-  targets = [
-`
-	// Add a scrape target for each service that exposes metrics
-	scrapeTargets := []string{}
-	for _, service := range manifest.Services {
-		for _, port := range service.Ports {
-			if port.Name == "metrics" {
-				metricsPath := "/metrics"
-				if overrideMetricsPath, ok := service.Labels["metrics_path"]; ok {
-					metricsPath = overrideMetricsPath
-				}
-
-				// Create a scrape target for the service
-				scrapeTarget := fmt.Sprintf("    // %s\n    {__address__ = \"%s:%d\", __metrics_path__ = \"%s\"},",
-					service.Name, service.Name, port.Port, metricsPath)
-				scrapeTargets = append(scrapeTargets, scrapeTarget)
-			}
-		}
-	}
-
-	// If no service exposes metrics, add a default target
-	if len(scrapeTargets) == 0 {
-		scrapeTargets = append(scrapeTargets, "    // Default\n    {__address__ = \"localhost:5555\"}")
-	}
-
-	// Add the targets to the alloy config - ensure proper comma formatting
-	alloyConfig += strings.Join(scrapeTargets, "") + "\n"
-
-	// Continue the alloy config
-	alloyConfig += `  ]
-  forward_to = [prometheus.remote_write.metrics_service.receiver]
-  scrape_interval = "10s"  // cannot be lower than poll_frequency
-  scrape_timeout = "1s"  // should be lower than scrape_interval
-}
+%s
 
 // Add a scrape job for Grafana Alloy's own metrics
 prometheus.scrape "alloy_self" {
@@ -207,7 +194,7 @@ loki.write "grafanacloud" {
 	}
 }
 
-`
+`, metricsConfig)
 
 	// Write the alloy configuration file
 	if err := out.WriteFile("alloy.river", alloyConfig); err != nil {

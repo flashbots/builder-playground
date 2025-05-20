@@ -708,6 +708,14 @@ func (e *EnodeAddr) ID() enode.ID {
 	return enode.PubkeyToIDV4(&e.PrivKey.PublicKey)
 }
 
+// EnodeURL returns the enode URL for the given service and port
+func (e *EnodeAddr) EnodeURL(serviceName string, portName string) string {
+	pub := e.PrivKey.PublicKey
+	pubBytes := ecrypto.FromECDSAPub(&pub)     // 65 bytes, uncompressed
+	pubHex := hex.EncodeToString(pubBytes)[2:] // remove the "04" prefix
+	return fmt.Sprintf("enode://%s@%s", pubHex, ConnectRaw(serviceName, portName, "", ""))
+}
+
 func (o *output) GetEnodeAddr() *EnodeAddr {
 	// TODO: This is a bit enshrined here
 	if o.enodeAddrSeq == nil {

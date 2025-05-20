@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"log"
+
 	flag "github.com/spf13/pflag"
 )
 
@@ -104,7 +106,7 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, 
 	if o.opTalosImageTag != "" { // If the flag was provided
 		parts := strings.SplitN(o.opTalosImageTag, ":", 2)
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			return nil, fmt.Errorf("Invalid --op-talos-image-tag value: '%s'. Must be in 'imagename:tag' format with non-empty imagename and tag parts.", o.opTalosImageTag)
+			return nil, fmt.Errorf("invalid --op-talos-image-tag value: '%s'. Must be in 'imagename:tag' format with non-empty imagename and tag parts", o.opTalosImageTag)
 		}
 		parsedImageName = parts[0]
 		parsedImageTag = parts[1]
@@ -119,6 +121,9 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, 
 		BeaconNode: "beacon",
 	})
 
+	geth := &OpGeth{}
+	svcManager.AddService("op-geth", geth)
+
 	externalDaRef := o.externalDA
 	if o.externalDA == "" || o.externalDA == "dev" {
 		svcManager.AddService("assertion-da", &AssertionDA{
@@ -130,7 +135,7 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, 
 
 	externalBuilderRef := o.externalBuilder
 	if o.externalBuilder == "" {
-		// Add a new op-reth service and connect it to Rollup-boost
+		// Add a new OP-Talos service and connect it to Rollup-boost
 		svcManager.AddService("op-talos", &OpTalos{
 			AssertionDA:    externalDaRef,
 			AssexGasLimit:  o.assexGasLimit,
@@ -138,11 +143,19 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, 
 			ImageName:      parsedImageName,
 			ImageTag:       parsedImageTag,
 			BlockTag:       o.opTalosBlockTag,
+			GethEnode:      *geth.Enode,
 		})
 		externalBuilderRef = Connect("op-talos", "authrpc")
-	}
+	} else {
+		// Extract just the enode ID portion without the template
+		enodeURL := geth.Enode.EnodeURL("op-geth", "rpc")
+		enodeID := strings.Split(enodeURL, "@")[0]
 
+		// Log clear instructions for the user
+		log.Printf("External Builder configured. Sequencer EL enode: %s@<RPC_ENDPOINT>", enodeID)
+	}
 	externalHttpRef := Connect("op-talos", "http")
+
 	if o.faucetUi {
 		svcManager.AddService("eth-faucet", &Faucet{
 			Rpc:        externalHttpRef,
@@ -164,7 +177,6 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, 
 		L1Beacon: "beacon",
 		L2Node:   elNode,
 	})
-	svcManager.AddService("op-geth", &OpGeth{})
 	svcManager.AddService("op-batcher", &OpBatcher{
 		L1Node:             "el",
 		L2Node:             "op-geth",
@@ -175,14 +187,6 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, 
 }
 
 func (o *OpTalosRecipe) Output(manifest *Manifest) map[string]interface{} {
-	/*
-		opGeth := manifest.MustGetService("op-geth").component.(*OpGeth)
-		if opGeth.Enode != "" {
-			// Only output if enode was set
-			return map[string]interface{}{
-				"op-geth-enode": opGeth.Enode,
-			}
-		}
-	*/
+	// Just return empty map for now
 	return map[string]interface{}{}
 }

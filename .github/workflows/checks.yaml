@@ -1,9 +1,8 @@
-name: Checks
+name: E2E tests
 
 on:
   workflow_dispatch:
   pull_request:
-  merge_group:
   push:
     branches: [main]
 
@@ -14,12 +13,8 @@ jobs:
     strategy:
       matrix:
         flags:
-          - "l1"
-          - "l1 --use-native-reth"
-          - "l1 --with-prometheus"
-          - "opstack"
-          - "opstack --external-builder http://host.docker.internal:4444"
-          - "opstack --enable-latest-fork=10"
+          - "pcl --with-caddy op-talos --with-caddy assertion-da"
+          - "pcl --faucet-ui"
     steps:
       - name: Check out code
         uses: actions/checkout@v2
@@ -31,6 +26,13 @@ jobs:
 
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_TOKEN}}
 
       - name: Build playground utils
         run: ./scripts/ci-build-playground-utils.sh

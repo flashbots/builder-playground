@@ -75,13 +75,16 @@ type OpTalos struct {
 	ImageName      string
 	ImageTag       string
 	BlockTag       string
+	GethEnode      EnodeAddr
 }
 
 func (o *OpTalos) Run(service *Service, ctx *ExContext) {
+	enode := o.GethEnode.EnodeURL("op-geth", "rpc")
 	service.WithImage(o.ImageName).
 		WithTag(o.ImageTag).
 		WithArgs(
 			"node",
+			"--trusted-peers", enode,
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.jwtsecret", "/data/jwtsecret",
@@ -92,18 +95,18 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 			"--ws.origins", "*",
 			"--ws.port", `{{Port "ws" 8546}}`,
 			"--chain", "/data/l2-genesis.json",
-			"--datadir", "/data_op_talos",
-			"--disable-discovery",
+			"--datadir", "/data_op_talos/reth",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			"--port", `{{Port "rpc" 30303}}`,
 			"--ae.rpc_da_url", o.AssertionDA,
 			"--ae.rpc_url", "ws://localhost:8546",
 			"--ae.oracle_contract", o.OracleContract,
+			"--ae.db_path", "/data_op_talos/assertion_executor",
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth").
+		WithVolume("data", "/data_op_talos").
 		WithEnv("AE_ASSERTION_GAS_LIMIT", strconv.FormatUint(o.AssexGasLimit, 10)).
 		WithEnv("AE_BLOCK_TAG", o.BlockTag).
 		WithEnv("RUST_LOG", logLevelToTalosVerbosity(ctx.LogLevel))

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
+	mevboostrelay "github.com/phylaxsystems/builder-playground/mev-boost-relay"
 	"github.com/spf13/cobra"
 )
 
