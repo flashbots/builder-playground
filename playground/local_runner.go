@@ -19,6 +19,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
@@ -560,9 +561,9 @@ func printAddr(protocol, serviceName string, port int, user string) string {
 	return fmt.Sprintf("%s%s:%d", protocolPrefix, serviceName, port)
 }
 
-func (d *LocalRunner) validateImageExists(image string) error {
+func (d *LocalRunner) validateImageExists(imageName string) error {
 	// check locally
-	_, err := d.client.ImageInspect(context.Background(), image)
+	_, err := d.client.ImageInspect(context.Background(), imageName)
 	if err == nil {
 		return nil
 	}
@@ -570,15 +571,19 @@ func (d *LocalRunner) validateImageExists(image string) error {
 		return err
 	}
 
-	// check remotely
-	if _, err = d.client.DistributionInspect(context.Background(), image, ""); err == nil {
+	// Try to pull the image with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
+	if err == nil {
+		// Pull started successfully - image exists and we have access
+		// Close the reader to cancel the pull
+		reader.Close()
 		return nil
 	}
-	if !client.IsErrNotFound(err) {
-		return err
-	}
 
-	return fmt.Errorf("image %s not found", image)
+	return fmt.Errorf("image %s not found or not accessible: %w", imageName, err)
 }
 
 func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}, error) {
