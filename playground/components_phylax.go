@@ -5,20 +5,15 @@ import (
 )
 
 type AssertionDA struct {
-	DevMode bool
-	Pk      string
+	Pk        string
+	ImageName string
+	ImageTag  string
 }
 
 func (a *AssertionDA) Run(service *Service, ctx *ExContext) {
-	var name string
-	if a.DevMode {
-		name = "ghcr.io/phylaxsystems/assertion-da/assertion-da-dev"
-	} else {
-		name = "ghcr.io/phylaxsystems/assertion-da/assertion-da"
-	}
 	service.
-		WithImage(name).
-		WithTag("main").
+		WithImage(a.ImageName).
+		WithTag(a.ImageTag).
 		WithArgs("--listen-addr", "0.0.0.0:"+`{{Port "http" 5001}}`, "--private-key", a.Pk).
 		WithAbsoluteVolume("/var/run/docker.sock", "/var/run/docker.sock").
 		WithAbsoluteVolume("/tmp", "/tmp").
