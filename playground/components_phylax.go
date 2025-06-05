@@ -14,8 +14,14 @@ func (a *AssertionDA) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage(a.ImageName).
 		WithTag(a.ImageTag).
-		WithArgs("--listen-addr", "0.0.0.0:"+`{{Port "http" 5001}}`, "--private-key", a.Pk).
+		WithArgs(
+			"--listen-addr",
+			"0.0.0.0:"+`{{Port "http" 5001}}`,
+			"--private-key", a.Pk,
+			"--db-path", "/data_assertion_da/db",
+		).
 		WithAbsoluteVolume("/var/run/docker.sock", "/var/run/docker.sock").
+		WithVolume("data", "/data_assertion_da").
 		WithAbsoluteVolume("/tmp", "/tmp").
 		WithPrivileged()
 	if ctx.AlloyEnabled {
@@ -86,6 +92,7 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 			"--http",
 			"--http.addr", "0.0.0.0",
 			"--http.port", `{{Port "http" 8545}}`,
+			"--http.api", "eth,net,web3,debug",
 			"--ws",
 			"--ws.origins", "*",
 			"--ws.port", `{{Port "ws" 8546}}`,
