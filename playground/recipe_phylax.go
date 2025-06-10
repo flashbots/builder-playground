@@ -99,7 +99,7 @@ func (o *OpTalosRecipe) Artifacts() *ArtifactsBuilder {
 func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, error) {
 
 	parsedImageNameAssertionDa := "ghcr.io/phylaxsystems/assertion-da/assertion-da" // Default image name
-	parsedImageTagAssertionDa := "main"                                           // Default image tag
+	parsedImageTagAssertionDa := "latest"                                           // Default image tag
 
 	// Validate required flags
 	if o.externalDA == "" {
