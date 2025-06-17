@@ -26,7 +26,7 @@ Note that we use `host.docker.internal` as the hostname because the Op Stack com
 
 By default, the EL node for the Op-stack is deployed with a deterministic P2P key, ensuring the enode address remains consistent across all runs. The enode address is:
 
-`enode://3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f@127.0.0.1:30304`
+`enode://79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8@127.0.0.1:30304`
 
 You will see this enode address displayed in the output when running the Op-stack recipe.
 
@@ -38,7 +38,7 @@ Third, we can start the `op-reth` binary as the external block builder:
 $ $HOME/.playground/op-reth-v1.3.12 node --http --http.port 2222 \
     --authrpc.addr 0.0.0.0 --authrpc.port 4444 --authrpc.jwtsecret $HOME/.playground/devnet/jwtsecret \
     --chain $HOME/.playground/devnet/l2-genesis.json --datadir /tmp/builder --disable-discovery --port 30333 \
-    --trusted-peers enode://3479db4d9217fb5d7a8ed4d61ac36e120b05d36c2eefb795dc42ff2e971f251a2315f5649ea1833271e020b9adc98d5db9973c7ed92d6b2f1f2223088c3d852f@127.0.0.1:30304
+    --trusted-peers enode://79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8@127.0.0.1:30304
 ```
 
 The command above starts op-reth as an external block builder with the following key parameters:
