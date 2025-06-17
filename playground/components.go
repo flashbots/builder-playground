@@ -13,19 +13,36 @@ var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293
 type RollupBoost struct {
 	ELNode  string
 	Builder string
+
+	Flashblocks           bool
+	FlashblocksBuilderURL string
 }
 
 func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("0.4rc1").
+		WithTag("0.7.0").
 		WithArgs(
+			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
 			"--l2-jwt-path", "/data/jwtsecret",
 			"--l2-url", Connect(r.ELNode, "authrpc"),
 			"--builder-jwt-path", "/data/jwtsecret",
 			"--builder-url", r.Builder,
 		).WithArtifact("/data/jwtsecret", "jwtsecret")
+
+	if r.Flashblocks {
+		service.WithArgs(
+			"--flashblocks",
+			"--flashblocks-host", "0.0.0.0",
+			"--flashblocks-port", `{{Port "flashblocks" 1112}}`,
+		)
+	}
+	if r.FlashblocksBuilderURL != "" {
+		service.WithArgs(
+			"--flashblocks-builder-url", r.FlashblocksBuilderURL,
+		)
+	}
 }
 
 func (r *RollupBoost) Name() string {
