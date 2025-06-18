@@ -49,6 +49,44 @@ func (r *RollupBoost) Name() string {
 	return "rollup-boost"
 }
 
+type OpRbuilder struct {
+	Flashblocks bool
+}
+
+func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
+	service.WithImage("ghcr.io/flashbots/op-rbuilder").
+		WithTag("sha-4f1931b").
+		WithArgs(
+			"node",
+			"--authrpc.port", `{{Port "authrpc" 8551}}`,
+			"--authrpc.addr", "0.0.0.0",
+			"--authrpc.jwtsecret", "/data/jwtsecret",
+			"--http",
+			"--http.addr", "0.0.0.0",
+			"--http.port", `{{Port "http" 8545}}`,
+			"--chain", "/data/l2-genesis.json",
+			"--datadir", "/data_op_reth",
+			"--disable-discovery",
+			"--color", "never",
+			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+			"--port", `{{Port "rpc" 30303}}`).
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
+		WithVolume("data", "/data_op_reth")
+
+	if o.Flashblocks {
+		service.WithArgs(
+			"--flashblocks.enabled",
+			"--flashblocks.addr", "0.0.0.0",
+			"--flashblocks.port", `{{Port "flashblocks" 1112}}`,
+		)
+	}
+}
+
+func (o *OpRbuilder) Name() string {
+	return "op-rbuilder"
+}
+
 type OpBatcher struct {
 	L1Node             string
 	L2Node             string

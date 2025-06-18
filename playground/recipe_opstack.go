@@ -67,12 +67,24 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		BeaconNode: "beacon",
 	})
 
+	flashblocksBuilderURLRef := o.flashblocksBuilderURL
 	externalBuilderRef := o.externalBuilder
+
 	if o.externalBuilder == "op-reth" {
 		// Add a new op-reth service and connect it to Rollup-boost
 		svcManager.AddService("op-reth", &OpReth{})
 
 		externalBuilderRef = Connect("op-reth", "authrpc")
+	} else if o.externalBuilder == "op-rbuilder" {
+		svcManager.AddService("op-rbuilder", &OpRbuilder{
+			Flashblocks: o.flashblocks,
+		})
+		externalBuilderRef = Connect("op-rbuilder", "authrpc")
+	}
+
+	if o.flashblocks && o.externalBuilder == "op-rbuilder" {
+		// If flashblocks is enabled and using op-rbuilder, use it to deliver flashblocks
+		flashblocksBuilderURLRef = ConnectWs("op-rbuilder", "flashblocks")
 	}
 
 	elNode := "op-geth"
@@ -83,7 +95,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			ELNode:                "op-geth",
 			Builder:               externalBuilderRef,
 			Flashblocks:           o.flashblocks,
-			FlashblocksBuilderURL: o.flashblocksBuilderURL,
+			FlashblocksBuilderURL: flashblocksBuilderURLRef,
 		})
 	}
 	svcManager.AddService("op-node", &OpNode{
