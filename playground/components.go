@@ -13,23 +13,78 @@ var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293
 type RollupBoost struct {
 	ELNode  string
 	Builder string
+
+	Flashblocks           bool
+	FlashblocksBuilderURL string
 }
 
 func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("0.4rc1").
+		WithTag("0.7.0").
 		WithArgs(
+			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
 			"--l2-jwt-path", "/data/jwtsecret",
 			"--l2-url", Connect(r.ELNode, "authrpc"),
 			"--builder-jwt-path", "/data/jwtsecret",
 			"--builder-url", r.Builder,
 		).WithArtifact("/data/jwtsecret", "jwtsecret")
+
+	if r.Flashblocks {
+		service.WithArgs(
+			"--flashblocks",
+			"--flashblocks-host", "0.0.0.0",
+			"--flashblocks-port", `{{Port "flashblocks" 1112}}`,
+		)
+	}
+	if r.FlashblocksBuilderURL != "" {
+		service.WithArgs(
+			"--flashblocks-builder-url", r.FlashblocksBuilderURL,
+		)
+	}
 }
 
 func (r *RollupBoost) Name() string {
 	return "rollup-boost"
+}
+
+type OpRbuilder struct {
+	Flashblocks bool
+}
+
+func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
+	service.WithImage("ghcr.io/flashbots/op-rbuilder").
+		WithTag("sha-4f1931b").
+		WithArgs(
+			"node",
+			"--authrpc.port", `{{Port "authrpc" 8551}}`,
+			"--authrpc.addr", "0.0.0.0",
+			"--authrpc.jwtsecret", "/data/jwtsecret",
+			"--http",
+			"--http.addr", "0.0.0.0",
+			"--http.port", `{{Port "http" 8545}}`,
+			"--chain", "/data/l2-genesis.json",
+			"--datadir", "/data_op_reth",
+			"--disable-discovery",
+			"--color", "never",
+			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+			"--port", `{{Port "rpc" 30303}}`).
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
+		WithVolume("data", "/data_op_reth")
+
+	if o.Flashblocks {
+		service.WithArgs(
+			"--flashblocks.enabled",
+			"--flashblocks.addr", "0.0.0.0",
+			"--flashblocks.port", `{{Port "flashblocks" 1112}}`,
+		)
+	}
+}
+
+func (o *OpRbuilder) Name() string {
+	return "op-rbuilder"
 }
 
 type OpBatcher struct {

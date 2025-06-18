@@ -411,6 +411,10 @@ func Connect(service, port string) string {
 	return ConnectRaw(service, port, "http", "")
 }
 
+func ConnectWs(service, port string) string {
+	return ConnectRaw(service, port, "ws", "")
+}
+
 type output struct {
 	dst string
 
