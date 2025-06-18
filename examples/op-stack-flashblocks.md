@@ -16,7 +16,7 @@ $ go run main.go cook opstack --external-builder op-rbuilder --flashblocks
 
 This will deploy an Op Stack chain with:
 
-- A complete L1 setup (CL/EL/Mev-boost)
+- A complete L1 setup (CL/EL)
 - A complete L2 sequencer (op-geth/op-node/op-batcher)
 - Rollup-boost with Flashblocks enabled for pre-confirmations
 - Op-rbuilder as the external block builder with Flashblocks support
