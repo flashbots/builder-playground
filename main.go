@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flashbots/builder-playground/k8s"
 	"github.com/flashbots/builder-playground/playground"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,7 @@ var withPrometheus bool
 var networkName string
 var labels playground.MapStringFlag
 var disableLogs bool
+var nameFlag string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -177,6 +179,7 @@ func main() {
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
+		recipeCmd.Flags().StringVar(&nameFlag, "name", "", "name of the recipe")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -189,6 +192,7 @@ func main() {
 	rootCmd.AddCommand(artifactsCmd)
 	rootCmd.AddCommand(artifactsAllCmd)
 	rootCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(k8s.K8sCommand)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -223,6 +227,7 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel}, artifacts)
+	svcManager.Name = nameFlag
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}

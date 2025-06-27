@@ -52,7 +52,7 @@ func TestNodeRefString(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		result := printAddr(testCase.protocol, testCase.service, testCase.port, testCase.user)
+		result := PrintAddr(testCase.protocol, testCase.service, testCase.port, testCase.user)
 		if result != testCase.expected {
 			t.Errorf("expected %s, got %s", testCase.expected, result)
 		}
