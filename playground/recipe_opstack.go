@@ -70,10 +70,6 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	flashblocksBuilderURLRef := o.flashblocksBuilderURL
 	externalBuilderRef := o.externalBuilder
 
-	/*
-		bootnode := &Bootnode{}
-		svcManager.AddService("bootnode", bootnode)
-	*/
 	opGeth := &OpGeth{}
 	svcManager.AddService("op-geth", opGeth)
 
