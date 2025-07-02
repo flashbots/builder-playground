@@ -80,6 +80,9 @@ type LocalRunner struct {
 
 	// logInternally outputs the logs of the service to the artifacts folder
 	logInternally bool
+
+	// platform is the docker platform to use for the services
+	platform string
 }
 
 type task struct {
@@ -109,24 +112,35 @@ func newDockerClient() (*client.Client, error) {
 	return client, nil
 }
 
-// TODO: add a runner config struct
-func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string, interactive bool, bindHostPortsLocally bool, networkName string, labels map[string]string, logInternally bool) (*LocalRunner, error) {
+type RunnerConfig struct {
+	Out                  *output
+	Manifest             *Manifest
+	Overrides            map[string]string
+	Interactive          bool
+	BindHostPortsLocally bool
+	NetworkName          string
+	Labels               map[string]string
+	LogInternally        bool
+	Platform             string
+}
+
+func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	client, err := newDockerClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
 	// merge the overrides with the manifest overrides
-	if overrides == nil {
-		overrides = make(map[string]string)
+	if cfg.Overrides == nil {
+		cfg.Overrides = make(map[string]string)
 	}
-	for k, v := range manifest.overrides {
-		overrides[k] = v
+	for k, v := range cfg.Manifest.overrides {
+		cfg.Overrides[k] = v
 	}
 
 	// Create the concrete instances to run
 	instances := []*instance{}
-	for _, service := range manifest.Services {
+	for _, service := range cfg.Manifest.Services {
 		component := FindComponent(service.ComponentName)
 		if component == nil {
 			return nil, fmt.Errorf("component not found '%s'", service.ComponentName)
@@ -135,8 +149,8 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 			service:   service,
 			component: component,
 		}
-		if logInternally {
-			log_output, err := out.LogOutput(service.Name)
+		if cfg.LogInternally {
+			log_output, err := cfg.Out.LogOutput(service.Name)
 			if err != nil {
 				return nil, fmt.Errorf("error getting log output: %w", err)
 			}
@@ -160,11 +174,11 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
 			}
 			releaseArtifact := releaseService.ReleaseArtifact()
-			bin, err := DownloadRelease(out.homeDir, releaseArtifact)
+			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
 			if err != nil {
 				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
 			}
-			overrides[ss.Name] = bin
+			cfg.Overrides[ss.Name] = bin
 		}
 	}
 
@@ -173,7 +187,7 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 	// - a path to an executable: In that case, we need to run it on the host machine
 	// and use the override map <- We only check this case, and if it is not a path, we assume
 	// it is a docker image. If it is not a docker image either, the error will be catched during the execution
-	for k, v := range overrides {
+	for k, v := range cfg.Overrides {
 		if _, err := os.Stat(v); err != nil {
 			// this is a path to an executable, remove it from the overrides since we
 			// assume it s a docker image and add it to manifest
@@ -182,45 +196,46 @@ func NewLocalRunner(out *output, manifest *Manifest, overrides map[string]string
 				return nil, fmt.Errorf("invalid override docker image %s, expected image:tag", v)
 			}
 
-			srv := manifest.MustGetService(k)
+			srv := cfg.Manifest.MustGetService(k)
 			srv.Image = parts[0]
 			srv.Tag = parts[1]
 
-			delete(overrides, k)
+			delete(cfg.Overrides, k)
 			continue
 		}
 	}
 
 	tasks := map[string]*task{}
-	for _, svc := range manifest.Services {
+	for _, svc := range cfg.Manifest.Services {
 		tasks[svc.Name] = &task{
 			status: taskStatusPending,
 			logs:   nil,
 		}
 	}
 
-	if networkName == "" {
-		networkName = defaultNetworkName
+	if cfg.NetworkName == "" {
+		cfg.NetworkName = defaultNetworkName
 	}
 	d := &LocalRunner{
-		out:                  out,
-		manifest:             manifest,
+		out:                  cfg.Out,
+		manifest:             cfg.Manifest,
 		client:               client,
 		reservedPorts:        map[int]bool{},
-		overrides:            overrides,
+		overrides:            cfg.Overrides,
 		handles:              []*exec.Cmd{},
 		tasks:                tasks,
 		taskUpdateCh:         make(chan struct{}),
 		exitErr:              make(chan error, 2),
-		bindHostPortsLocally: bindHostPortsLocally,
+		bindHostPortsLocally: cfg.BindHostPortsLocally,
 		sessionID:            uuid.New().String(),
-		networkName:          networkName,
+		networkName:          cfg.NetworkName,
 		instances:            instances,
-		labels:               labels,
-		logInternally:        logInternally,
+		labels:               cfg.Labels,
+		logInternally:        cfg.LogInternally,
+		platform:             cfg.Platform,
 	}
 
-	if interactive {
+	if cfg.Interactive {
 		go d.printStatus()
 
 		select {
@@ -654,6 +669,10 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// Add the ethereum network
 		"networks": []string{d.networkName},
 		"labels":   labels,
+	}
+
+	if d.platform != "" {
+		service["platform"] = d.platform
 	}
 
 	if len(envs) > 0 {

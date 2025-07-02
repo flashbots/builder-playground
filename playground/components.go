@@ -95,7 +95,6 @@ func (o *OpRbuilder) Name() string {
 
 type FlashblocksRPC struct {
 	FlashblocksWSService string
-	Bootnode             string
 }
 
 func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
@@ -122,9 +121,9 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_flashblocks_rpc")
 
-	if f.Bootnode != "" {
+	if ctx.Bootnode != nil {
 		service.WithArgs(
-			"--trusted-peers", Connect(f.Bootnode, "http"),
+			"--trusted-peers", ctx.Bootnode.Connect(),
 		)
 	}
 }
