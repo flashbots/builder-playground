@@ -1,4 +1,4 @@
-package internal
+package playground
 
 var Components = []ServiceGen{}
 
@@ -22,6 +22,7 @@ func init() {
 	register(&BuilderHubMockProxy{})
 	register(&nullService{})
 	register(&Bootnode{})
+	register(&OpRbuilder{})
 }
 
 func FindComponent(name string) ServiceGen {

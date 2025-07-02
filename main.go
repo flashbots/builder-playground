@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flashbots/builder-playground/internal"
+	"github.com/flashbots/builder-playground/playground"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +27,7 @@ var logLevelFlag string
 var bindExternal bool
 var withPrometheus bool
 var networkName string
-var labels internal.MapStringFlag
+var labels playground.MapStringFlag
 var disableLogs bool
 
 var rootCmd = &cobra.Command{
@@ -59,23 +59,23 @@ var artifactsCmd = &cobra.Command{
 			return fmt.Errorf("please specify a service name")
 		}
 		serviceName := args[0]
-		component := internal.FindComponent(serviceName)
+		component := playground.FindComponent(serviceName)
 		if component == nil {
 			return fmt.Errorf("service %s not found", serviceName)
 		}
-		releaseService, ok := component.(internal.ReleaseService)
+		releaseService, ok := component.(playground.ReleaseService)
 		if !ok {
 			return fmt.Errorf("service %s is not a release service", serviceName)
 		}
 		output := outputFlag
 		if output == "" {
-			homeDir, err := internal.GetHomeDir()
+			homeDir, err := playground.GetHomeDir()
 			if err != nil {
 				return fmt.Errorf("failed to get home directory: %w", err)
 			}
 			output = homeDir
 		}
-		location, err := internal.DownloadRelease(output, releaseService.ReleaseArtifact())
+		location, err := playground.DownloadRelease(output, releaseService.ReleaseArtifact())
 		if err != nil {
 			return fmt.Errorf("failed to download release: %w", err)
 		}
@@ -92,18 +92,18 @@ var artifactsAllCmd = &cobra.Command{
 
 		output := outputFlag
 		if output == "" {
-			homeDir, err := internal.GetHomeDir()
+			homeDir, err := playground.GetHomeDir()
 			if err != nil {
 				return fmt.Errorf("failed to get home directory: %w", err)
 			}
 			output = homeDir
 		}
-		for _, component := range internal.Components {
-			releaseService, ok := component.(internal.ReleaseService)
+		for _, component := range playground.Components {
+			releaseService, ok := component.(playground.ReleaseService)
 			if !ok {
 				continue
 			}
-			location, err := internal.DownloadRelease(output, releaseService.ReleaseArtifact())
+			location, err := playground.DownloadRelease(output, releaseService.ReleaseArtifact())
 			if err != nil {
 				return fmt.Errorf("failed to download release: %w", err)
 			}
@@ -138,17 +138,17 @@ var inspectCmd = &cobra.Command{
 			cancel()
 		}()
 
-		if err := internal.Inspect(ctx, serviceName, connectionName); err != nil {
+		if err := playground.Inspect(ctx, serviceName, connectionName); err != nil {
 			return fmt.Errorf("failed to inspect connection: %w", err)
 		}
 		return nil
 	},
 }
 
-var recipes = []internal.Recipe{
-	&internal.L1Recipe{},
-	&internal.OpRecipe{},
-	&internal.BuilderNetRecipe{},
+var recipes = []playground.Recipe{
+	&playground.L1Recipe{},
+	&playground.OpRecipe{},
+	&playground.BuilderNetRecipe{},
 }
 
 func main() {
@@ -168,7 +168,7 @@ func main() {
 		recipeCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
 		recipeCmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
 		recipeCmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
-		recipeCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", internal.MinimumGenesisDelay, "")
+		recipeCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
 		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
 		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
@@ -196,8 +196,8 @@ func main() {
 	}
 }
 
-func runIt(recipe internal.Recipe) error {
-	var logLevel internal.LogLevel
+func runIt(recipe playground.Recipe) error {
+	var logLevel playground.LogLevel
 	if err := logLevel.Unmarshal(logLevelFlag); err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
@@ -222,7 +222,7 @@ func runIt(recipe internal.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(&internal.ExContext{LogLevel: logLevel}, artifacts)
+	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel}, artifacts)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
@@ -239,7 +239,7 @@ func runIt(recipe internal.Recipe) error {
 	}
 
 	if withPrometheus {
-		if err := internal.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
+		if err := playground.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
 			return fmt.Errorf("failed to create prometheus services: %w", err)
 		}
 	}
@@ -255,7 +255,7 @@ func runIt(recipe internal.Recipe) error {
 		}
 	}
 
-	dockerRunner, err := internal.NewLocalRunner(artifacts.Out, svcManager, overrides, interactive, !bindExternal, networkName, labels, !disableLogs)
+	dockerRunner, err := playground.NewLocalRunner(artifacts.Out, svcManager, overrides, interactive, !bindExternal, networkName, labels, !disableLogs)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
@@ -277,7 +277,7 @@ func runIt(recipe internal.Recipe) error {
 	if !interactive {
 		// print services info
 		fmt.Printf("\n========= Services started =========\n")
-		for _, ss := range svcManager.Services() {
+		for _, ss := range svcManager.Services {
 			ports := ss.GetPorts()
 			sort.Slice(ports, func(i, j int) bool {
 				return ports[i].Name < ports[j].Name
@@ -286,7 +286,7 @@ func runIt(recipe internal.Recipe) error {
 			portsStr := []string{}
 			for _, p := range ports {
 				protocol := ""
-				if p.Protocol == internal.ProtocolUDP {
+				if p.Protocol == playground.ProtocolUDP {
 					protocol = "/udp"
 				}
 				portsStr = append(portsStr, fmt.Sprintf("%s: %d/%d%s", p.Name, p.Port, p.HostPort, protocol))
@@ -300,7 +300,7 @@ func runIt(recipe internal.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
-	if err := internal.CompleteReady(dockerRunner.Instances()); err != nil {
+	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to complete ready: %w", err)
 	}
@@ -317,7 +317,7 @@ func runIt(recipe internal.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			if err := internal.RunWatchdog(artifacts.Out, dockerRunner.Instances()); err != nil {
+			if err := playground.RunWatchdog(artifacts.Out, dockerRunner.Instances()); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
 		}()
