@@ -76,6 +76,10 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
 
+	if ctx.Bootnode != nil {
+		service.WithArgs("--trusted-peers", ctx.Bootnode.Connect())
+	}
+
 	if o.Flashblocks {
 		service.WithArgs(
 			"--flashblocks.enabled",
@@ -192,6 +196,11 @@ func logLevelToGethVerbosity(logLevel LogLevel) string {
 func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 	o.Enode = ctx.Output.GetEnodeAddr()
 
+	var trustedPeers string
+	if ctx.Bootnode != nil {
+		trustedPeers = fmt.Sprintf("--bootnodes %s ", ctx.Bootnode.Connect())
+	}
+
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101503.2-rc.5").
@@ -226,6 +235,7 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
 				"--nodekey /data/p2p_key.txt "+
+				trustedPeers+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
@@ -620,27 +630,4 @@ func (n *nullService) Run(service *Service, ctx *ExContext) {
 
 func (n *nullService) Name() string {
 	return "null"
-}
-
-type Bootnode struct {
-	Enode *EnodeAddr
-}
-
-func (b *Bootnode) Run(service *Service, ctx *ExContext) {
-	// bootnode is not available in modern versions of Geth anymore https://github.com/ethereum/go-ethereum/pull/30813
-	b.Enode = ctx.Output.GetEnodeAddr()
-
-	service.
-		WithImage("ethereum/client-go").
-		WithTag("alltools-release-1.10").
-		WithEntrypoint("bootnode").
-		WithArgs(
-			"--nodekeyhex", b.Enode.PrivKeyHex(),
-			"--addr", `0.0.0.0:{{Port "p2p" 33333}}`,
-			"--verbosity", logLevelToGethVerbosity(ctx.LogLevel),
-		)
-}
-
-func (b *Bootnode) Name() string {
-	return "bootnode"
 }

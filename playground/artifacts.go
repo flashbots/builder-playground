@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/hashicorp/go-uuid"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
@@ -407,6 +406,11 @@ func ConnectRaw(service, port, protocol, user string) string {
 	return fmt.Sprintf(`{{Service "%s" "%s" "%s" "%s"}}`, service, port, protocol, user)
 }
 
+func ConnectEnode(service, id string) string {
+	// Note, this assumes that all the enode ports are registered with the 'rpc' label.
+	return ConnectRaw(service, "rpc", "enode", id)
+}
+
 func Connect(service, port string) string {
 	return ConnectRaw(service, port, "http", "")
 }
@@ -710,8 +714,9 @@ func (e *EnodeAddr) PrivKeyHex() string {
 	return hex.EncodeToString(gethcommon.LeftPadBytes(e.PrivKey.D.Bytes(), 32))
 }
 
-func (e *EnodeAddr) ID() enode.ID {
-	return enode.PubkeyToIDV4(&e.PrivKey.PublicKey)
+func (e *EnodeAddr) NodeID() string {
+	nodeid := fmt.Sprintf("%x", ecrypto.FromECDSAPub(&e.PrivKey.PublicKey)[1:])
+	return nodeid
 }
 
 func (o *output) GetEnodeAddr() *EnodeAddr {

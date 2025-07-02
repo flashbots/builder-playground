@@ -21,7 +21,6 @@ func init() {
 	register(&BuilderHubPostgres{})
 	register(&BuilderHubMockProxy{})
 	register(&nullService{})
-	register(&Bootnode{})
 	register(&OpRbuilder{})
 }
 
