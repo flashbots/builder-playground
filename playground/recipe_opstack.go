@@ -98,6 +98,13 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			FlashblocksBuilderURL: flashblocksBuilderURLRef,
 		})
 	}
+
+	if o.flashblocks {
+		svcManager.AddService("flashblocks-rpc", &FlashblocksRPC{
+			FlashblocksWSService: "rollup-boost", // rollup-boost provides the websocket stream
+		})
+	}
+
 	svcManager.AddService("op-node", &OpNode{
 		L1Node:   "el",
 		L1Beacon: "beacon",

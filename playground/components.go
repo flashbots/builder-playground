@@ -89,6 +89,46 @@ func (o *OpRbuilder) Name() string {
 	return "op-rbuilder"
 }
 
+type FlashblocksRPC struct {
+	FlashblocksWSService string
+	Bootnode             string
+}
+
+func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
+	service.WithImage("flashbots/flashblocks-rpc").
+		WithTag("sha-7caffb9").
+		WithArgs(
+			"node",
+			"--authrpc.port", `{{Port "authrpc" 8551}}`,
+			"--authrpc.addr", "0.0.0.0",
+			"--authrpc.jwtsecret", "/data/jwtsecret",
+			"--http",
+			"--http.addr", "0.0.0.0",
+			"--http.port", `{{Port "http" 8545}}`,
+			"--chain", "/data/l2-genesis.json",
+			"--datadir", "/data_op_reth",
+			"--disable-discovery",
+			"--color", "never",
+			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+			"--port", `{{Port "rpc" 30303}}`,
+			"--flashblocks.enabled",
+			"--flashblocks.websocket-url", ConnectWs(f.FlashblocksWSService, "flashblocks"),
+		).
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
+		WithVolume("data", "/data_flashblocks_rpc")
+
+	if f.Bootnode != "" {
+		service.WithArgs(
+			"--trusted-peers", Connect(f.Bootnode, "http"),
+		)
+	}
+}
+
+func (f *FlashblocksRPC) Name() string {
+	return "flashblocks-rpc"
+}
+
 type OpBatcher struct {
 	L1Node             string
 	L2Node             string
