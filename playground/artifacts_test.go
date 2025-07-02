@@ -11,7 +11,7 @@ func TestEnodeGeneration(t *testing.T) {
 	o2 := newTestOutput(t)
 
 	for i := 0; i < 10; i++ {
-		if o1.GetEnodeAddr().ID() != o2.GetEnodeAddr().ID() {
+		if o1.GetEnodeAddr().NodeID() != o2.GetEnodeAddr().NodeID() {
 			t.Fatalf("enode IDs are not the same")
 		}
 	}
