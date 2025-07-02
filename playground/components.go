@@ -69,7 +69,9 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
-			"--port", `{{Port "rpc" 30303}}`).
+			"--port", `{{Port "rpc" 30303}}`,
+			"--builder.enable-revert-protection",
+		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
