@@ -260,7 +260,6 @@ func (o *OpGeth) Watchdog(out io.Writer, instance *instance, ctx context.Context
 type RethEL struct {
 	UseRethForValidation bool
 	UseNativeReth        bool
-	Bootnode             *EnodeAddr
 }
 
 func (r *RethEL) ReleaseArtifact() *release {
