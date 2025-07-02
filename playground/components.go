@@ -76,6 +76,10 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
 
+	if ctx.Bootnode != nil {
+		service.WithArgs("--trusted-peers", ctx.Bootnode.Connect())
+	}
+
 	if o.Flashblocks {
 		service.WithArgs(
 			"--flashblocks.enabled",
@@ -232,6 +236,11 @@ func logLevelToGethVerbosity(logLevel LogLevel) string {
 func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 	o.Enode = ctx.Output.GetEnodeAddr()
 
+	var trustedPeers string
+	if ctx.Bootnode != nil {
+		trustedPeers = fmt.Sprintf("--bootnodes %s ", ctx.Bootnode.Connect())
+	}
+
 	service.
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101503.2-rc.5").
@@ -266,6 +275,7 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
 				"--nodekey /data/p2p_key.txt "+
+				trustedPeers+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,

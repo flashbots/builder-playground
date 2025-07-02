@@ -554,7 +554,7 @@ func printAddr(protocol, serviceName string, port int, user string) string {
 	}
 
 	if user != "" {
-		return fmt.Sprintf("%s%s@%s:%s", protocolPrefix, user, serviceName, serviceName)
+		return fmt.Sprintf("%s%s@%s:%d", protocolPrefix, user, serviceName, port)
 	}
 
 	return fmt.Sprintf("%s%s:%d", protocolPrefix, serviceName, port)

@@ -78,6 +78,19 @@ type ExContext struct {
 	// have to modify the serviceDesc interface to give services
 	// access to the output.
 	Output *output
+
+	// Bootnode reference for EL nodes.
+	// TODO: Extend for CL nodes too
+	Bootnode *BootnodeRef
+}
+
+type BootnodeRef struct {
+	Service string
+	ID      string
+}
+
+func (b *BootnodeRef) Connect() string {
+	return ConnectEnode(b.Service, b.ID)
 }
 
 type ServiceGen interface {
