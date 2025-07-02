@@ -330,10 +330,6 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
 
-	if r.Bootnode != nil {
-
-	}
-
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
 		svc.UseHostExecution()
