@@ -22,6 +22,7 @@ func init() {
 	register(&BuilderHubMockProxy{})
 	register(&nullService{})
 	register(&OpRbuilder{})
+	register(&FlashblocksRPC{})
 }
 
 func FindComponent(name string) ServiceGen {
