@@ -71,12 +71,12 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	flashblocksBuilderURLRef := o.flashblocksBuilderURL
 	externalBuilderRef := o.externalBuilder
 
-	opGeth := &OpGeth{}
-	svcManager.AddService("op-geth", opGeth)
+	bootnode := &Bootnode{}
+	svcManager.AddService("bootnode", bootnode)
 
 	ctx.Bootnode = &BootnodeRef{
-		Service: "op-geth",
-		ID:      opGeth.Enode.NodeID(),
+		Service: "bootnode",
+		ID:      bootnode.Enode.NodeID(),
 	}
 
 	if o.externalBuilder == "op-reth" {
@@ -114,6 +114,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		})
 	}
 
+	svcManager.AddService("op-geth", &OpGeth{})
 	svcManager.AddService("op-node", &OpNode{
 		L1Node:   "el",
 		L1Beacon: "beacon",
