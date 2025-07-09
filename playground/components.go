@@ -77,7 +77,7 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 		WithVolume("data", "/data_op_reth")
 
 	if ctx.Bootnode != nil {
-		service.WithArgs("--trusted-peers", ctx.Bootnode.Connect())
+		service.WithArgs("--bootnodes", ctx.Bootnode.Connect())
 	}
 
 	if o.Flashblocks {
@@ -123,7 +123,7 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 
 	if ctx.Bootnode != nil {
 		service.WithArgs(
-			"--trusted-peers", ctx.Bootnode.Connect(),
+			"--bootnodes", ctx.Bootnode.Connect(),
 		)
 	}
 }
