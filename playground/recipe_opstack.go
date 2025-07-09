@@ -47,6 +47,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.Uint64Var(&o.blockTime, "block-time", defaultOpBlockTimeSeconds, "Block time to use for the rollup")
 	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
 	flags.BoolVar(&o.flashblocks, "flashblocks", false, "Whether to enable flashblocks")
+	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
 	return flags
 }
 
