@@ -23,6 +23,7 @@ func init() {
 	register(&nullService{})
 	register(&OpRbuilder{})
 	register(&FlashblocksRPC{})
+	register(&Bootnode{})
 }
 
 func FindComponent(name string) ServiceGen {

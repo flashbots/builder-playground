@@ -665,3 +665,36 @@ func (n *nullService) Run(service *Service, ctx *ExContext) {
 func (n *nullService) Name() string {
 	return "null"
 }
+
+type BootnodeProtocol string
+
+const (
+	BootnodeProtocolV5 BootnodeProtocol = "v5"
+)
+
+type Bootnode struct {
+	Protocol BootnodeProtocol
+	Enode    *EnodeAddr
+}
+
+func (b *Bootnode) Run(service *Service, ctx *ExContext) {
+	b.Enode = ctx.Output.GetEnodeAddr()
+
+	service.WithImage("ghcr.io/paradigmxyz/reth").
+		WithTag("v1.5.1").
+		WithEntrypoint("/usr/local/bin/reth").
+		WithArgs(
+			"p2p", "bootnode",
+			"--addr", `0.0.0.0:{{Port "rpc" 30303}}`,
+			"--node-key", "/data/p2p_key.txt",
+		).
+		WithArtifact("/data/p2p_key.txt", b.Enode.Artifact)
+
+	if b.Protocol == BootnodeProtocolV5 {
+		service.WithArgs("--v5")
+	}
+}
+
+func (b *Bootnode) Name() string {
+	return "bootnode"
+}
