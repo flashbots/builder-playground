@@ -473,13 +473,6 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		If(useRethForValidation, func(s *service) *service {
 			return s.WithReplacementArgs("--http.api", "admin,eth,web3,net,rpc,flashbots")
 		}).
-		If(
-			semver.Compare(rethVersion, "v1.1.0") >= 0,
-			func(s *service) *service {
-				// For versions >= v1.1.0, we need to run with --engine.legacy, at least for now
-				return s.WithArgs("--engine.legacy")
-			},
-		).
 		WithPort("rpc", 30303).
 		WithPort("http", 8545).
 		WithPort("authrpc", 8551).
