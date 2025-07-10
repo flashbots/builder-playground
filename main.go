@@ -427,14 +427,15 @@ func setupServices(svcManager *serviceManager, out *output) error {
 	rethVersion := func() string {
 		cmd := exec.Command(rethBin, "--version")
 		out, err := cmd.Output()
+
 		if err != nil {
 			return "unknown"
 		}
 		// find the line of the form:
 		// reth Version: x.y.z
 		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "reth Version: ") {
-				v := strings.TrimSpace(strings.TrimPrefix(line, "reth Version: "))
+			if strings.HasPrefix(line, "reth-ethereum-cli Version:") {
+				v := strings.TrimSpace(strings.TrimPrefix(line, "reth-ethereum-cli Version:"))
 				if !strings.HasPrefix(v, "v") {
 					v = "v" + v
 				}
@@ -466,6 +467,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 			"--http.port", "8545",
 			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
+			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
 			"-vvvv",
 		).
 		If(useRethForValidation, func(s *service) *service {

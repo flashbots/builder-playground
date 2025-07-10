@@ -24,7 +24,7 @@ func DownloadArtifacts() (map[string]string, error) {
 		{
 			Name:    "reth",
 			Org:     "paradigmxyz",
-			Version: "v1.0.2",
+			Version: "v1.4.8",
 			Arch: func(goos, goarch string) string {
 				if goos == "linux" {
 					return "x86_64-unknown-linux-gnu"
