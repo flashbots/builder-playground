@@ -23,6 +23,8 @@ type L1Recipe struct {
 	// will run on the host machine. This is useful if you want to bind to the Reth database and you
 	// are running a host machine (i.e Mac) that is differerent from the docker one (Linux)
 	useNativeReth bool
+
+	useSeparateMevBoost bool
 }
 
 func (l *L1Recipe) Name() string {
@@ -39,6 +41,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
 	flags.Uint64Var(&l.secondaryELPort, "secondary-el", 0, "port to use for the secondary builder")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
+	flags.BoolVar(&l.useSeparateMevBoost, "use-separate-mev-boost", false, "use separate mev-boost and mev-boost-relay services")
 	return flags
 }
 
@@ -78,14 +81,31 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		BeaconNode: "beacon",
 	})
 
-	mevBoostValidationServer := ""
-	if l.useRethForValidation {
-		mevBoostValidationServer = "el"
+	if l.useSeparateMevBoost {
+		mevBoostValidationServer := ""
+		if l.useRethForValidation {
+			mevBoostValidationServer = "el"
+		}
+
+		svcManager.AddService("mev-boost-relay", &MevBoostRelay{
+			BeaconClient:     "beacon",
+			ValidationServer: mevBoostValidationServer,
+		})
+
+		svcManager.AddService("mev-boost", &MevBoost{
+			RelayEndpoints: []string{"mev-boost-relay"},
+		})
+	} else {
+		// single-service setup
+		mevBoostValidationServer := ""
+		if l.useRethForValidation {
+			mevBoostValidationServer = "el"
+		}
+		svcManager.AddService("mev-boost", &MevBoostRelay{
+			BeaconClient:     "beacon",
+			ValidationServer: mevBoostValidationServer,
+		})
 	}
-	svcManager.AddService("mev-boost", &MevBoostRelay{
-		BeaconClient:     "beacon",
-		ValidationServer: mevBoostValidationServer,
-	})
 	return svcManager
 }
 

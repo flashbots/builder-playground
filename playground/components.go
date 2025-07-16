@@ -6,6 +6,11 @@ import (
 	"io"
 	"strconv"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
+	"github.com/flashbots/go-boost-utils/bls"
+	"github.com/flashbots/go-boost-utils/utils"
 )
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
@@ -654,6 +659,53 @@ var _ ServiceWatchdog = &OpReth{}
 func (p *OpReth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
 	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 	return watchChainHead(out, rethURL, 2*time.Second)
+}
+
+type MevBoost struct {
+	RelayEndpoints []string
+}
+
+func (m *MevBoost) Run(service *Service, ctx *ExContext) {
+	args := []string{
+		"--addr", "0.0.0.0:" + `{{Port "http" 18550}}`,
+		"--loglevel", "info",
+	}
+
+	for _, endpoint := range m.RelayEndpoints {
+		if endpoint == "mev-boost-relay" {
+			// create relay URL with public key for local mev-boost-relay
+			envSkBytes, err := hexutil.Decode(mevboostrelay.DefaultSecretKey)
+			if err != nil {
+				continue
+			}
+			secretKey, err := bls.SecretKeyFromBytes(envSkBytes[:])
+			if err != nil {
+				continue
+			}
+			blsPublicKey, err := bls.PublicKeyFromSecretKey(secretKey)
+			if err != nil {
+				continue
+			}
+			publicKey, err := utils.BlsPublicKeyToPublicKey(blsPublicKey)
+			if err != nil {
+				continue
+			}
+
+			relayURL := fmt.Sprintf("http://%s@%s:%s", publicKey.String(), endpoint, "5555")
+			args = append(args, "--relay", relayURL)
+		} else {
+			args = append(args, "--relay", Connect(endpoint, "http"))
+		}
+	}
+
+	service.
+		WithImage("flashbots/mev-boost").
+		WithTag("latest").
+		WithArgs(args...)
+}
+
+func (m *MevBoost) Name() string {
+	return "mev-boost"
 }
 
 type nullService struct {

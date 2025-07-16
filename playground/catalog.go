@@ -15,6 +15,7 @@ func init() {
 	register(&LighthouseValidator{})
 	register(&ClProxy{})
 	register(&MevBoostRelay{})
+	register(&MevBoost{})
 	register(&RollupBoost{})
 	register(&OpReth{})
 	register(&BuilderHub{})
