@@ -310,7 +310,7 @@ func (r *RethEL) ReleaseArtifact() *release {
 	return &release{
 		Name:    "reth",
 		Org:     "paradigmxyz",
-		Version: "v1.3.1",
+		Version: "v1.4.8",
 		Arch: func(goos, goarch string) string {
 			if goos == "linux" {
 				return "x86_64-unknown-linux-gnu"
@@ -345,7 +345,7 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 	// start the reth el client
 	svc.
 		WithImage("ghcr.io/paradigmxyz/reth").
-		WithTag("v1.3.1").
+		WithTag("v1.4.8").
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",
@@ -673,7 +673,7 @@ func (m *MevBoost) Run(service *Service, ctx *ExContext) {
 
 	for _, endpoint := range m.RelayEndpoints {
 		if endpoint == "mev-boost-relay" {
-			// create relay URL with public key for local mev-boost-relay
+			// creating relay url with public key for mev-boost-relay
 			envSkBytes, err := hexutil.Decode(mevboostrelay.DefaultSecretKey)
 			if err != nil {
 				continue
@@ -691,17 +691,17 @@ func (m *MevBoost) Run(service *Service, ctx *ExContext) {
 				continue
 			}
 
-			relayURL := fmt.Sprintf("http://%s@%s:%s", publicKey.String(), endpoint, "5555")
+			relayURL := ConnectRaw("mev-boost-relay", "http", "http", publicKey.String())
 			args = append(args, "--relay", relayURL)
 		} else {
 			args = append(args, "--relay", Connect(endpoint, "http"))
 		}
 	}
 
-	service.
-		WithImage("flashbots/mev-boost").
+	service.WithImage("flashbots/mev-boost").
 		WithTag("latest").
-		WithArgs(args...)
+		WithArgs(args...).
+		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
 }
 
 func (m *MevBoost) Name() string {
