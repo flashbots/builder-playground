@@ -6,6 +6,11 @@ import (
 	"io"
 	"strconv"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
+	"github.com/flashbots/go-boost-utils/bls"
+	"github.com/flashbots/go-boost-utils/utils"
 )
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
@@ -305,7 +310,7 @@ func (r *RethEL) ReleaseArtifact() *release {
 	return &release{
 		Name:    "reth",
 		Org:     "paradigmxyz",
-		Version: "v1.3.1",
+		Version: "v1.4.8",
 		Arch: func(goos, goarch string) string {
 			if goos == "linux" {
 				return "x86_64-unknown-linux-gnu"
@@ -340,7 +345,7 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 	// start the reth el client
 	svc.
 		WithImage("ghcr.io/paradigmxyz/reth").
-		WithTag("v1.3.1").
+		WithTag("v1.4.8").
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",
@@ -654,6 +659,53 @@ var _ ServiceWatchdog = &OpReth{}
 func (p *OpReth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
 	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 	return watchChainHead(out, rethURL, 2*time.Second)
+}
+
+type MevBoost struct {
+	RelayEndpoints []string
+}
+
+func (m *MevBoost) Run(service *Service, ctx *ExContext) {
+	args := []string{
+		"--addr", "0.0.0.0:" + `{{Port "http" 18550}}`,
+		"--loglevel", "info",
+	}
+
+	for _, endpoint := range m.RelayEndpoints {
+		if endpoint == "mev-boost-relay" {
+			// creating relay url with public key since mev-boost requires it
+			envSkBytes, err := hexutil.Decode(mevboostrelay.DefaultSecretKey)
+			if err != nil {
+				continue
+			}
+			secretKey, err := bls.SecretKeyFromBytes(envSkBytes[:])
+			if err != nil {
+				continue
+			}
+			blsPublicKey, err := bls.PublicKeyFromSecretKey(secretKey)
+			if err != nil {
+				continue
+			}
+			publicKey, err := utils.BlsPublicKeyToPublicKey(blsPublicKey)
+			if err != nil {
+				continue
+			}
+
+			relayURL := ConnectRaw("mev-boost-relay", "http", "http", publicKey.String())
+			args = append(args, "--relay", relayURL)
+		} else {
+			args = append(args, "--relay", Connect(endpoint, "http"))
+		}
+	}
+
+	service.WithImage("flashbots/mev-boost").
+		WithTag("latest").
+		WithArgs(args...).
+		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
+}
+
+func (m *MevBoost) Name() string {
+	return "mev-boost"
 }
 
 type nullService struct {
