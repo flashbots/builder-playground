@@ -673,7 +673,7 @@ func (m *MevBoost) Run(service *Service, ctx *ExContext) {
 
 	for _, endpoint := range m.RelayEndpoints {
 		if endpoint == "mev-boost-relay" {
-			// creating relay url with public key for mev-boost-relay
+			// creating relay url with public key since mev-boost requires it
 			envSkBytes, err := hexutil.Decode(mevboostrelay.DefaultSecretKey)
 			if err != nil {
 				continue
