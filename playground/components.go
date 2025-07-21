@@ -717,3 +717,23 @@ func (n *nullService) Run(service *Service, ctx *ExContext) {
 func (n *nullService) Name() string {
 	return "null"
 }
+
+type Contender struct{}
+
+func (c *Contender) Name() string {
+	return "contender"
+}
+
+func (c *Contender) Run(service *Service, ctx *ExContext) {
+	args := []string{
+		"spam",
+		"-l", // loop indefinitely
+		"--min-balance", "10 ether",
+		"-r", Connect("el", "http"),
+		"--tpb", "20", // send 20 txs per block
+	}
+	service.WithImage("flashbots/contender").
+		WithTag("latest").
+		WithArgs(args...).
+		DependsOnHealthy("beacon")
+}
