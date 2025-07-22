@@ -59,9 +59,7 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
 		})
 	}
 
-	svcManager.AddService("contender", &Contender{
-		UseNativeReth: b.l1Recipe.useNativeReth,
-	})
+	svcManager.AddService("contender", &Contender{})
 
 	return svcManager
 }

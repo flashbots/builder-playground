@@ -719,7 +719,6 @@ func (n *nullService) Name() string {
 }
 
 type Contender struct {
-	UseNativeReth bool
 }
 
 func (c *Contender) Name() string {
@@ -727,19 +726,11 @@ func (c *Contender) Name() string {
 }
 
 func (c *Contender) Run(service *Service, ctx *ExContext) {
-	var targetNode string
-
-	if c.UseNativeReth {
-		targetNode = "http://host.docker.internal:8545"
-	} else {
-		targetNode = Connect("el", "http")
-	}
-
 	args := []string{
 		"spam",
 		"-l", // loop indefinitely
 		"--min-balance", "10 ether",
-		"-r", targetNode,
+		"-r", Connect("el", "http"),
 		"--tps", "20", // send 20 txs per block
 	}
 	service.WithImage("flashbots/contender").

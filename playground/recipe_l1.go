@@ -107,9 +107,7 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		})
 	}
 
-	svcManager.AddService("contender", &Contender{
-		UseNativeReth: l.useNativeReth,
-	})
+	svcManager.AddService("contender", &Contender{})
 
 	return svcManager
 }
