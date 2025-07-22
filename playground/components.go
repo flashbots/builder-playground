@@ -728,10 +728,10 @@ func (c *Contender) Name() string {
 func (c *Contender) Run(service *Service, ctx *ExContext) {
 	args := []string{
 		"spam",
-		"-l", // loop indefinitely
-		"--min-balance", "10 ether",
-		"-r", Connect("el", "http"),
-		"--tps", "20", // send 20 txs per block
+		"-l",                        // loop indefinitely
+		"--min-balance", "10 ether", // give each spammer 10 ether (sender must have 100 ether because default number of spammers is 10)
+		"-r", Connect("el", "http"), // connect to whatever EL node is available
+		"--tps", "20", // send 20 txs per second
 	}
 	service.WithImage("flashbots/contender").
 		WithTag("latest").
