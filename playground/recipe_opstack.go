@@ -127,7 +127,9 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
 
-	svcManager.AddService("contender", &Contender{})
+	if ctx.ContenderEnabled {
+		svcManager.AddService("contender", &Contender{})
+	}
 
 	return svcManager
 }

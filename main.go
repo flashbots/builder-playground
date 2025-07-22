@@ -30,6 +30,7 @@ var networkName string
 var labels playground.MapStringFlag
 var disableLogs bool
 var platform string
+var contenderEnabled bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -179,6 +180,7 @@ func main() {
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
 		recipeCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
+		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -224,7 +226,7 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel}, artifacts)
+	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel, ContenderEnabled: contenderEnabled}, artifacts)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
