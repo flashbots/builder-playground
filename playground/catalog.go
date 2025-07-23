@@ -15,12 +15,15 @@ func init() {
 	register(&LighthouseValidator{})
 	register(&ClProxy{})
 	register(&MevBoostRelay{})
+	register(&MevBoost{})
 	register(&RollupBoost{})
 	register(&OpReth{})
 	register(&BuilderHub{})
 	register(&BuilderHubPostgres{})
 	register(&BuilderHubMockProxy{})
 	register(&nullService{})
+	register(&OpRbuilder{})
+	register(&FlashblocksRPC{})
 }
 
 func FindComponent(name string) ServiceGen {
