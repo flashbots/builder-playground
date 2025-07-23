@@ -170,6 +170,13 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		}
 	}
 
+	// fund the batcher account on L1
+	// https://github.com/flashbots/builder-playground/blob/863477dad501350a246b8824de85a1a4b65314d6/playground/components.go#L163
+	gen.Alloc[gethcommon.HexToAddress("0xa0Ee7A142d267C1f36714E4a8F75612F20a79720")] = types.Account{
+		Balance: prefundedBalance,
+		Nonce:   1,
+	}
+
 	// Apply Optimism pre-state
 	{
 		var state struct {
