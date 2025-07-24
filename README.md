@@ -33,6 +33,7 @@ Flags:
 - `--use-reth-for-validation`: Use Reth EL for block validation in mev-boost.
 - `--secondary-el`: Port to use for a secondary el (enables the internal cl-proxy proxy)
 - `--use-native-reth`: Run the Reth EL binary on the host instead of docker (recommended to bind to the Reth DB)
+- `--use-separate-mev-boost`: Spins a seperate service for mev-boost in addition with mev-boost-relay
 
 ### OpStack Recipe
 
