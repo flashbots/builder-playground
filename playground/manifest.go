@@ -82,6 +82,8 @@ type ExContext struct {
 	// Bootnode reference for EL nodes.
 	// TODO: Extend for CL nodes too
 	Bootnode *BootnodeRef
+
+	ContenderEnabled bool
 }
 
 type BootnodeRef struct {

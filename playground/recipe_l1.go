@@ -106,6 +106,11 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			ValidationServer: mevBoostValidationServer,
 		})
 	}
+
+	if ctx.ContenderEnabled {
+		svcManager.AddService("contender", &Contender{})
+	}
+
 	return svcManager
 }
 

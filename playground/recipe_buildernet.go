@@ -59,6 +59,10 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
 		})
 	}
 
+	if ctx.ContenderEnabled {
+		svcManager.AddService("contender", &Contender{})
+	}
+
 	return svcManager
 }
 

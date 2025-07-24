@@ -126,6 +126,11 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		RollupNode:         "op-node",
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
+
+	if ctx.ContenderEnabled {
+		svcManager.AddService("contender", &Contender{})
+	}
+
 	return svcManager
 }
 
