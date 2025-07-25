@@ -118,7 +118,7 @@ func (o *OpTalosRecipe) Apply(ctx *ExContext, artifacts *Artifacts) (*Manifest, 
 	}
 
 	parsedImageNameOpTalos := "ghcr.io/phylaxsystems/op-talos/op-rbuilder" // Default image name
-	parsedImageTagOpTalos := "master"                                      // Default image tag
+	parsedImageTagOpTalos := "main"                                        // Default image tag
 
 	if o.opTalosImageTag != "" { // If the flag was provided
 		parts := strings.SplitN(o.opTalosImageTag, ":", 2)
