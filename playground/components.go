@@ -361,6 +361,12 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 			"--http.addr", "0.0.0.0",
 			"--http.api", "admin,eth,web3,net,rpc,mev,flashbots",
 			"--http.port", `{{Port "http" 8545}}`,
+			// websocket config
+			"--ws",
+			"--ws.addr", "0.0.0.0",
+			"--ws.port", `{{Port "ws" 8546}}`,
+			"--ws.api", "eth,web3,net,txpool,debug,trace",
+			"--ws.origins", "*",
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.jwtsecret", "/data/jwtsecret",
