@@ -30,6 +30,9 @@ type OpRecipe struct {
 	// flashblocksBuilderURL is the URL of the builder that returns the flashblocks. This is meant to be used
 	// for external builders.
 	flashblocksBuilderURL string
+
+	// Indicates that flashblocks-rpc should use base image
+	baseOverlay bool 
 }
 
 func (o *OpRecipe) Name() string {
@@ -47,6 +50,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.Uint64Var(&o.blockTime, "block-time", defaultOpBlockTimeSeconds, "Block time to use for the rollup")
 	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
 	flags.BoolVar(&o.flashblocks, "flashblocks", false, "Whether to enable flashblocks")
+	flags.BoolVar(&o.baseOverlay, "base-overlay", false, "Whether to use base implementation for flashblocks-rpc")
 	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
 	return flags
 }
@@ -96,21 +100,36 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		flashblocksBuilderURLRef = ConnectWs("op-rbuilder", "flashblocks")
 	}
 
+	svcManager.AddService("bproxy", &BProxy{
+		TargetAuthrpc: externalBuilderRef,
+		Peers: []string{
+			"flashblocks-rpc",
+		},
+		Flashblocks: o.flashblocks,
+		FlashblocksBuilderURL: flashblocksBuilderURLRef,
+	})
+
+	svcManager.AddService("websocket-proxy", &WebsocketProxy{
+		Upstream: "rollup-boost",
+	})
+
 	elNode := "op-geth"
 	if o.externalBuilder != "" {
 		elNode = "rollup-boost"
 
 		svcManager.AddService("rollup-boost", &RollupBoost{
 			ELNode:                "op-geth",
-			Builder:               externalBuilderRef,
+			Builder:               Connect("bproxy", "authrpc"),
 			Flashblocks:           o.flashblocks,
-			FlashblocksBuilderURL: flashblocksBuilderURLRef,
+			FlashblocksBuilderURL: ConnectWs("bproxy", "flashblocks"),
 		})
 	}
 
+	
 	if o.flashblocks {
 		svcManager.AddService("flashblocks-rpc", &FlashblocksRPC{
-			FlashblocksWSService: "rollup-boost", // rollup-boost provides the websocket stream
+			FlashblocksWSService: "websocket-proxy", // rollup-boost provides the websocket stream
+			BaseOverlay: o.baseOverlay,
 		})
 	}
 
