@@ -74,6 +74,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	flashblocksBuilderURLRef := o.flashblocksBuilderURL
 	externalBuilderRef := o.externalBuilder
+	peers := []string{}
 
 	opGeth := &OpGeth{}
 	svcManager.AddService("op-geth", opGeth)
@@ -100,11 +101,13 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		flashblocksBuilderURLRef = ConnectWs("op-rbuilder", "flashblocks")
 	}
 
+	if o.flashblocks {
+		peers = append(peers, "flashblocks-rpc")
+	}
+	
 	svcManager.AddService("bproxy", &BProxy{
 		TargetAuthrpc: externalBuilderRef,
-		Peers: []string{
-			"flashblocks-rpc",
-		},
+		Peers: peers,
 		Flashblocks: o.flashblocks,
 		FlashblocksBuilderURL: flashblocksBuilderURLRef,
 	})
