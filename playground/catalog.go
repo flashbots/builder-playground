@@ -24,6 +24,8 @@ func init() {
 	register(&nullService{})
 	register(&OpRbuilder{})
 	register(&FlashblocksRPC{})
+	register(&BProxy{})
+	register(&WebsocketProxy{})
 }
 
 func FindComponent(name string) ServiceGen {

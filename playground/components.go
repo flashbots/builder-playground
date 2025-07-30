@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -100,13 +101,31 @@ func (o *OpRbuilder) Name() string {
 
 type FlashblocksRPC struct {
 	FlashblocksWSService string
+	BaseOverlay bool
 }
 
 func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
-	service.WithImage("flashbots/flashblocks-rpc").
-		WithTag("sha-7caffb9").
-		WithArgs(
-			"node",
+	if f.BaseOverlay {
+		// Base doesn't have built image, so we use mikawamp/base-reth-node
+		service.WithImage("docker.io/mikawamp/base-reth-node").
+			WithTag("latest").
+			WithEntrypoint("/app/base-reth-node").
+			WithArgs(
+				"node",
+				// We use websocket proxy to connect to rollup-boost, so we need to add /ws to the url
+				"--websocket-url", ConnectWs(f.FlashblocksWSService, "flashblocks") + "/ws",
+			)
+	} else {
+		service.WithImage("flashbots/flashblocks-rpc").
+			WithTag("sha-7caffb9").
+			WithArgs(
+				"node",
+				"--flashblocks.enabled",
+				// We use websocket proxy to connect to rollup-boost, so we need to add /ws to the url
+				"--flashblocks.websocket-url", ConnectWs(f.FlashblocksWSService, "flashblocks") + "/ws",
+			)
+	}
+	service.WithArgs(
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.jwtsecret", "/data/jwtsecret",
@@ -119,8 +138,6 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			"--port", `{{Port "rpc" 30303}}`,
-			"--flashblocks.enabled",
-			"--flashblocks.websocket-url", ConnectWs(f.FlashblocksWSService, "flashblocks"),
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
@@ -135,6 +152,73 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 
 func (f *FlashblocksRPC) Name() string {
 	return "flashblocks-rpc"
+}
+
+type BProxy struct {
+	TargetAuthrpc string
+	Peers []string
+	Flashblocks bool
+	FlashblocksBuilderURL string
+}
+
+func (f* BProxy) Run(service *Service, ctx *ExContext) {
+	peers := []string{}
+	for _, peer := range f.Peers {
+		peers = append(peers, Connect(peer, "authrpc"))
+	}
+	service.WithImage("ghcr.io/flashbots/bproxy").
+		WithTag("v0.0.91").
+		WithArgs(
+			"serve",
+			"--authrpc-backend", f.TargetAuthrpc,
+			"--authrpc-backend-timeout", "5s",
+			"--authrpc-client-idle-connection-timeout", "15m",
+			"--authrpc-deduplicate-fcus",
+			"--authrpc-enabled",
+			"--authrpc-listen-address", `0.0.0.0:{{Port "authrpc" 8651}}`,
+			"--authrpc-log-requests",
+			"--authrpc-log-responses",
+			"--authrpc-max-backend-connections-per-host", "1",
+			"--authrpc-max-request-size", "150",
+			"--authrpc-max-response-size", "1150",
+			"--authrpc-peers", strings.Join(peers, ","),
+			"--authrpc-remove-backend-from-peers",
+			"--authrpc-use-priority-queue",
+		).
+		WithArtifact("/data/jwtsecret", "jwtsecret")
+
+	if f.Flashblocks {
+		service.WithArgs(
+			"--flashblocks-backend", f.FlashblocksBuilderURL,
+			"--flashblocks-enabled",
+			"--flashblocks-listen-address", `0.0.0.0:{{Port "flashblocks" 1114}}`,
+			"--flashblocks-log-messages",
+		)
+	}
+
+}
+
+func (f *BProxy) Name() string {
+	return "bproxy"
+}
+
+type WebsocketProxy struct {
+	Upstream string
+}
+
+func (w *WebsocketProxy) Run(service *Service, ctx *ExContext) {
+	service.WithImage("docker.io/mikawamp/websocket-rpc").
+		WithTag("latest").
+		WithArgs(
+			"--listen-addr", `0.0.0.0:{{Port "flashblocks" 1115}}`,
+			"--upstream-ws", ConnectWs(w.Upstream, "flashblocks"),
+			"--enable-compression",
+			"--client-ping-enabled",
+		)
+}
+
+func (w *WebsocketProxy) Name() string {
+	return "websocket-proxy"
 }
 
 type OpBatcher struct {
