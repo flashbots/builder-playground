@@ -102,9 +102,15 @@ func (o *OpRbuilder) Name() string {
 type FlashblocksRPC struct {
 	FlashblocksWSService string
 	BaseOverlay bool
+	UseWebsocketProxy bool  // Whether to add /ws path for websocket proxy
 }
 
 func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
+	websocketURL := ConnectWs(f.FlashblocksWSService, "flashblocks")
+	if f.UseWebsocketProxy {
+		websocketURL += "/ws"
+	}
+
 	if f.BaseOverlay {
 		// Base doesn't have built image, so we use mikawamp/base-reth-node
 		service.WithImage("docker.io/mikawamp/base-reth-node").
@@ -112,8 +118,7 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 			WithEntrypoint("/app/base-reth-node").
 			WithArgs(
 				"node",
-				// We use websocket proxy to connect to rollup-boost, so we need to add /ws to the url
-				"--websocket-url", ConnectWs(f.FlashblocksWSService, "flashblocks") + "/ws",
+				"--websocket-url", websocketURL,
 			)
 	} else {
 		service.WithImage("flashbots/flashblocks-rpc").
@@ -121,8 +126,7 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 			WithArgs(
 				"node",
 				"--flashblocks.enabled",
-				// We use websocket proxy to connect to rollup-boost, so we need to add /ws to the url
-				"--flashblocks.websocket-url", ConnectWs(f.FlashblocksWSService, "flashblocks") + "/ws",
+				"--flashblocks.websocket-url", websocketURL,
 			)
 	}
 	service.WithArgs(

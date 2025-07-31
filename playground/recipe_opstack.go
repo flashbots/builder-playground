@@ -33,6 +33,9 @@ type OpRecipe struct {
 
 	// Indicates that flashblocks-rpc should use base image
 	baseOverlay bool 
+
+	// whether to enable websocket proxy
+	enableWebsocketProxy bool
 }
 
 func (o *OpRecipe) Name() string {
@@ -52,6 +55,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.flashblocks, "flashblocks", false, "Whether to enable flashblocks")
 	flags.BoolVar(&o.baseOverlay, "base-overlay", false, "Whether to use base implementation for flashblocks-rpc")
 	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
+	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
 	return flags
 }
 
@@ -105,34 +109,57 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		peers = append(peers, "flashblocks-rpc")
 	}
 	
-	svcManager.AddService("bproxy", &BProxy{
-		TargetAuthrpc: externalBuilderRef,
-		Peers: peers,
-		Flashblocks: o.flashblocks,
-		FlashblocksBuilderURL: flashblocksBuilderURLRef,
-	})
+	// Only enable bproxy if flashblocks is enabled (since flashblocks-rpc is the only service that needs it)
+	if o.flashblocks {
+		svcManager.AddService("bproxy", &BProxy{
+			TargetAuthrpc: externalBuilderRef,
+			Peers: peers,
+			Flashblocks: o.flashblocks,
+			FlashblocksBuilderURL: flashblocksBuilderURLRef,
+		})
+	}
 
-	svcManager.AddService("websocket-proxy", &WebsocketProxy{
-		Upstream: "rollup-boost",
-	})
+	// Only enable websocket-proxy if the flag is set
+	if o.enableWebsocketProxy {
+		svcManager.AddService("websocket-proxy", &WebsocketProxy{
+			Upstream: "rollup-boost",
+		})
+	}
 
 	elNode := "op-geth"
 	if o.externalBuilder != "" {
 		elNode = "rollup-boost"
 
+		// Use bproxy if flashblocks is enabled, otherwise use external builder directly
+		builderRef := externalBuilderRef
+		flashblocksBuilderRef := flashblocksBuilderURLRef
+		if o.flashblocks {
+			builderRef = Connect("bproxy", "authrpc")
+			flashblocksBuilderRef = ConnectWs("bproxy", "flashblocks")
+		}
+
 		svcManager.AddService("rollup-boost", &RollupBoost{
 			ELNode:                "op-geth",
-			Builder:               Connect("bproxy", "authrpc"),
+			Builder:               builderRef,
 			Flashblocks:           o.flashblocks,
-			FlashblocksBuilderURL: ConnectWs("bproxy", "flashblocks"),
+			FlashblocksBuilderURL: flashblocksBuilderRef,
 		})
 	}
 
 	
 	if o.flashblocks {
+		// Determine which service to use for flashblocks websocket connection
+		flashblocksWSService := "rollup-boost"
+		useWebsocketProxy := false
+		if o.enableWebsocketProxy {
+			flashblocksWSService = "websocket-proxy"
+			useWebsocketProxy = true
+		}
+
 		svcManager.AddService("flashblocks-rpc", &FlashblocksRPC{
-			FlashblocksWSService: "websocket-proxy", // rollup-boost provides the websocket stream
+			FlashblocksWSService: flashblocksWSService,
 			BaseOverlay: o.baseOverlay,
+			UseWebsocketProxy: useWebsocketProxy,
 		})
 	}
 
