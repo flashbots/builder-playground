@@ -101,6 +101,7 @@ func (o *OpTalos) Run(service *Service, ctx *ExContext) {
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			"--port", `{{Port "rpc" 30303}}`,
+			"--ae.enabled",
 			"--ae.rpc_da_url", o.AssertionDA,
 			"--ae.rpc_url", "ws://localhost:8546",
 			"--ae.oracle_contract", o.OracleContract,
