@@ -101,8 +101,8 @@ func (o *OpRbuilder) Name() string {
 
 type FlashblocksRPC struct {
 	FlashblocksWSService string
-	BaseOverlay bool
-	UseWebsocketProxy bool  // Whether to add /ws path for websocket proxy
+	BaseOverlay          bool
+	UseWebsocketProxy    bool // Whether to add /ws path for websocket proxy
 }
 
 func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
@@ -130,19 +130,19 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 			)
 	}
 	service.WithArgs(
-			"--authrpc.port", `{{Port "authrpc" 8551}}`,
-			"--authrpc.addr", "0.0.0.0",
-			"--authrpc.jwtsecret", "/data/jwtsecret",
-			"--http",
-			"--http.addr", "0.0.0.0",
-			"--http.port", `{{Port "http" 8545}}`,
-			"--chain", "/data/l2-genesis.json",
-			"--datadir", "/data_op_reth",
-			"--disable-discovery",
-			"--color", "never",
-			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
-			"--port", `{{Port "rpc" 30303}}`,
-		).
+		"--authrpc.port", `{{Port "authrpc" 8551}}`,
+		"--authrpc.addr", "0.0.0.0",
+		"--authrpc.jwtsecret", "/data/jwtsecret",
+		"--http",
+		"--http.addr", "0.0.0.0",
+		"--http.port", `{{Port "http" 8545}}`,
+		"--chain", "/data/l2-genesis.json",
+		"--datadir", "/data_op_reth",
+		"--disable-discovery",
+		"--color", "never",
+		"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+		"--port", `{{Port "rpc" 30303}}`,
+	).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_flashblocks_rpc")
@@ -159,13 +159,13 @@ func (f *FlashblocksRPC) Name() string {
 }
 
 type BProxy struct {
-	TargetAuthrpc string
-	Peers []string
-	Flashblocks bool
+	TargetAuthrpc         string
+	Peers                 []string
+	Flashblocks           bool
 	FlashblocksBuilderURL string
 }
 
-func (f* BProxy) Run(service *Service, ctx *ExContext) {
+func (f *BProxy) Run(service *Service, ctx *ExContext) {
 	peers := []string{}
 	for _, peer := range f.Peers {
 		peers = append(peers, Connect(peer, "authrpc"))
@@ -813,6 +813,7 @@ func (n *nullService) Name() string {
 }
 
 type Contender struct {
+	Tps *uint64 // txs per second, defaults to 20
 }
 
 func (c *Contender) Name() string {
@@ -820,12 +821,17 @@ func (c *Contender) Name() string {
 }
 
 func (c *Contender) Run(service *Service, ctx *ExContext) {
+	tps := uint64(20)
+	if c.Tps != nil {
+		tps = *c.Tps
+	}
+
 	args := []string{
 		"spam",
 		"-l",                        // loop indefinitely
 		"--min-balance", "10 ether", // give each spammer 10 ether (sender must have 100 ether because default number of spammers is 10)
 		"-r", Connect("el", "http"), // connect to whatever EL node is available
-		"--tps", "20", // send 20 txs per second
+		"--tps", strconv.FormatUint(uint64(tps), 10), // send tps txs per second as string
 	}
 	service.WithImage("flashbots/contender").
 		WithTag("latest").

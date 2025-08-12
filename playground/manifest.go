@@ -70,6 +70,14 @@ func (l *LogLevel) Unmarshal(s string) error {
 	return nil
 }
 
+type ContenderContext struct {
+	// Run `contender spam` automatically once all playground services are running.
+	Enabled bool
+
+	// Determines txs/sec for contender spam.
+	Tps *uint64
+}
+
 // Execution context
 type ExContext struct {
 	LogLevel LogLevel
@@ -83,7 +91,7 @@ type ExContext struct {
 	// TODO: Extend for CL nodes too
 	Bootnode *BootnodeRef
 
-	ContenderEnabled bool
+	Contender *ContenderContext
 }
 
 type BootnodeRef struct {

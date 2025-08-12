@@ -31,6 +31,7 @@ var labels playground.MapStringFlag
 var disableLogs bool
 var platform string
 var contenderEnabled bool
+var contenderTps uint64
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -181,6 +182,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
 		recipeCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
 		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
+		recipeCmd.Flags().Uint64Var(&contenderTps, "contender.tps", 20, "txs/sec to send from contender")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -226,7 +228,14 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	svcManager := recipe.Apply(&playground.ExContext{LogLevel: logLevel, ContenderEnabled: contenderEnabled}, artifacts)
+	// if contender.tps is set, assume contender is enabled
+	svcManager := recipe.Apply(&playground.ExContext{
+		LogLevel: logLevel,
+		Contender: &playground.ContenderContext{
+			Enabled: contenderEnabled,
+			Tps:     &contenderTps,
+		},
+	}, artifacts)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}

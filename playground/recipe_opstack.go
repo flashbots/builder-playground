@@ -32,7 +32,7 @@ type OpRecipe struct {
 	flashblocksBuilderURL string
 
 	// Indicates that flashblocks-rpc should use base image
-	baseOverlay bool 
+	baseOverlay bool
 
 	// whether to enable websocket proxy
 	enableWebsocketProxy bool
@@ -108,13 +108,13 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	if o.flashblocks {
 		peers = append(peers, "flashblocks-rpc")
 	}
-	
+
 	// Only enable bproxy if flashblocks is enabled (since flashblocks-rpc is the only service that needs it)
 	if o.flashblocks {
 		svcManager.AddService("bproxy", &BProxy{
-			TargetAuthrpc: externalBuilderRef,
-			Peers: peers,
-			Flashblocks: o.flashblocks,
+			TargetAuthrpc:         externalBuilderRef,
+			Peers:                 peers,
+			Flashblocks:           o.flashblocks,
 			FlashblocksBuilderURL: flashblocksBuilderURLRef,
 		})
 	}
@@ -146,7 +146,6 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		})
 	}
 
-	
 	if o.flashblocks {
 		// Determine which service to use for flashblocks websocket connection
 		flashblocksWSService := "rollup-boost"
@@ -158,8 +157,8 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 		svcManager.AddService("flashblocks-rpc", &FlashblocksRPC{
 			FlashblocksWSService: flashblocksWSService,
-			BaseOverlay: o.baseOverlay,
-			UseWebsocketProxy: useWebsocketProxy,
+			BaseOverlay:          o.baseOverlay,
+			UseWebsocketProxy:    useWebsocketProxy,
 		})
 	}
 
@@ -176,8 +175,10 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
 
-	if ctx.ContenderEnabled {
-		svcManager.AddService("contender", &Contender{})
+	if ctx.Contender.Enabled {
+		svcManager.AddService("contender", &Contender{
+			Tps: ctx.Contender.Tps,
+		})
 	}
 
 	return svcManager
