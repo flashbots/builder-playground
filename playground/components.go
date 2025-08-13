@@ -101,8 +101,8 @@ func (o *OpRbuilder) Name() string {
 
 type FlashblocksRPC struct {
 	FlashblocksWSService string
-	BaseOverlay bool
-	UseWebsocketProxy bool  // Whether to add /ws path for websocket proxy
+	BaseOverlay          bool
+	UseWebsocketProxy    bool // Whether to add /ws path for websocket proxy
 }
 
 func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
@@ -130,19 +130,19 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 			)
 	}
 	service.WithArgs(
-			"--authrpc.port", `{{Port "authrpc" 8551}}`,
-			"--authrpc.addr", "0.0.0.0",
-			"--authrpc.jwtsecret", "/data/jwtsecret",
-			"--http",
-			"--http.addr", "0.0.0.0",
-			"--http.port", `{{Port "http" 8545}}`,
-			"--chain", "/data/l2-genesis.json",
-			"--datadir", "/data_op_reth",
-			"--disable-discovery",
-			"--color", "never",
-			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
-			"--port", `{{Port "rpc" 30303}}`,
-		).
+		"--authrpc.port", `{{Port "authrpc" 8551}}`,
+		"--authrpc.addr", "0.0.0.0",
+		"--authrpc.jwtsecret", "/data/jwtsecret",
+		"--http",
+		"--http.addr", "0.0.0.0",
+		"--http.port", `{{Port "http" 8545}}`,
+		"--chain", "/data/l2-genesis.json",
+		"--datadir", "/data_op_reth",
+		"--disable-discovery",
+		"--color", "never",
+		"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+		"--port", `{{Port "rpc" 30303}}`,
+	).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_flashblocks_rpc")
@@ -159,13 +159,13 @@ func (f *FlashblocksRPC) Name() string {
 }
 
 type BProxy struct {
-	TargetAuthrpc string
-	Peers []string
-	Flashblocks bool
+	TargetAuthrpc         string
+	Peers                 []string
+	Flashblocks           bool
 	FlashblocksBuilderURL string
 }
 
-func (f* BProxy) Run(service *Service, ctx *ExContext) {
+func (f *BProxy) Run(service *Service, ctx *ExContext) {
 	peers := []string{}
 	for _, peer := range f.Peers {
 		peers = append(peers, Connect(peer, "authrpc"))
@@ -813,20 +813,110 @@ func (n *nullService) Name() string {
 }
 
 type Contender struct {
+	ExtraArgs []string
 }
 
 func (c *Contender) Name() string {
 	return "contender"
 }
 
-func (c *Contender) Run(service *Service, ctx *ExContext) {
-	args := []string{
-		"spam",
-		"-l",                        // loop indefinitely
-		"--min-balance", "10 ether", // give each spammer 10 ether (sender must have 100 ether because default number of spammers is 10)
-		"-r", Connect("el", "http"), // connect to whatever EL node is available
-		"--tps", "20", // send 20 txs per second
+// parse "key=value" OR "key value"; remainder after first space is the value (may contain spaces)
+func parseKV(s string) (name, val string, hasVal, usedEq bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", "", false, false
 	}
+	eq := strings.IndexByte(s, '=')
+	ws := indexWS(s)
+
+	// prefer '=' if it appears before any whitespace
+	if eq > 0 && (ws == -1 || eq < ws) {
+		return strings.TrimSpace(s[:eq]), strings.TrimSpace(s[eq+1:]), true, true
+	}
+	if ws == -1 {
+		return s, "", false, false
+	}
+	return strings.TrimSpace(s[:ws]), strings.TrimSpace(s[ws+1:]), true, false
+}
+
+func indexWS(s string) int {
+	for i, r := range s {
+		if r == ' ' || r == '\t' {
+			return i
+		}
+	}
+	return -1
+}
+
+func (c *Contender) Run(service *Service, ctx *ExContext) {
+	type opt struct {
+		name   string
+		val    string
+		hasVal bool
+	}
+	defaults := []opt{
+		{name: "-l"},
+		{name: "--min-balance", val: "10 ether", hasVal: true},
+		{name: "-r", val: Connect("el", "http"), hasVal: true},
+		{name: "--tps", val: "20", hasVal: true},
+	}
+
+	// Parse extras and track seen flags
+	type extra struct {
+		name   string
+		val    string
+		hasVal bool
+		usedEq bool
+	}
+	var extras []extra
+	seen := map[string]bool{}
+
+	for _, s := range c.ExtraArgs {
+		name, val, hasVal, usedEq := parseKV(s)
+		if name == "" {
+			continue
+		}
+		extras = append(extras, extra{name, val, hasVal, usedEq})
+		seen[name] = true
+	}
+
+	// Minimal conflict example: --loops overrides default "-l"
+	conflict := func(flag string) bool {
+		if seen[flag] {
+			return true
+		}
+		if flag == "-l" && seen["--loops"] {
+			return true
+		}
+		return false
+	}
+
+	args := []string{"spam"}
+
+	// Add defaults unless overridden
+	for _, d := range defaults {
+		if conflict(d.name) {
+			continue
+		}
+		args = append(args, d.name)
+		if d.hasVal {
+			args = append(args, d.val)
+		}
+	}
+
+	// Append extras verbatim, preserving "=" vs space
+	for _, e := range extras {
+		if !e.hasVal {
+			args = append(args, e.name)
+			continue
+		}
+		if e.usedEq {
+			args = append(args, e.name+"="+e.val)
+		} else {
+			args = append(args, e.name, e.val)
+		}
+	}
+
 	service.WithImage("flashbots/contender").
 		WithTag("latest").
 		WithArgs(args...).
