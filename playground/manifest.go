@@ -74,8 +74,8 @@ type ContenderContext struct {
 	// Run `contender spam` automatically once all playground services are running.
 	Enabled bool
 
-	// Determines txs/sec for contender spam.
-	Tps *uint64
+	// Provide additional args to contender's CLI
+	ExtraArgs []string
 }
 
 // Execution context

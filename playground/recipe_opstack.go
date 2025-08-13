@@ -177,7 +177,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	if ctx.Contender.Enabled {
 		svcManager.AddService("contender", &Contender{
-			Tps: ctx.Contender.Tps,
+			ExtraArgs: ctx.Contender.ExtraArgs,
 		})
 	}
 
