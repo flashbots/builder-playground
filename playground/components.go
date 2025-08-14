@@ -940,4 +940,7 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 		WithArgs(args...).
 		DependsOnHealthy("beacon")
 
+	if c.TargetChain == "op-geth" {
+		service.DependsOnRunning("op-node")
+	}
 }
