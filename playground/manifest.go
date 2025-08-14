@@ -74,8 +74,11 @@ type ContenderContext struct {
 	// Run `contender spam` automatically once all playground services are running.
 	Enabled bool
 
-	// Provide additional args to contender's CLI
+	// Provide additional args to contender's CLI.
 	ExtraArgs []string
+
+	// Override the default target chain for contender to spam.
+	TargetChain string
 }
 
 // Execution context
@@ -602,4 +605,13 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 		dst: outputFolder,
 	}
 	return &manifestData, nil
+}
+
+func (svcManager *Manifest) RunContenderIfEnabled() {
+	if svcManager.ctx.Contender.Enabled {
+		svcManager.AddService("contender", &Contender{
+			ExtraArgs:   svcManager.ctx.Contender.ExtraArgs,
+			TargetChain: svcManager.ctx.Contender.TargetChain,
+		})
+	}
 }

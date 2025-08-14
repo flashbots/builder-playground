@@ -107,11 +107,7 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		})
 	}
 
-	if ctx.Contender.Enabled {
-		svcManager.AddService("contender", &Contender{
-			ExtraArgs: ctx.Contender.ExtraArgs,
-		})
-	}
+	svcManager.RunContenderIfEnabled()
 
 	return svcManager
 }

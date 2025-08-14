@@ -813,7 +813,8 @@ func (n *nullService) Name() string {
 }
 
 type Contender struct {
-	ExtraArgs []string
+	ExtraArgs   []string
+	TargetChain string // defaults to "el", may be any chain name in a recipe's spec
 }
 
 func (c *Contender) Name() string {
@@ -854,10 +855,16 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 		val    string
 		hasVal bool
 	}
+
+	targetChain := "el"
+	if c.TargetChain != "" {
+		targetChain = c.TargetChain
+	}
+
 	defaults := []opt{
 		{name: "-l"},
 		{name: "--min-balance", val: "10 ether", hasVal: true},
-		{name: "-r", val: Connect("el", "http"), hasVal: true},
+		{name: "-r", val: Connect(targetChain, "http"), hasVal: true},
 		{name: "--tps", val: "20", hasVal: true},
 	}
 
@@ -886,6 +893,9 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 			return true
 		}
 		if flag == "-l" && seen["--loops"] {
+			return true
+		}
+		if flag == "-r" && seen["--rpc-url"] {
 			return true
 		}
 		return false
