@@ -817,6 +817,14 @@ type Contender struct {
 	TargetChain string // defaults to "el", may be any chain name in a recipe's spec
 }
 
+// Converts a `ContenderContext` into a `Contender` service. `Enabled` is ignored.
+func (cc *ContenderContext) Contender() *Contender {
+	return &Contender{
+		ExtraArgs:   cc.ExtraArgs,
+		TargetChain: cc.TargetChain,
+	}
+}
+
 func (c *Contender) Name() string {
 	return "contender"
 }
