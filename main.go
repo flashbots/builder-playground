@@ -32,6 +32,7 @@ var disableLogs bool
 var platform string
 var contenderEnabled bool
 var contenderArgs []string
+var contenderTarget string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -183,6 +184,7 @@ func main() {
 		recipeCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
 		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
+		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -232,8 +234,9 @@ func runIt(recipe playground.Recipe) error {
 	svcManager := recipe.Apply(&playground.ExContext{
 		LogLevel: logLevel,
 		Contender: &playground.ContenderContext{
-			Enabled:   contenderEnabled,
-			ExtraArgs: contenderArgs,
+			Enabled:     contenderEnabled,
+			ExtraArgs:   contenderArgs,
+			TargetChain: contenderTarget,
 		},
 	}, artifacts)
 	if err := svcManager.Validate(); err != nil {
