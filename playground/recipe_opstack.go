@@ -180,6 +180,12 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		svcManager.AddService("contender", &Contender{})
 	}
 
+	// Add blockchain explorer for L2
+	svcManager.AddService("explorer", &BlockExplorer{
+		ChainNode: "op-geth",
+		Port:      8547,  // op-geth HTTP RPC is mapped to this port on the host
+	})
+
 	return svcManager
 }
 

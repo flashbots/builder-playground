@@ -111,6 +111,12 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		svcManager.AddService("contender", &Contender{})
 	}
 
+	// Add blockchain explorer
+	svcManager.AddService("explorer", &BlockExplorer{
+		ChainNode: "el",
+		Port:      8545,  // el HTTP RPC is mapped to standard port on the host
+	})
+
 	return svcManager
 }
 
