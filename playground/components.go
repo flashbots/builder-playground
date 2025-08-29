@@ -906,7 +906,8 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 		if flag == "-r" && seen["--rpc-url"] {
 			return true
 		}
-		if (flag == "--tpb" || flag == "--tps") && (seen["--tpb"] || seen["--tps"]) {
+		if (flag == "--tpb" || flag == "--txs-per-second" || flag == "--tps" || flag == "--txs-per-block") &&
+			(seen["--tpb"] || seen["--tps"] || seen["--txs-per-second"] || seen["--txs-per-block"]) {
 			return true
 		}
 		return false
