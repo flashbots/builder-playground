@@ -906,6 +906,9 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 		if flag == "-r" && seen["--rpc-url"] {
 			return true
 		}
+		if (flag == "--tpb" || flag == "--tps") && (seen["--tpb"] || seen["--tps"]) {
+			return true
+		}
 		return false
 	}
 
