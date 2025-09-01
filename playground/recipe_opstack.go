@@ -67,6 +67,9 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 }
 
 func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+	// Allocate the bootnodes
+	ctx.Bootnodes = make(map[BootnodeProtocol]*BootnodeRef)
+
 	svcManager := NewManifest(ctx, artifacts.Out)
 	svcManager.AddService("el", &RethEL{})
 	svcManager.AddService("beacon", &LighthouseBeaconNode{
@@ -83,9 +86,14 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	opGeth := &OpGeth{}
 	svcManager.AddService("op-geth", opGeth)
 
-	ctx.Bootnode = &BootnodeRef{
-		Service: "op-geth",
-		ID:      opGeth.Enode.NodeID(),
+	elEnode := ctx.Output.GetEnodeAddr()
+
+	elBootnode := &Bootnode{Protocol: BootnodeProtocolDiscV4, Enode: elEnode, Port: 30303}
+	svcManager.AddService("el-bootnode", elBootnode)
+
+	ctx.Bootnodes[BootnodeProtocolDiscV4] = &BootnodeRef{
+		Service: "op-geth-el-bootnode",
+		ID:      elBootnode.Enode.NodeID(),
 	}
 
 	if o.externalBuilder == "op-reth" {

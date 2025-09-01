@@ -90,11 +90,18 @@ type ExContext struct {
 	// access to the output.
 	Output *output
 
-	// Bootnode reference for EL nodes.
-	// TODO: Extend for CL nodes too
-	Bootnode *BootnodeRef
+	// Bootnodes is a map from protocol to manifest entry.
+	Bootnodes map[BootnodeProtocol]*BootnodeRef
 
 	Contender *ContenderContext
+}
+
+func (c *ExContext) GetBootnode(proto BootnodeProtocol) *BootnodeRef {
+	if c.Bootnodes == nil {
+		return nil
+	}
+
+	return c.Bootnodes[proto]
 }
 
 type BootnodeRef struct {
@@ -102,10 +109,18 @@ type BootnodeRef struct {
 	ID      string
 }
 
-func (b *BootnodeRef) Connect() string {
-	return ConnectEnode(b.Service, b.ID)
+func (b *BootnodeRef) Connect(proto BootnodeProtocol) string {
+	switch proto {
+	case BootnodeProtocolDiscV4:
+		return ConnectEnode(b.Service, b.ID)
+	case BootnodeProtocolDiscV5:
+		return ConnectENR(b.Service, b.ID)
+	default:
+		panic(fmt.Sprintf("unexpected playground.BootnodeProtocol: %#v", proto))
+	}
 }
 
+// ServiceGen represents a canonical Component, which is utilized in the creation of components.
 type ServiceGen interface {
 	Run(service *Service, ctx *ExContext)
 	Name() string

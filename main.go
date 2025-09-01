@@ -245,6 +245,8 @@ func runIt(recipe playground.Recipe) error {
 
 	// generate the dot graph
 	dotGraph := svcManager.GenerateDotGraph()
+
+	// TODO: Maybe replace with saveDotGraph?
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
 	}

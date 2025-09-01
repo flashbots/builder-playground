@@ -411,6 +411,11 @@ func ConnectEnode(service, id string) string {
 	return ConnectRaw(service, "rpc", "enode", id)
 }
 
+func ConnectENR(service, enr string) string {
+	// We will just hand the entire enr string over as the "user" in this
+	return ConnectRaw(service, "rpc", "enr", enr)
+}
+
 func Connect(service, port string) string {
 	return ConnectRaw(service, port, "http", "")
 }

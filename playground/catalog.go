@@ -27,6 +27,8 @@ func init() {
 	register(&Contender{})
 	register(&BProxy{})
 	register(&WebsocketProxy{})
+	register(&Bootnode{Protocol: BootnodeProtocolDiscV4})
+	register(&Bootnode{Protocol: BootnodeProtocolDiscV5})
 }
 
 func FindComponent(name string) ServiceGen {

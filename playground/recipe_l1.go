@@ -53,7 +53,24 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 }
 
 func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+	ctx.Bootnodes = make(map[BootnodeProtocol]*BootnodeRef)
 	svcManager := NewManifest(ctx, artifacts.Out)
+
+	elEnode := ctx.Output.GetEnodeAddr()
+	elBootnodeComponent := &Bootnode{Protocol: BootnodeProtocolDiscV4, Enode: elEnode, Port: 30303}
+	svcManager.AddService("el-bootnode", elBootnodeComponent)
+	ctx.Bootnodes[BootnodeProtocolDiscV4] = &BootnodeRef{
+		Service: "el-bootnode",
+		ID:      elEnode.NodeID(),
+	}
+
+	clEnode := ctx.Output.GetEnodeAddr()
+	clBootnodeComponent := &Bootnode{Protocol: BootnodeProtocolDiscV5, Enode: clEnode, Port: 9000}
+	svcManager.AddService("cl-bootnode", clBootnodeComponent)
+	ctx.Bootnodes[BootnodeProtocolDiscV5] = &BootnodeRef{
+		Service: "cl-bootnode",
+		ID:      clEnode.NodeID(),
+	}
 
 	svcManager.AddService("el", &RethEL{
 		UseRethForValidation: l.useRethForValidation,

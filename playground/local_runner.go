@@ -563,6 +563,11 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 }
 
 func printAddr(protocol, serviceName string, port int, user string) string {
+	// Special handler for the enr protocol
+	if protocol == "enr" {
+		return user
+	}
+
 	var protocolPrefix string
 	if protocol != "" {
 		protocolPrefix = protocol + "://"
@@ -613,7 +618,10 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 	}
 
 	// Validate that the image exists
-	imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
+	imageName := s.Image
+	if s.Tag != "" {
+		imageName = fmt.Sprintf("%s:%s", s.Image, s.Tag)
+	}
 	if err := d.validateImageExists(imageName); err != nil {
 		return nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
 	}

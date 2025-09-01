@@ -4,14 +4,24 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-boost-utils/bls"
 	"github.com/flashbots/go-boost-utils/utils"
+)
+
+type BootnodeProtocol int
+
+const (
+	BootnodeProtocolDiscV4 BootnodeProtocol = iota
+	BootnodeProtocolDiscV5
 )
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
@@ -82,8 +92,8 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
 
-	if ctx.Bootnode != nil {
-		service.WithArgs("--trusted-peers", ctx.Bootnode.Connect())
+	if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV4); bootnode != nil {
+		service.WithArgs("--trusted-peers", bootnode.Connect(BootnodeProtocolDiscV4))
 	}
 
 	if o.Flashblocks {
@@ -147,9 +157,9 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_flashblocks_rpc")
 
-	if ctx.Bootnode != nil {
+	if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV4); bootnode != nil {
 		service.WithArgs(
-			"--trusted-peers", ctx.Bootnode.Connect(),
+			"--trusted-peers", bootnode.Connect(BootnodeProtocolDiscV4),
 		)
 	}
 }
@@ -329,8 +339,8 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 	o.Enode = ctx.Output.GetEnodeAddr()
 
 	var trustedPeers string
-	if ctx.Bootnode != nil {
-		trustedPeers = fmt.Sprintf("--bootnodes %s ", ctx.Bootnode.Connect())
+	if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV4); bootnode != nil {
+		trustedPeers = fmt.Sprintf("--bootnodes %s ", bootnode.Connect(BootnodeProtocolDiscV4))
 	}
 
 	service.
@@ -443,7 +453,6 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 			"--ipcpath", "/data_reth/reth.ipc",
 			"--addr", "127.0.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
-			// "--disable-discovery",
 			// http config
 			"--http",
 			"--http.addr", "0.0.0.0",
@@ -470,6 +479,11 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
 		svc.UseHostExecution()
+	}
+
+	if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV4); bootnode != nil {
+		fmt.Println("bootnode! v4")
+		svc.WithArgs("--bootnodes", bootnode.Connect(BootnodeProtocolDiscV4))
 	}
 }
 
@@ -512,7 +526,6 @@ func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
-			"--target-peers", "0",
 			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
 			"--execution-jwt", "/data/jwtsecret",
 			"--always-prepare-payload",
@@ -537,6 +550,13 @@ func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 			"--builder-fallback-disable-checks",
 		)
 	}
+
+	// if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV5); bootnode != nil {
+	// 	fmt.Println("bootnode! v5")
+	// 	svc.WithArgs("--boot-nodes", bootnode.Connect(BootnodeProtocolDiscV5))
+	// } else {
+	// 	svc.WithArgs("--target-peers", "0")
+	// }
 }
 
 func (l *LighthouseBeaconNode) Name() string {
@@ -943,4 +963,102 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 	if c.TargetChain == "op-geth" {
 		service.DependsOnRunning("op-node")
 	}
+}
+
+type Bootnode struct {
+	// Protocol specifies the protocol that will be utilized for this bootnode,
+	// forming an implicit association with a node type.
+	Protocol BootnodeProtocol
+
+	// Enode is an enode address for a bootnode (generated in the execution context).
+	Enode *EnodeAddr
+
+	// Port is the port the bootnode will be running on.
+	Port uint16
+}
+
+func (b *Bootnode) GenerateENR(host string) (string, error) {
+	if b.Protocol == BootnodeProtocolDiscV4 {
+		return "", fmt.Errorf("ENR is only supported for discv5-compatible protocols")
+	}
+
+	// Resolve hostname to IP address, we assume this'll always need to be resolved since docker
+	// will be using hostnames by default in the network abstraction.
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve hostname %s: %v", host, err)
+	}
+	if len(ips) == 0 {
+		return "", fmt.Errorf("no IP addresses found for hostname: %s", host)
+	}
+
+	var selectedIP net.IP
+	for _, resolvedIP := range ips {
+		if resolvedIP.To4() != nil {
+			selectedIP = resolvedIP
+			break
+		}
+	}
+
+	if selectedIP == nil {
+		return "", fmt.Errorf("failed to resolve IP address")
+	}
+
+	// Create a new database for the node record
+	db, _ := enode.OpenDB("")
+
+	localNode := enode.NewLocalNode(db, b.Enode.PrivKey)
+
+	if selectedIP.To4() != nil {
+		localNode.Set(enr.IP(selectedIP.To4()))
+	} else {
+		localNode.Set(enr.IPv6(selectedIP))
+	}
+
+	if b.Port > 0 {
+		localNode.Set(enr.TCP(b.Port))
+	}
+
+	if b.Port > 0 {
+		localNode.Set(enr.UDP(b.Port))
+	}
+
+	node := localNode.Node()
+	return node.String(), nil
+}
+
+func (b *Bootnode) Name() string {
+	// return "bootnode"
+	var protocolNamePrefix string
+	switch b.Protocol {
+	case BootnodeProtocolDiscV5:
+		protocolNamePrefix = "cl"
+	case BootnodeProtocolDiscV4:
+		protocolNamePrefix = "el"
+	default:
+		panic(fmt.Sprintf("unexpected playground.BootnodeProtocol: %#v", b.Protocol))
+	}
+
+	// Disambiguate between instances of the bootnode.
+	return fmt.Sprintf("%s-bootnode", protocolNamePrefix)
+}
+
+func (b *Bootnode) Run(service *Service, ctx *ExContext) {
+	if b.Enode == nil {
+		panic("BUG: Bootnode component must be created with an EnodeAddr.")
+	}
+
+	service.
+		WithImage("alpine/socat").
+		WithEntrypoint("sh").
+		WithArgs(
+			"-c",
+			fmt.Sprintf(
+				"socat -v TCP-LISTEN:%d,fork STDOUT & socat -v UDP-LISTEN:%d,fork STDOUT & wait",
+				b.Port,
+				b.Port,
+			),
+		).
+		WithPort("rpc", int(b.Port), "tcp").
+		WithPort("rpc", int(b.Port), "udp")
 }
