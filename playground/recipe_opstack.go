@@ -92,7 +92,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	svcManager.AddService("el-bootnode", elBootnode)
 
 	ctx.Bootnodes[BootnodeProtocolDiscV4] = &BootnodeRef{
-		Service: "op-geth-el-bootnode",
+		Service: "el-bootnode",
 		ID:      elBootnode.Enode.NodeID(),
 	}
 
