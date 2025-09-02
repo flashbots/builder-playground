@@ -68,6 +68,10 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 - `--log-level` (string): Log level to use (debug, info, warn, error, fatal). Defaults to `info`.
 - `--labels` (key=val): Custom labels to apply to your deployment.
 - `--disable-logs` (bool): Disable the logs for the services. Defaults to `false`.
+- `--contender` (bool): Enable [contender](https://github.com/flashbots/contender) spammer. Required to use other contender flags.
+  - `--contender.arg` (string): Pass custom args to the contender CLI. 
+  Example: `--contender.arg "--tpb 20"`
+  - `--contender.target` (string): Change the default target node to spam. On the `l1` recipe, the default is "el", and on `opstack` it's "op-geth".
 
 To stop the playground, press `Ctrl+C`.
 
