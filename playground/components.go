@@ -44,11 +44,6 @@ func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 			"--flashblocks-port", `{{Port "flashblocks" 1112}}`,
 		)
 	}
-	if r.FlashblocksBuilderURL != "" {
-		service.WithArgs(
-			"--flashblocks-builder-url", r.FlashblocksBuilderURL,
-		)
-	}
 }
 
 func (r *RollupBoost) Name() string {
