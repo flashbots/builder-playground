@@ -2,6 +2,7 @@ package playground
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 )
@@ -67,4 +68,24 @@ func (n *MapStringFlag) Set(s string) error {
 	}
 	(*n)[k] = v
 	return nil
+}
+
+func GetGatewayFromCIDR(cidr string) (string, error) {
+	ip, _, err := net.ParseCIDR(cidr)
+
+	if err != nil {
+		return "", err
+	}
+
+	// The ip address is whatever the base was. We make the assumption it'll
+	// be a .0/whatever in this case, (i.e. the gateway will always be .1).
+	gateway := ip.To4()
+	if gateway == nil {
+		return "", fmt.Errorf("failed to get an ipv4 base address from the cidr")
+	}
+
+	// Set the last octet to the default gateway (.1)
+	gateway[3] = 1
+
+	return gateway.String(), nil
 }

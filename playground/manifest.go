@@ -307,6 +307,9 @@ type Service struct {
 	Tag        string `json:"tag,omitempty"`
 	Image      string `json:"image,omitempty"`
 	Entrypoint string `json:"entrypoint,omitempty"`
+
+	// The IP Address of this service. If empty, we let IPAM sort it out.
+	IP string `json:"ip,omitempty"`
 }
 
 type instance struct {

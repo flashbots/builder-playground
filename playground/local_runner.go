@@ -28,6 +28,9 @@ import (
 
 const defaultNetworkName = "ethplayground"
 
+// The default here is docker's default CIDR range. Subsequent networks use .19, .20, etc. If the bridge network is in use, the .17 subnet is used.
+const defaultNetworkCidr = "172.18.0.0/16"
+
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
 // But, some services (if they are configured to do so) can be run on the host machine instead.
@@ -75,6 +78,12 @@ type LocalRunner struct {
 	// networkName is the name of the network to use for the services
 	networkName string
 
+	// networkCIDR is the cidr range to use for the network
+	networkCidr string
+
+	// networkGateway is the gateway for the network within the CIDr range.
+	networkGateway string
+
 	// labels is the list of labels to apply to each resource being created
 	labels map[string]string
 
@@ -119,6 +128,7 @@ type RunnerConfig struct {
 	Interactive          bool
 	BindHostPortsLocally bool
 	NetworkName          string
+	NetworkCidr          string
 	Labels               map[string]string
 	LogInternally        bool
 	Platform             string
@@ -216,6 +226,19 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	if cfg.NetworkName == "" {
 		cfg.NetworkName = defaultNetworkName
 	}
+
+	var networkGateway string
+	if cfg.NetworkCidr == "" {
+		cfg.NetworkCidr = defaultNetworkCidr
+	}
+
+	// Make sure the CDR is actually valid, get the gateway
+	networkGateway, err = GetGatewayFromCIDR(cfg.NetworkCidr)
+
+	if err != nil {
+		return nil, err
+	}
+
 	d := &LocalRunner{
 		out:                  cfg.Out,
 		manifest:             cfg.Manifest,
@@ -229,6 +252,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		bindHostPortsLocally: cfg.BindHostPortsLocally,
 		sessionID:            uuid.New().String(),
 		networkName:          cfg.NetworkName,
+		networkCidr:          cfg.NetworkCidr,
+		networkGateway:       networkGateway,
 		instances:            instances,
 		labels:               cfg.Labels,
 		logInternally:        cfg.LogInternally,
@@ -765,7 +790,16 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 		// we can do DNS discovery between them.
 		"networks": map[string]interface{}{
 			d.networkName: map[string]interface{}{
-				"name": d.networkName,
+				"name":   d.networkName,
+				"driver": "bridge",
+				"ipam": map[string]interface{}{
+					"config": []map[string]interface{}{
+						{
+							"subnet":  d.networkCidr,
+							"gateway": d.networkGateway,
+						},
+					},
+				},
 			},
 		},
 	}

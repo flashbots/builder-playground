@@ -27,6 +27,7 @@ var logLevelFlag string
 var bindExternal bool
 var withPrometheus bool
 var networkName string
+var networkCidr string
 var labels playground.MapStringFlag
 var disableLogs bool
 var platform string
@@ -179,6 +180,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
 		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
 		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
+		recipeCmd.Flags().StringVar(&networkCidr, "networkCidr", "", "network cidr range")
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
 		recipeCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
@@ -280,6 +282,7 @@ func runIt(recipe playground.Recipe) error {
 		Interactive:          interactive,
 		BindHostPortsLocally: !bindExternal,
 		NetworkName:          networkName,
+		NetworkCidr:          networkCidr,
 		Labels:               labels,
 		LogInternally:        !disableLogs,
 		Platform:             platform,
