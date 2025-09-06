@@ -2,7 +2,6 @@ package playground
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -13,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/ethereum/go-ethereum/rlp"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-boost-utils/bls"
 	"github.com/flashbots/go-boost-utils/utils"
@@ -484,7 +482,6 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 	}
 
 	if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV4); bootnode != nil {
-		fmt.Println("bootnode! v4")
 		svc.WithArgs("--bootnodes", bootnode.Connect(BootnodeProtocolDiscV4))
 	}
 }
@@ -554,7 +551,6 @@ func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 	}
 
 	if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV5); bootnode != nil {
-		fmt.Println("bootnode! v5")
 		svc.WithArgs("--boot-nodes", bootnode.Connect(BootnodeProtocolDiscV5))
 	} else {
 		svc.WithArgs("--target-peers", "0")
@@ -986,34 +982,34 @@ type Bootnode struct {
 func (b *Bootnode) GenerateENR() (string, error) {
 	var r enr.Record
 
-	ip := net.ParseIP(b.IP).To4()
-
+	ip := net.ParseIP(b.IP)
 	if ip == nil {
-		return "", fmt.Errorf("ip is not a valid IPv4 Address")
+		return "", fmt.Errorf("ip is not a valid IP Address")
 	}
 
-	// Set IP address (IPv4 or IPv6)
+	// Set IP address (IPv4)
 	if ipv4 := ip.To4(); ipv4 != nil {
-		fmt.Println(ipv4)
-		ip4 := enr.IPv4(ipv4)
-		r.Set(ip4)
+		r.Set(enr.IPv4(ipv4))
+	} else {
+		return "", fmt.Errorf("only IPv4 addresses are supported")
 	}
 
+	// Set ports
 	r.Set(enr.UDP(b.Port))
 	r.Set(enr.TCP(b.Port))
-	r.Set(enr.ID("v4"))
 
+	// Sign the record - this also adds the public key
 	if err := enode.SignV4(&r, b.Enode.PrivKey); err != nil {
 		return "", err
 	}
 
-	encoded, err := rlp.EncodeToBytes(r)
+	// Create a node from the record to get the ENR string
+	node, err := enode.New(enode.ValidSchemes, &r)
 	if err != nil {
 		return "", err
 	}
 
-	b64 := base64.StdEncoding.EncodeToString(encoded)
-	return "enr:" + b64, nil
+	return node.String(), nil
 }
 
 func (b *Bootnode) Name() string {
