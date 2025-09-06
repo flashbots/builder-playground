@@ -698,7 +698,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		"command": args,
 		// Add volume mount for the output directory
 		"volumes": volumesInLine,
-		"labels":   labels,
+		"labels":  labels,
 	}
 
 	if s.IP != "" {

@@ -120,10 +120,15 @@ func (b *BootnodeRef) Connect(proto BootnodeProtocol) string {
 	}
 }
 
-// ServiceGen represents a canonical Component, which is utilized in the creation of components.
+// ServiceGen represents a canonical Component.
 type ServiceGen interface {
 	Run(service *Service, ctx *ExContext)
 	Name() string
+}
+
+// ServiceWithIP is an optional interface that services can implement to provide a static IP
+type ServiceWithIP interface {
+	GetIP() string
 }
 
 type ServiceReady interface {
@@ -136,7 +141,20 @@ type ReleaseService interface {
 }
 
 func (s *Manifest) AddService(name string, srv ServiceGen) {
-	service := s.NewService(name)
+	var service *Service
+	
+	// Check if the service has a static IP
+	if srvWithIP, ok := srv.(ServiceWithIP); ok {
+		if ip := srvWithIP.GetIP(); ip != "" {
+			service = s.NewServiceWithIP(name, ip)
+		}
+	}
+	
+	// Fall back to regular service if no IP
+	if service == nil {
+		service = s.NewService(name)
+	}
+	
 	service.ComponentName = srv.Name()
 	srv.Run(service, s.ctx)
 
@@ -376,6 +394,10 @@ func (s *Service) WithLabel(key, value string) *Service {
 
 func (s *Manifest) NewService(name string) *Service {
 	return &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+}
+
+func (s *Manifest) NewServiceWithIP(name, ip string) *Service {
+	return &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}, IP: ip}
 }
 
 func (s *Service) WithImage(image string) *Service {

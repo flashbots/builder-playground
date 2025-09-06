@@ -1032,6 +1032,11 @@ func (b *Bootnode) Name() string {
 	return fmt.Sprintf("%s-bootnode", protocolNamePrefix)
 }
 
+// GetIP returns the static IP address for the bootnode
+func (b *Bootnode) GetIP() string {
+	return b.IP
+}
+
 func (b *Bootnode) Run(service *Service, ctx *ExContext) {
 	if b.Enode == nil {
 		panic("BUG: Bootnode component must be created with an EnodeAddr.")
