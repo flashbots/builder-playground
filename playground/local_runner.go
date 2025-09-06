@@ -29,7 +29,7 @@ import (
 const defaultNetworkName = "ethplayground"
 
 // The default here is docker's default CIDR range. Subsequent networks use .19, .20, etc. If the bridge network is in use, the .17 subnet is used.
-const defaultNetworkCidr = "172.18.0.0/16"
+const DefaultNetworkCidr = "172.19.0.0/16"
 
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
@@ -229,7 +229,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 
 	var networkGateway string
 	if cfg.NetworkCidr == "" {
-		cfg.NetworkCidr = defaultNetworkCidr
+		cfg.NetworkCidr = DefaultNetworkCidr
 	}
 
 	// Make sure the CDR is actually valid, get the gateway

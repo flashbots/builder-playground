@@ -60,7 +60,7 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	// TODO: Make this more configurable.
 	elBootnodeIP, err := GetIPFromCIDR(artifacts.Out.networkCidr, 10)
 	if err != nil {
-		panic("BUG: We got an invalid CIDR that somehow slipped through")
+		panic(fmt.Sprintf("BUG: We got an invalid CIDR that somehow slipped through for el; error = %v", err))
 	}
 
 	elEnode := ctx.Output.GetEnodeAddr()
@@ -73,7 +73,7 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	clBootnodeIP, err := GetIPFromCIDR(artifacts.Out.networkCidr, 11)
 	if err != nil {
-		panic("BUG: We got an invalid CIDR that somehow slipped through")
+		panic(fmt.Sprintf("BUG: We got an invalid CIDR that somehow slipped through for cl; error = %v", err))
 	}
 
 	clEnode := ctx.Output.GetEnodeAddr()

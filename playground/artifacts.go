@@ -13,6 +13,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -74,7 +75,7 @@ func NewArtifactsBuilder() *ArtifactsBuilder {
 		applyLatestL1Fork: false,
 		genesisDelay:      MinimumGenesisDelay,
 		OpblockTime:       defaultOpBlockTimeSeconds,
-		Cidr:              defaultNetworkCidr,
+		Cidr:              DefaultNetworkCidr,
 	}
 }
 
@@ -453,7 +454,23 @@ func (o *output) Exists(path string) bool {
 }
 
 func (o *output) Remove(path string) error {
-	return os.RemoveAll(filepath.Join(o.dst, path))
+	targetPath := filepath.Join(o.dst, path)
+	err := os.RemoveAll(targetPath)
+	if err != nil {
+		// If regular removal fails (likely due to permission issues from Docker),
+		// try with sudo. This is common when Docker creates files as root.
+		if os.IsPermission(err) {
+			// Use sudo to remove the files
+			cmd := exec.Command("sudo", "rm", "-rf", targetPath)
+			if sudoErr := cmd.Run(); sudoErr != nil {
+				// If sudo also fails, return the original error
+				return fmt.Errorf("failed to remove %s: %v (sudo attempt also failed: %v)", targetPath, err, sudoErr)
+			}
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // CreateDir creates a new dir in the output folder and returns the

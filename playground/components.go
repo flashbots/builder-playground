@@ -1044,7 +1044,10 @@ func (b *Bootnode) Run(service *Service, ctx *ExContext) {
 		WithArgs(
 			"-c",
 			fmt.Sprintf(
-				"socat -v TCP-LISTEN:%d,fork STDOUT & socat -v UDP-LISTEN:%d,fork STDOUT & wait",
+				"trap 'kill -TERM $TCP_PID $UDP_PID 2>/dev/null; exit 0' TERM INT; "+
+					"socat -v TCP-LISTEN:%d,fork STDOUT & TCP_PID=$!; "+
+					"socat -v UDP-LISTEN:%d,fork STDOUT & UDP_PID=$!; "+
+					"wait",
 				b.Port,
 				b.Port,
 			),
