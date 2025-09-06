@@ -693,15 +693,22 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		volumesInLine = append(volumesInLine, fmt.Sprintf("%s:%s", k, v))
 	}
 
-	// add the ports to the labels as well
 	service := map[string]interface{}{
 		"image":   imageName,
 		"command": args,
 		// Add volume mount for the output directory
 		"volumes": volumesInLine,
-		// Add the ethereum network
-		"networks": []string{d.networkName},
 		"labels":   labels,
+	}
+
+	if s.IP != "" {
+		service["networks"] = map[string]interface{}{
+			d.networkName: map[string]interface{}{
+				"ipv4_address": s.IP,
+			},
+		}
+	} else {
+		service["networks"] = []string{d.networkName}
 	}
 
 	if d.platform != "" {

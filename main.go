@@ -227,6 +227,7 @@ func runIt(recipe playground.Recipe) error {
 	builder := recipe.Artifacts()
 	builder.OutputDir(outputFlag)
 	builder.GenesisDelay(genesisDelayFlag)
+	builder.NetworkCidr(networkCidr)
 	artifacts, err := builder.Build()
 	if err != nil {
 		return err

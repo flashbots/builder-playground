@@ -70,22 +70,25 @@ func (n *MapStringFlag) Set(s string) error {
 	return nil
 }
 
+// GetGatewayFromCIDR returns the gateway from the ip address is whatever the base was. We make the assumption it'll be a .0/whatever in this case, (i.e. the gateway will always be .1).
 func GetGatewayFromCIDR(cidr string) (string, error) {
+	return GetIPFromCIDR(cidr, 1)
+}
+
+// GetIPFromCIDR returns an IP from the CIDR range with the last octet filled out with any numeric value in the range 0-cidr max.
+func GetIPFromCIDR(cidr string, lastOctet int) (string, error) {
 	ip, _, err := net.ParseCIDR(cidr)
 
 	if err != nil {
 		return "", err
 	}
-
-	// The ip address is whatever the base was. We make the assumption it'll
-	// be a .0/whatever in this case, (i.e. the gateway will always be .1).
 	gateway := ip.To4()
 	if gateway == nil {
 		return "", fmt.Errorf("failed to get an ipv4 base address from the cidr")
 	}
 
-	// Set the last octet to the default gateway (.1)
-	gateway[3] = 1
+	// Set the last octet to the user-provided value
+	gateway[3] = byte(lastOctet)
 
 	return gateway.String(), nil
 }

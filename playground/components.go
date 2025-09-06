@@ -2,6 +2,7 @@ package playground
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/ethereum/go-ethereum/rlp"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-boost-utils/bls"
 	"github.com/flashbots/go-boost-utils/utils"
@@ -551,12 +553,12 @@ func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 		)
 	}
 
-	// if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV5); bootnode != nil {
-	// 	fmt.Println("bootnode! v5")
-	// 	svc.WithArgs("--boot-nodes", bootnode.Connect(BootnodeProtocolDiscV5))
-	// } else {
-	// 	svc.WithArgs("--target-peers", "0")
-	// }
+	if bootnode := ctx.GetBootnode(BootnodeProtocolDiscV5); bootnode != nil {
+		fmt.Println("bootnode! v5")
+		svc.WithArgs("--boot-nodes", bootnode.Connect(BootnodeProtocolDiscV5))
+	} else {
+		svc.WithArgs("--target-peers", "0")
+	}
 }
 
 func (l *LighthouseBeaconNode) Name() string {
@@ -975,56 +977,43 @@ type Bootnode struct {
 
 	// Port is the port the bootnode will be running on.
 	Port uint16
+
+	// IP is the static IP of the host
+	IP string
 }
 
-func (b *Bootnode) GenerateENR(host string) (string, error) {
-	if b.Protocol == BootnodeProtocolDiscV4 {
-		return "", fmt.Errorf("ENR is only supported for discv5-compatible protocols")
+// GenerateENR creates and signs an ENR record for this bootnode
+func (b *Bootnode) GenerateENR() (string, error) {
+	var r enr.Record
+
+	ip := net.ParseIP(b.IP).To4()
+
+	if ip == nil {
+		return "", fmt.Errorf("ip is not a valid IPv4 Address")
 	}
 
-	// Resolve hostname to IP address, we assume this'll always need to be resolved since docker
-	// will be using hostnames by default in the network abstraction.
-	ips, err := net.LookupIP(host)
+	// Set IP address (IPv4 or IPv6)
+	if ipv4 := ip.To4(); ipv4 != nil {
+		fmt.Println(ipv4)
+		ip4 := enr.IPv4(ipv4)
+		r.Set(ip4)
+	}
+
+	r.Set(enr.UDP(b.Port))
+	r.Set(enr.TCP(b.Port))
+	r.Set(enr.ID("v4"))
+
+	if err := enode.SignV4(&r, b.Enode.PrivKey); err != nil {
+		return "", err
+	}
+
+	encoded, err := rlp.EncodeToBytes(r)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve hostname %s: %v", host, err)
-	}
-	if len(ips) == 0 {
-		return "", fmt.Errorf("no IP addresses found for hostname: %s", host)
+		return "", err
 	}
 
-	var selectedIP net.IP
-	for _, resolvedIP := range ips {
-		if resolvedIP.To4() != nil {
-			selectedIP = resolvedIP
-			break
-		}
-	}
-
-	if selectedIP == nil {
-		return "", fmt.Errorf("failed to resolve IP address")
-	}
-
-	// Create a new database for the node record
-	db, _ := enode.OpenDB("")
-
-	localNode := enode.NewLocalNode(db, b.Enode.PrivKey)
-
-	if selectedIP.To4() != nil {
-		localNode.Set(enr.IP(selectedIP.To4()))
-	} else {
-		localNode.Set(enr.IPv6(selectedIP))
-	}
-
-	if b.Port > 0 {
-		localNode.Set(enr.TCP(b.Port))
-	}
-
-	if b.Port > 0 {
-		localNode.Set(enr.UDP(b.Port))
-	}
-
-	node := localNode.Node()
-	return node.String(), nil
+	b64 := base64.StdEncoding.EncodeToString(encoded)
+	return "enr:" + b64, nil
 }
 
 func (b *Bootnode) Name() string {

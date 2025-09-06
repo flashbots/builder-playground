@@ -65,6 +65,7 @@ type ArtifactsBuilder struct {
 	genesisDelay      uint64
 	applyLatestL2Fork *uint64
 	OpblockTime       uint64
+	Cidr              string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -73,6 +74,7 @@ func NewArtifactsBuilder() *ArtifactsBuilder {
 		applyLatestL1Fork: false,
 		genesisDelay:      MinimumGenesisDelay,
 		OpblockTime:       defaultOpBlockTimeSeconds,
+		Cidr:              defaultNetworkCidr,
 	}
 }
 
@@ -101,6 +103,11 @@ func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 	return b
 }
 
+func (b *ArtifactsBuilder) NetworkCidr(cidr string) *ArtifactsBuilder {
+	b.Cidr = cidr
+	return b
+}
+
 type Artifacts struct {
 	Out *output
 }
@@ -115,7 +122,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		b.outputDir = filepath.Join(homeDir, "devnet")
 	}
 
-	out := &output{dst: b.outputDir, homeDir: homeDir}
+	out := &output{dst: b.outputDir, homeDir: homeDir, networkCidr: b.Cidr}
 
 	// check if the output directory exists
 	if out.Exists("") {
@@ -431,6 +438,9 @@ type output struct {
 	lock    sync.Mutex
 
 	enodeAddrSeq *big.Int
+
+	// The network CIDR range
+	networkCidr string
 }
 
 func (o *output) AbsoluteDstPath() (string, error) {

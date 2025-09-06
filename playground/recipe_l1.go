@@ -56,20 +56,36 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	ctx.Bootnodes = make(map[BootnodeProtocol]*BootnodeRef)
 	svcManager := NewManifest(ctx, artifacts.Out)
 
+	// IPAM will reconcile the service IPs, so we can hardcode
+	// TODO: Make this more configurable.
+	elBootnodeIP, err := GetIPFromCIDR(artifacts.Out.networkCidr, 10)
+	if err != nil {
+		panic("BUG: We got an invalid CIDR that somehow slipped through")
+	}
+
 	elEnode := ctx.Output.GetEnodeAddr()
-	elBootnodeComponent := &Bootnode{Protocol: BootnodeProtocolDiscV4, Enode: elEnode, Port: 30303}
+	elBootnodeComponent := &Bootnode{Protocol: BootnodeProtocolDiscV4, Enode: elEnode, Port: 30303, IP: elBootnodeIP}
 	svcManager.AddService("el-bootnode", elBootnodeComponent)
 	ctx.Bootnodes[BootnodeProtocolDiscV4] = &BootnodeRef{
 		Service: "el-bootnode",
 		ID:      elEnode.NodeID(),
 	}
 
+	clBootnodeIP, err := GetIPFromCIDR(artifacts.Out.networkCidr, 11)
+	if err != nil {
+		panic("BUG: We got an invalid CIDR that somehow slipped through")
+	}
+
 	clEnode := ctx.Output.GetEnodeAddr()
-	clBootnodeComponent := &Bootnode{Protocol: BootnodeProtocolDiscV5, Enode: clEnode, Port: 9000}
+	clBootnodeComponent := &Bootnode{Protocol: BootnodeProtocolDiscV5, Enode: clEnode, Port: 9000, IP: clBootnodeIP}
+	enr, err := clBootnodeComponent.GenerateENR()
+	if err != nil {
+		panic(fmt.Sprintf("BUG: Somehow generated an invalid ENR; error = %v", err))
+	}
 	svcManager.AddService("cl-bootnode", clBootnodeComponent)
 	ctx.Bootnodes[BootnodeProtocolDiscV5] = &BootnodeRef{
 		Service: "cl-bootnode",
-		ID:      clEnode.NodeID(),
+		ID:      enr,
 	}
 
 	svcManager.AddService("el", &RethEL{
