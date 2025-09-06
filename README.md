@@ -51,6 +51,14 @@ Flags:
 - `--external-builder`: URL of an external builder to use (enables rollup-boost)
 - `--enable-latest-fork` (int): Enables the latest fork (isthmus) at startup (0) or n blocks after genesis.
 
+### Bootnodes
+
+Some recipes have bootnodes in them. Bootnodes using discovery v5 require a static IP so we can use enr to connect. Due to this, we also allow the changing of the network CIDR range that docker uses (for machines where this is already used, etc). This can be done via the `--network-cidr` command:
+
+```bash
+go run main.go cook l1 --interactive --networkCidr 172.19.0.0/16
+```
+
 ### Example Commands
 
 Here's a complete example showing how to run the L1 recipe with the latest fork enabled and custom output directory:
