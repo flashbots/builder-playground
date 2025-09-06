@@ -1013,7 +1013,6 @@ func (b *Bootnode) GenerateENR() (string, error) {
 }
 
 func (b *Bootnode) Name() string {
-	// return "bootnode"
 	var protocolNamePrefix string
 	switch b.Protocol {
 	case BootnodeProtocolDiscV5:

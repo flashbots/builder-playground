@@ -1,6 +1,8 @@
 package playground
 
 import (
+	"fmt"
+
 	flag "github.com/spf13/pflag"
 )
 
@@ -88,7 +90,12 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	elEnode := ctx.Output.GetEnodeAddr()
 
-	elBootnode := &Bootnode{Protocol: BootnodeProtocolDiscV4, Enode: elEnode, Port: 30303}
+	elBootnodeIP, err := GetIPFromCIDR(artifacts.Out.networkCidr, 10)
+	if err != nil {
+		panic(fmt.Sprintf("BUG: We got an invalid CIDR that somehow slipped through for el; error = %v", err))
+	}
+
+	elBootnode := &Bootnode{Protocol: BootnodeProtocolDiscV4, Enode: elEnode, Port: 30303, IP: elBootnodeIP}
 	svcManager.AddService("el-bootnode", elBootnode)
 
 	ctx.Bootnodes[BootnodeProtocolDiscV4] = &BootnodeRef{
