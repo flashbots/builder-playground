@@ -12,6 +12,9 @@ type OpRecipe struct {
 	// rollup-boost on the sequencer and uses this URL as the external builder.
 	externalBuilder string
 
+	// an extra peer for a bproxy
+	authrpcPeer string
+
 	// whether to enable the latest fork isthmus and when
 	enableLatestFork *uint64
 
@@ -49,6 +52,7 @@ func (o *OpRecipe) Description() string {
 func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("opstack", flag.ContinueOnError)
 	flags.StringVar(&o.externalBuilder, "external-builder", "", "External builder URL")
+	flags.StringVar(&o.authrpcPeer, "authrpc-peer", "", "A peer for bproxy")
 	flags.Var(&nullableUint64Value{&o.enableLatestFork}, "enable-latest-fork", "Enable latest fork isthmus (nil or empty = disabled, otherwise enabled at specified block)")
 	flags.Uint64Var(&o.blockTime, "block-time", defaultOpBlockTimeSeconds, "Block time to use for the rollup")
 	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
@@ -107,6 +111,10 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	if o.flashblocks {
 		peers = append(peers, "flashblocks-rpc")
+	}
+
+	if o.authrpcPeer != "" {
+		peers = append(peers, o.authrpcPeer)
 	}
 
 	// Only enable bproxy if flashblocks is enabled (since flashblocks-rpc is the only service that needs it)
