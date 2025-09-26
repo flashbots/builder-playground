@@ -168,7 +168,11 @@ type BProxy struct {
 func (f *BProxy) Run(service *Service, ctx *ExContext) {
 	peers := []string{}
 	for _, peer := range f.Peers {
-		peers = append(peers, Connect(peer, "authrpc"))
+		if strings.HasPrefix(peer, "http") {
+			peers = append(peers, peer)
+		} else {
+			peers = append(peers, Connect(peer, "authrpc"))
+		}
 	}
 	service.WithImage("ghcr.io/flashbots/bproxy").
 		WithTag("v0.0.91").
