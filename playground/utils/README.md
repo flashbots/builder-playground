@@ -1,3 +1,6 @@
+## Regenerating the Rollup Config
+
+```
 # Reset the state
 rm state.json
 echo '{"version": 1}' > state.json
@@ -8,6 +11,7 @@ op-deployer apply --workdir . --deployment-target genesis
 op-deployer inspect genesis --workdir . --outfile ./genesis.json 13
 
 op-deployer inspect rollup --workdir . --outfile ./rollup.json 13
+```
 
 ## Updating for New op-deployer Releases
 
@@ -33,7 +37,6 @@ When a new op-deployer version is released, follow these steps:
    - Set `l1ContractsLocator` and `l2ContractsLocator` to:
      `https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-<ContentHash>.tar.gz`
    - Ensure `configType = "custom"` for HTTP URLs
-   - Use `configType = "standard-overrides"` for tag:// URLs
 
 4. **Deploy with the new version:**
    ```bash
@@ -44,4 +47,4 @@ When a new op-deployer version is released, follow these steps:
    ./op-deployer inspect rollup --workdir . --outfile ./rollup.json 13
    ```
 
-**Note:** The ContentHash (not ArtifactsHash) is used in the HTTP URL. ArtifactsHash is for validation only.
+**Note:** The ContentHash (not ArtifactsHash) is used in the HTTP URL.
