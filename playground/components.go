@@ -192,6 +192,7 @@ func (f *BProxy) Run(service *Service, ctx *ExContext) {
 			"--authrpc-peers", strings.Join(peers, ","),
 			"--authrpc-remove-backend-from-peers",
 			"--authrpc-use-priority-queue",
+			"--authrpc-extra-mirrored-jrpc-methods", "eth_sendRawTransaction",
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret")
 
