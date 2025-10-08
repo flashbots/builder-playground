@@ -107,15 +107,22 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	if o.flashblocks {
 		peers = append(peers, "flashblocks-rpc")
+
+		svcManager.AddService("op-rbuilder-sync-only", &OpRbuilder{
+			Flashblocks: true,
+			SyncOnly:    true,
+		})
+		peers = append(peers, "op-rbuilder-sync-only")
 	}
 
 	// Only enable bproxy if flashblocks is enabled (since flashblocks-rpc is the only service that needs it)
 	if o.flashblocks {
 		svcManager.AddService("bproxy", &BProxy{
-			TargetAuthrpc:         externalBuilderRef,
-			Peers:                 peers,
-			Flashblocks:           o.flashblocks,
-			FlashblocksBuilderURL: flashblocksBuilderURLRef,
+			TargetAuthrpc:           externalBuilderRef,
+			Peers:                   peers,
+			Flashblocks:             o.flashblocks,
+			FlashblocksBuilderURL:   flashblocksBuilderURLRef,
+			MirrorFcuWithoutPayload: false, // TODO: ?
 		})
 	}
 

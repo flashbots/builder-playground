@@ -57,30 +57,48 @@ func (r *RollupBoost) Name() string {
 
 type OpRbuilder struct {
 	Flashblocks bool
+	SyncOnly    bool
 }
 
 func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
-	service.WithImage("ghcr.io/flashbots/op-rbuilder").
-		WithTag("sha-4f1931b").
+	service.WithImage("docker.io/noot99/op-rbuilder").
+		//WithTag("sha-4f1931b").
+		WithTag("p2p-sync").
+		//WithTag("e44d069f1ca17469b7f4a4b53d7dc9227424ca08ff321cd3beaf67006097e752").
 		WithArgs(
 			"node",
-			"--authrpc.port", `{{Port "authrpc" 8551}}`,
 			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.jwtsecret", "/data/jwtsecret",
 			"--http",
 			"--http.addr", "0.0.0.0",
-			"--http.port", `{{Port "http" 8545}}`,
 			"--chain", "/data/l2-genesis.json",
 			"--datadir", "/data_op_reth",
 			"--disable-discovery",
 			"--color", "never",
-			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
-			"--port", `{{Port "rpc" 30303}}`,
 			"--builder.enable-revert-protection",
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
+
+	if o.SyncOnly {
+		service.WithArgs(
+			"--flashblocks.p2p_enabled",
+			"--flashblocks.p2p_port", "9008",
+			"--flashblocks.p2p_known_peers", "\"/ip4/127.0.0.1/tcp/9009/p2p/12D3KooW9sn2ZidTANAmQB1paiKBPGkF5DVusZXxaZCapbW94G44\"",
+			"--authrpc.port", `{{Port "authrpc" 8552}}`,
+			"--http.port", `{{Port "http" 8546}}`,
+			"--metrics", `0.0.0.0:{{Port "metrics" 9091}}`,
+			"--port", `{{Port "rpc" 30304}}`,
+		)
+	} else {
+		service.WithArgs(
+			"--authrpc.port", `{{Port "authrpc" 8551}}`,
+			"--http.port", `{{Port "http" 8545}}`,
+			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+			"--port", `{{Port "rpc" 30303}}`,
+		)
+	}
 
 	if ctx.Bootnode != nil {
 		service.WithArgs("--trusted-peers", ctx.Bootnode.Connect())
@@ -163,6 +181,8 @@ type BProxy struct {
 	Peers                 []string
 	Flashblocks           bool
 	FlashblocksBuilderURL string
+	// mirror engine_forkchoiceUpdated calls that do not carry execution payload
+	MirrorFcuWithoutPayload bool
 }
 
 func (f *BProxy) Run(service *Service, ctx *ExContext) {
@@ -171,7 +191,7 @@ func (f *BProxy) Run(service *Service, ctx *ExContext) {
 		peers = append(peers, Connect(peer, "authrpc"))
 	}
 	service.WithImage("ghcr.io/flashbots/bproxy").
-		WithTag("v0.0.91").
+		WithTag("v0.1.0").
 		WithArgs(
 			"serve",
 			"--authrpc-backend", f.TargetAuthrpc,
@@ -200,6 +220,11 @@ func (f *BProxy) Run(service *Service, ctx *ExContext) {
 		)
 	}
 
+	if f.MirrorFcuWithoutPayload {
+		service.WithArgs(
+			"--authrpc-mirror-fcu-without-payload",
+		)
+	}
 }
 
 func (f *BProxy) Name() string {
