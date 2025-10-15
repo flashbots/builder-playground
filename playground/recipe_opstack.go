@@ -122,7 +122,6 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			Peers:                   peers,
 			Flashblocks:             o.flashblocks,
 			FlashblocksBuilderURL:   flashblocksBuilderURLRef,
-			MirrorFcuWithoutPayload: false, // TODO: ?
 		})
 	}
 

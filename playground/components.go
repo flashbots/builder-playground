@@ -62,9 +62,7 @@ type OpRbuilder struct {
 
 func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 	service.WithImage("docker.io/noot99/op-rbuilder").
-		//WithTag("sha-4f1931b").
 		WithTag("p2p-sync").
-		//WithTag("e44d069f1ca17469b7f4a4b53d7dc9227424ca08ff321cd3beaf67006097e752").
 		WithArgs(
 			"node",
 			"--authrpc.addr", "0.0.0.0",
