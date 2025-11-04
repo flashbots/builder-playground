@@ -222,6 +222,7 @@ func generateEthNetworkDetails(spec *Spec, info *beaconclient.GetGenesisResponse
 		"CAPELLA_FORK_VERSION":    spec.CapellaForkVersion,
 		"DENEB_FORK_VERSION":      spec.DenebForkVersion,
 		"ELECTRA_FORK_VERSION":    spec.ElectraForkVersion,
+		"FULU_FORK_VERSION":       spec.FuluForkVersion,
 	}
 	for k, v := range envs {
 		if err := os.Setenv(k, v); err != nil {
@@ -439,6 +440,7 @@ type Spec struct {
 	CapellaForkVersion              string `json:"CAPELLA_FORK_VERSION"`               //nolint:tagliatelle
 	DenebForkVersion                string `json:"DENEB_FORK_VERSION"`                 //nolint:tagliatelle
 	ElectraForkVersion              string `json:"ELECTRA_FORK_VERSION"`               //nolint:tagliatelle
+	FuluForkVersion                 string `json:"FULU_FORK_VERSION"`                  //nolint:tagliatelle
 }
 
 func getSpec(beaconURL string) (*Spec, error) {
