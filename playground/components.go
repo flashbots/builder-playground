@@ -27,7 +27,7 @@ type RollupBoost struct {
 func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("0.7.0").
+		WithTag("v0.7.5").
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -112,13 +112,13 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 	}
 
 	if f.BaseOverlay {
-		// Base doesn't have built image, so we use mikawamp/base-reth-node
-		service.WithImage("docker.io/mikawamp/base-reth-node").
-			WithTag("latest").
+		service.WithImage("ghcr.io/base/node-reth-dev").
+			WithTag("main").
 			WithEntrypoint("/app/base-reth-node").
 			WithArgs(
 				"node",
 				"--websocket-url", websocketURL,
+				"--enable-metering",
 			)
 	} else {
 		service.WithImage("flashbots/flashblocks-rpc").
@@ -171,7 +171,7 @@ func (f *BProxy) Run(service *Service, ctx *ExContext) {
 		peers = append(peers, Connect(peer, "authrpc"))
 	}
 	service.WithImage("ghcr.io/flashbots/bproxy").
-		WithTag("v0.0.91").
+		WithTag("v0.1.2").
 		WithArgs(
 			"serve",
 			"--authrpc-backend", f.TargetAuthrpc,
