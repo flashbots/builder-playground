@@ -2,27 +2,32 @@ configType = "custom"
 l1ChainID = 1337
 fundDevAccounts = false
 useInterop = false
-l1ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-c193a1863182092bc6cb723e523e8313a0f4b6e9c9636513927f1db74c047c15.tar.gz"
-l2ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-c193a1863182092bc6cb723e523e8313a0f4b6e9c9636513927f1db74c047c15.tar.gz"
+l1ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
+l2ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
 
 [superchainRoles]
-proxyAdminOwner = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-protocolVersionsOwner = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-guardian = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
+proxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+protocolVersionsOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+guardian = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+superchainProxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+superchainGuardian = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+challenger = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 
 [[chains]]
 id = "0x000000000000000000000000000000000000000000000000000000000000000d"
-baseFeeVaultRecipient = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-l1FeeVaultRecipient = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-sequencerFeeVaultRecipient = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
+baseFeeVaultRecipient = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+l1FeeVaultRecipient = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+sequencerFeeVaultRecipient = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+gasLimit = 60000000
 eip1559DenominatorCanyon = 250
 eip1559Denominator = 50
 eip1559Elasticity = 6
 [chains.roles]
-l1ProxyAdminOwner = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-l2ProxyAdminOwner = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-systemConfigOwner = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-unsafeBlockSigner = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-batcher = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-proposer = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
-challenger = "0xafF0CA253b97e54440965855cec0A8a2E2399896"
+l1ProxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+l2ProxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+systemConfigOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+unsafeBlockSigner = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc"
+batcher = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+proposer = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+challenger = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+
