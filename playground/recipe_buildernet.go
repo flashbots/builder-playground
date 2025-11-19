@@ -1,12 +1,15 @@
 package playground
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	flag "github.com/spf13/pflag"
 )
 
 var _ Recipe = &BuilderNetRecipe{}
+var _ NetworkReadyChecker = &BuilderNetRecipe{}
 
 // BuilderNetRecipe is a recipe that extends the L1 recipe to include builder-hub
 type BuilderNetRecipe struct {
@@ -89,4 +92,12 @@ func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {
 	}
 
 	return output
+}
+
+func (b *BuilderNetRecipe) IsNetworkReady(ctx context.Context, manifest *Manifest) (bool, error) {
+	return b.l1Recipe.IsNetworkReady(ctx, manifest)
+}
+
+func (b *BuilderNetRecipe) WaitForNetworkReady(ctx context.Context, manifest *Manifest, timeout time.Duration) error {
+	return b.l1Recipe.WaitForNetworkReady(ctx, manifest, timeout)
 }

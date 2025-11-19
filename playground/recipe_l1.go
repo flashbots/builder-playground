@@ -1,12 +1,15 @@
 package playground
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	flag "github.com/spf13/pflag"
 )
 
 var _ Recipe = &L1Recipe{}
+var _ NetworkReadyChecker = &L1Recipe{}
 
 type L1Recipe struct {
 	// latestFork enables the use of the latest fork at startup
@@ -114,4 +117,16 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 func (l *L1Recipe) Output(manifest *Manifest) map[string]interface{} {
 	return map[string]interface{}{}
+}
+
+func (l *L1Recipe) IsNetworkReady(ctx context.Context, manifest *Manifest) (bool, error) {
+	elService := manifest.MustGetService("el")
+	elURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+	return isChainProducingBlocks(ctx, elURL)
+}
+
+func (l *L1Recipe) WaitForNetworkReady(ctx context.Context, manifest *Manifest, timeout time.Duration) error {
+	elService := manifest.MustGetService("el")
+	elURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+	return waitForFirstBlock(ctx, elURL, timeout)
 }

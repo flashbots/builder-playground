@@ -14,6 +14,75 @@ import (
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 )
 
+func isChainProducingBlocks(ctx context.Context, elURL string) (bool, error) {
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		return false, err
+	}
+	defer rpcClient.Close()
+
+	clt := ethclient.NewClient(rpcClient)
+	num, err := clt.BlockNumber(ctx)
+	if err != nil {
+		return false, err
+	}
+	return num > 0, nil
+}
+
+func isChainProducingBlocksWithLogging(ctx context.Context, elURL string) (bool, uint64, error) {
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		return false, 0, err
+	}
+	defer rpcClient.Close()
+
+	clt := ethclient.NewClient(rpcClient)
+	num, err := clt.BlockNumber(ctx)
+	if err != nil {
+		return false, 0, err
+	}
+	return num > 0, num, nil
+}
+
+func waitForFirstBlock(ctx context.Context, elURL string, timeout time.Duration) error {
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		fmt.Printf("  [%s] Failed to connect: %v\n", elURL, err)
+		return err
+	}
+	defer rpcClient.Close()
+
+	clt := ethclient.NewClient(rpcClient)
+	fmt.Printf("  [%s] Connected, waiting for first block...\n", elURL)
+
+	timeoutCh := time.After(timeout)
+	checkCount := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeoutCh:
+			return fmt.Errorf("timeout waiting for first block on %s", elURL)
+		case <-time.After(500 * time.Millisecond):
+			num, err := clt.BlockNumber(ctx)
+			checkCount++
+			if err != nil {
+				if checkCount%10 == 0 {
+					fmt.Printf("  [%s] Error getting block number: %v\n", elURL, err)
+				}
+				continue
+			}
+			if num > 0 {
+				fmt.Printf("  [%s] First block detected: %d\n", elURL, num)
+				return nil
+			}
+			if checkCount%10 == 0 {
+				fmt.Printf("  [%s] Block number: %d (waiting for > 0)\n", elURL, num)
+			}
+		}
+	}
+}
+
 func waitForChainAlive(ctx context.Context, logOutput io.Writer, beaconNodeURL string, timeout time.Duration) error {
 	// Test that blocks are being produced
 	log := mevRCommon.LogSetup(false, "info").WithField("context", "waitForChainAlive")

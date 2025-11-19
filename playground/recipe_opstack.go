@@ -1,10 +1,15 @@
 package playground
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	flag "github.com/spf13/pflag"
 )
 
 var _ Recipe = &OpRecipe{}
+var _ NetworkReadyChecker = &OpRecipe{}
 
 // OpRecipe is a recipe that deploys an OP stack
 type OpRecipe struct {
@@ -194,4 +199,41 @@ func (o *OpRecipe) Output(manifest *Manifest) map[string]interface{} {
 		}
 	*/
 	return map[string]interface{}{}
+}
+
+func (o *OpRecipe) IsNetworkReady(ctx context.Context, manifest *Manifest) (bool, error) {
+	elService := manifest.MustGetService("el")
+	elURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+	l1Ready, err := isChainProducingBlocks(ctx, elURL)
+	if err != nil {
+		return false, fmt.Errorf("L1 check failed: %w", err)
+	}
+	if !l1Ready {
+		return false, nil
+	}
+
+	opGethService := manifest.MustGetService("op-geth")
+	opGethURL := fmt.Sprintf("http://localhost:%d", opGethService.MustGetPort("http").HostPort)
+	l2Ready, err := isChainProducingBlocks(ctx, opGethURL)
+	if err != nil {
+		return false, fmt.Errorf("L2 check failed: %w", err)
+	}
+
+	return l2Ready, nil
+}
+
+func (o *OpRecipe) WaitForNetworkReady(ctx context.Context, manifest *Manifest, timeout time.Duration) error {
+	elService := manifest.MustGetService("el")
+	elURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+	if err := waitForFirstBlock(ctx, elURL, timeout); err != nil {
+		return fmt.Errorf("L1 not ready: %w", err)
+	}
+
+	opGethService := manifest.MustGetService("op-geth")
+	opGethURL := fmt.Sprintf("http://localhost:%d", opGethService.MustGetPort("http").HostPort)
+	if err := waitForFirstBlock(ctx, opGethURL, timeout); err != nil {
+		return fmt.Errorf("L2 not ready: %w", err)
+	}
+
+	return nil
 }
