@@ -2,8 +2,10 @@ configType = "custom"
 l1ChainID = 1337
 fundDevAccounts = false
 useInterop = false
-l1ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
-l2ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
+l1ContractsLocator = "tag://op-contracts/v5.0.0-rc.2"
+# l1ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
+l2ContractsLocator = "tag://op-contracts/v5.0.0-rc.2"
+# l2ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
 
 [superchainRoles]
 proxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
@@ -30,4 +32,3 @@ unsafeBlockSigner = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc"
 batcher = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 proposer = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 challenger = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
-

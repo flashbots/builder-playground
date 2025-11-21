@@ -1,5 +1,8 @@
 ## Regenerating the Rollup Config
 
+TODO: Rewrite these instructions since this doc is out of date
+
+
 ```
 # Reset the state
 rm state.json
