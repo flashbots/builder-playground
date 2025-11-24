@@ -1,8 +1,10 @@
 package playground
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,25 +109,15 @@ func (b *BootnodeRef) Connect() string {
 }
 
 type ServiceGen interface {
-	Run(service *Service, ctx *ExContext)
-	Name() string
+	Apply(manifest *Manifest)
 }
 
 type ServiceReady interface {
 	Ready(instance *instance) error
 }
 
-// ReleaseService is a service that can also be runned as an artifact in the host machine
-type ReleaseService interface {
-	ReleaseArtifact() *release
-}
-
 func (s *Manifest) AddService(name string, srv ServiceGen) {
-	service := s.NewService(name)
-	service.ComponentName = srv.Name()
-	srv.Run(service, s.ctx)
-
-	s.Services = append(s.Services, service)
+	srv.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -287,18 +279,21 @@ type Service struct {
 	FilesMapped   map[string]string `json:"files_mapped,omitempty"`
 	VolumesMapped map[string]string `json:"volumes_mapped,omitempty"`
 
-	ComponentName string `json:"component_name,omitempty"`
-
 	Tag        string `json:"tag,omitempty"`
 	Image      string `json:"image,omitempty"`
 	Entrypoint string `json:"entrypoint,omitempty"`
+
+	release    *release
+	watchdogFn watchdogFn
 }
+
+type watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
 
 type instance struct {
 	service *Service
 
-	logs      *serviceLogs
-	component ServiceGen
+	logs *serviceLogs
+	// component ServiceGen
 }
 
 type DependsOnCondition string
@@ -357,7 +352,9 @@ func (s *Service) WithLabel(key, value string) *Service {
 }
 
 func (s *Manifest) NewService(name string) *Service {
-	return &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	s.Services = append(s.Services, ss)
+	return ss
 }
 
 func (s *Service) WithImage(image string) *Service {
@@ -399,6 +396,16 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 		}
 	}
 	s.Ports = append(s.Ports, &Port{Name: name, Port: portNumber, Protocol: protocol})
+	return s
+}
+
+func (s *Service) WithRelease(rel *release) *Service {
+	s.release = rel
+	return s
+}
+
+func (s *Service) WithWatchdog(watchdogFn watchdogFn) *Service {
+	s.watchdogFn = watchdogFn
 	return s
 }
 

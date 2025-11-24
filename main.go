@@ -55,73 +55,6 @@ var cookCmd = &cobra.Command{
 	},
 }
 
-var artifactsCmd = &cobra.Command{
-	Use:   "artifacts",
-	Short: "List available artifacts",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) != 1 {
-			return fmt.Errorf("please specify a service name")
-		}
-		serviceName := args[0]
-		component := playground.FindComponent(serviceName)
-		if component == nil {
-			return fmt.Errorf("service %s not found", serviceName)
-		}
-		releaseService, ok := component.(playground.ReleaseService)
-		if !ok {
-			return fmt.Errorf("service %s is not a release service", serviceName)
-		}
-		output := outputFlag
-		if output == "" {
-			homeDir, err := playground.GetHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			output = homeDir
-		}
-		location, err := playground.DownloadRelease(output, releaseService.ReleaseArtifact())
-		if err != nil {
-			return fmt.Errorf("failed to download release: %w", err)
-		}
-		fmt.Println(location)
-		return nil
-	},
-}
-
-var artifactsAllCmd = &cobra.Command{
-	Use:   "artifacts-all",
-	Short: "Download all the artifacts available in the catalog (Used for testing purposes)",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Downloading all artifacts...")
-
-		output := outputFlag
-		if output == "" {
-			homeDir, err := playground.GetHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			output = homeDir
-		}
-		for _, component := range playground.Components {
-			releaseService, ok := component.(playground.ReleaseService)
-			if !ok {
-				continue
-			}
-			location, err := playground.DownloadRelease(output, releaseService.ReleaseArtifact())
-			if err != nil {
-				return fmt.Errorf("failed to download release: %w", err)
-			}
-
-			// make sure the artifact is valid to be executed on this platform
-			log.Printf("Downloaded %s to %s\n", releaseService.ReleaseArtifact().Name, location)
-			if err := isExecutableValid(location); err != nil {
-				return fmt.Errorf("failed to check if artifact is valid: %w", err)
-			}
-		}
-		return nil
-	},
-}
-
 var inspectCmd = &cobra.Command{
 	Use:   "inspect",
 	Short: "Inspect a connection between two services",
@@ -189,13 +122,7 @@ func main() {
 		cookCmd.AddCommand(recipeCmd)
 	}
 
-	// reuse the same output flag for the artifacts command
-	artifactsCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-	artifactsAllCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-
 	rootCmd.AddCommand(cookCmd)
-	rootCmd.AddCommand(artifactsCmd)
-	rootCmd.AddCommand(artifactsAllCmd)
 	rootCmd.AddCommand(inspectCmd)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -327,11 +254,6 @@ func runIt(recipe playground.Recipe) error {
 	if err := dockerRunner.WaitForReady(ctx, 20*time.Second); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
-	}
-
-	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
-		dockerRunner.Stop()
-		return fmt.Errorf("failed to complete ready: %w", err)
 	}
 
 	// get the output from the recipe
