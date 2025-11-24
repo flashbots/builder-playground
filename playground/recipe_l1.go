@@ -52,9 +52,7 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
-	svcManager := NewManifest(ctx, artifacts.Out)
-
+func (l *L1Recipe) Apply(svcManager *Manifest) {
 	svcManager.AddService("el", &RethEL{
 		UseRethForValidation: l.useRethForValidation,
 		UseNativeReth:        l.useNativeReth,
@@ -108,8 +106,6 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	}
 
 	svcManager.RunContenderIfEnabled()
-
-	return svcManager
 }
 
 func (l *L1Recipe) Output(manifest *Manifest) map[string]interface{} {

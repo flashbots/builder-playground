@@ -66,8 +66,7 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
-	svcManager := NewManifest(ctx, artifacts.Out)
+func (o *OpRecipe) Apply(svcManager *Manifest) {
 	svcManager.AddService("el", &RethEL{})
 	svcManager.AddService("beacon", &LighthouseBeaconNode{
 		ExecutionNode: "el",
@@ -83,7 +82,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	opGeth := &OpGeth{}
 	svcManager.AddService("op-geth", opGeth)
 
-	ctx.Bootnode = &BootnodeRef{
+	svcManager.ctx.Bootnode = &BootnodeRef{
 		Service: "op-geth",
 		ID:      opGeth.Enode.NodeID(),
 	}
@@ -179,8 +178,6 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		svcManager.ctx.Contender.TargetChain = "op-geth"
 	}
 	svcManager.RunContenderIfEnabled()
-
-	return svcManager
 }
 
 func (o *OpRecipe) Output(manifest *Manifest) map[string]interface{} {

@@ -19,7 +19,7 @@ type Recipe interface {
 	Description() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
-	Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
+	Apply(manifest *Manifest)
 	Output(manifest *Manifest) map[string]interface{}
 }
 

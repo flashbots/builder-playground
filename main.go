@@ -230,15 +230,17 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	// if contender.tps is set, assume contender is enabled
-	svcManager := recipe.Apply(&playground.ExContext{
+	exCtx := &playground.ExContext{
 		LogLevel: logLevel,
+		// if contender.tps is set, assume contender is enabled
 		Contender: &playground.ContenderContext{
 			Enabled:     contenderEnabled,
 			ExtraArgs:   contenderArgs,
 			TargetChain: contenderTarget,
 		},
-	}, artifacts)
+	}
+	svcManager := playground.NewManifest(exCtx, artifacts.Out)
+	recipe.Apply(svcManager)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}

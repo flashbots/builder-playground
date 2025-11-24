@@ -40,9 +40,9 @@ func (b *BuilderNetRecipe) Artifacts() *ArtifactsBuilder {
 	return b.l1Recipe.Artifacts()
 }
 
-func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
+func (b *BuilderNetRecipe) Apply(svcManager *Manifest) {
 	// Start with the L1Recipe manifest
-	svcManager := b.l1Recipe.Apply(ctx, artifacts)
+	b.l1Recipe.Apply(svcManager)
 
 	// Add builder-hub-postgres service (now includes migrations)
 	svcManager.AddService("builder-hub-postgres", &BuilderHubPostgres{})
@@ -60,8 +60,6 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
 	}
 
 	svcManager.RunContenderIfEnabled()
-
-	return svcManager
 }
 
 func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {
