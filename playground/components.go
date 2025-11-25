@@ -27,7 +27,7 @@ type RollupBoost struct {
 func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 	service.
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("0.7.0").
+		WithTag("v0.7.5").
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -56,7 +56,7 @@ type OpRbuilder struct {
 
 func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 	service.WithImage("ghcr.io/flashbots/op-rbuilder").
-		WithTag("sha-4f1931b").
+		WithTag("v0.2.8").
 		WithArgs(
 			"node",
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
@@ -107,13 +107,13 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 	}
 
 	if f.BaseOverlay {
-		// Base doesn't have built image, so we use mikawamp/base-reth-node
-		service.WithImage("docker.io/mikawamp/base-reth-node").
-			WithTag("latest").
+		service.WithImage("ghcr.io/base/node-reth-dev").
+			WithTag("main").
 			WithEntrypoint("/app/base-reth-node").
 			WithArgs(
 				"node",
 				"--websocket-url", websocketURL,
+				"--enable-metering",
 			)
 	} else {
 		service.WithImage("flashbots/flashblocks-rpc").
@@ -166,7 +166,7 @@ func (f *BProxy) Run(service *Service, ctx *ExContext) {
 		peers = append(peers, Connect(peer, "authrpc"))
 	}
 	service.WithImage("ghcr.io/flashbots/bproxy").
-		WithTag("v0.0.91").
+		WithTag("v0.1.2").
 		WithArgs(
 			"serve",
 			"--authrpc-backend", f.TargetAuthrpc,
@@ -428,7 +428,7 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 	// start the reth el client
 	svc.
 		WithImage("ghcr.io/paradigmxyz/reth").
-		WithTag("v1.4.8").
+		WithTag("v1.8.2").
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",
@@ -487,7 +487,7 @@ type LighthouseBeaconNode struct {
 func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 	svc.
 		WithImage("sigp/lighthouse").
-		WithTag("v7.0.0-beta.0").
+		WithTag("v8.0.0-rc.2").
 		WithEntrypoint("lighthouse").
 		WithArgs(
 			"bn",
@@ -546,7 +546,7 @@ func (l *LighthouseValidator) Run(service *Service, ctx *ExContext) {
 	// start validator client
 	service.
 		WithImage("sigp/lighthouse").
-		WithTag("v7.0.0-beta.0").
+		WithTag("v8.0.0-rc.2").
 		WithEntrypoint("lighthouse").
 		WithArgs(
 			"vc",
