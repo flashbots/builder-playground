@@ -88,6 +88,9 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		ID:      opGeth.Enode.NodeID(),
 	}
 
+	svcManager.AddService("simulator", &Simulator{})
+	externalBuilderRef = Connect("simulator", "authrpc")
+
 	if o.externalBuilder == "op-reth" {
 		// Add a new op-reth service and connect it to Rollup-boost
 		svcManager.AddService("op-reth", &OpReth{})
@@ -132,17 +135,17 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 		// Use bproxy if flashblocks is enabled, otherwise use external builder directly
 		builderRef := externalBuilderRef
-		flashblocksBuilderRef := flashblocksBuilderURLRef
+		//flashblocksBuilderRef := flashblocksBuilderURLRef
 		if o.flashblocks {
 			builderRef = Connect("bproxy", "authrpc")
-			flashblocksBuilderRef = ConnectWs("bproxy", "flashblocks")
+			// flashblocksBuilderRef = ConnectWs("simulator", "flashblocks")
+			// flashblocksBuilderRef = ConnectWs("bproxy", "flashblocks")
 		}
 
 		svcManager.AddService("rollup-boost", &RollupBoost{
-			ELNode:                "op-geth",
-			Builder:               builderRef,
-			Flashblocks:           o.flashblocks,
-			FlashblocksBuilderURL: flashblocksBuilderRef,
+			ELNode:      "op-geth",
+			Builder:     builderRef,
+			Flashblocks: o.flashblocks,
 		})
 	}
 

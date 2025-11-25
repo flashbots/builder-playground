@@ -20,8 +20,7 @@ type RollupBoost struct {
 	ELNode  string
 	Builder string
 
-	Flashblocks           bool
-	FlashblocksBuilderURL string
+	Flashblocks bool
 }
 
 func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
@@ -942,4 +941,29 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 	if c.TargetChain == "op-geth" {
 		service.DependsOnRunning("op-node")
 	}
+}
+
+type Simulator struct{}
+
+func (s *Simulator) Name() string {
+	return "simulator"
+}
+
+func (s *Simulator) Run(service *Service, ctx *ExContext) {
+	service.WithImage("docker.io/noot99/simulator").
+		WithTag("latest").
+		WithArgs(
+			"node",
+			"--flashblocks.ws", "ws://127.0.0.1:1112",
+			"--authrpc.addr", "0.0.0.0",
+			"--authrpc.port", `{{Port "authrpc" 4508}}`,
+			"--authrpc.jwtsecret", "/data/jwtsecret",
+			"--port", "30363",
+			"--chain", "/data/l2-genesis.json",
+			"--trusted-peers", ctx.Bootnode.Connect(),
+			"--datadir", "/data_simulator",
+		).
+		WithArtifact("/data/jwtsecret", "jwtsecret").
+		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
+		WithVolume("data", "/data_simulator")
 }
