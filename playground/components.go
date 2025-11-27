@@ -959,6 +959,9 @@ func (s *Simulator) Run(service *Service, ctx *ExContext) {
 		WithArgs(
 			"node",
 			"--flashblocks.ws", websocketURL,
+			"--http",
+			"--http.addr", "0.0.0.0",
+			"--http.port", `{{Port "http" 8545}}`,
 			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.port", `{{Port "authrpc" 4508}}`,
 			"--authrpc.jwtsecret", "/data/jwtsecret",
