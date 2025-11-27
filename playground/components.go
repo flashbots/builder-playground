@@ -943,18 +943,22 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 	}
 }
 
-type Simulator struct{}
+type Simulator struct {
+	FlashblocksWSService string
+}
 
 func (s *Simulator) Name() string {
 	return "simulator"
 }
 
 func (s *Simulator) Run(service *Service, ctx *ExContext) {
+	websocketURL := ConnectWs(s.FlashblocksWSService, "flashblocks")
+
 	service.WithImage("docker.io/noot99/simulator").
 		WithTag("latest").
 		WithArgs(
 			"node",
-			"--flashblocks.ws", "ws://127.0.0.1:1112",
+			"--flashblocks.ws", websocketURL,
 			"--authrpc.addr", "0.0.0.0",
 			"--authrpc.port", `{{Port "authrpc" 4508}}`,
 			"--authrpc.jwtsecret", "/data/jwtsecret",

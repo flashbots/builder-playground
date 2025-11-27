@@ -88,7 +88,9 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		ID:      opGeth.Enode.NodeID(),
 	}
 
-	svcManager.AddService("simulator", &Simulator{})
+	svcManager.AddService("simulator", &Simulator{
+		FlashblocksWSService: "rollup-boost",
+	})
 	externalBuilderRef = Connect("simulator", "authrpc")
 
 	if o.externalBuilder == "op-reth" {
