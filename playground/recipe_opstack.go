@@ -88,34 +88,28 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 		ID:      opGeth.Enode.NodeID(),
 	}
 
-	svcManager.AddService("simulator", &Simulator{
-		FlashblocksWSService: "rollup-boost",
-	})
-	externalBuilderRef = Connect("simulator", "authrpc")
-
 	if o.externalBuilder == "op-reth" {
-		// Add a new op-reth service and connect it to Rollup-boost
 		svcManager.AddService("op-reth", &OpReth{})
-
 		externalBuilderRef = Connect("op-reth", "authrpc")
 	} else if o.externalBuilder == "op-rbuilder" {
 		svcManager.AddService("op-rbuilder", &OpRbuilder{
 			Flashblocks: o.flashblocks,
 		})
 		externalBuilderRef = Connect("op-rbuilder", "authrpc")
-	}
 
-	if o.flashblocks && o.externalBuilder == "op-rbuilder" {
-		// If flashblocks is enabled and using op-rbuilder, use it to deliver flashblocks
-		flashblocksBuilderURLRef = ConnectWs("op-rbuilder", "flashblocks")
+		if o.flashblocks {
+			flashblocksBuilderURLRef = ConnectWs("op-rbuilder", "flashblocks")
+		}
 	}
 
 	if o.flashblocks {
 		peers = append(peers, "flashblocks-rpc")
-	}
 
-	// Only enable bproxy if flashblocks is enabled (since flashblocks-rpc is the only service that needs it)
-	if o.flashblocks {
+		svcManager.AddService("simulator", &Simulator{
+			FlashblocksWSService: "rollup-boost",
+		})
+		peers = append(peers, "simulator")
+
 		svcManager.AddService("bproxy", &BProxy{
 			TargetAuthrpc:         externalBuilderRef,
 			Peers:                 peers,
