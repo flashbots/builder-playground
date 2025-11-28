@@ -446,6 +446,7 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 			"--chain", "/data/genesis.json",
 			"--datadir", "/data_reth",
 			"--color", "never",
+			"--ipcpath", "/data_reth/reth.ipc",
 			"--addr", "127.0.0.1",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
