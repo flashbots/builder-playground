@@ -327,11 +327,6 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
-	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
-		dockerRunner.Stop()
-		return fmt.Errorf("failed to complete ready: %w", err)
-	}
-
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
 	if len(output) > 0 {

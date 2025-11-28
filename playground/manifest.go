@@ -111,10 +111,6 @@ type ServiceGen interface {
 	Name() string
 }
 
-type ServiceReady interface {
-	Ready(instance *instance) error
-}
-
 // ReleaseService is a service that can also be runned as an artifact in the host machine
 type ReleaseService interface {
 	ReleaseArtifact() *release

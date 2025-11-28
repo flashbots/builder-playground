@@ -34,14 +34,3 @@ func RunWatchdog(out *output, instances []*instance) error {
 	}
 	return nil
 }
-
-func CompleteReady(instances []*instance) error {
-	for _, s := range instances {
-		if readyFn, ok := s.component.(ServiceReady); ok {
-			if err := readyFn.Ready(s); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
