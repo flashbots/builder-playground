@@ -29,6 +29,7 @@ func NewReadyzServer(instances []*instance, port int) *ReadyzServer {
 
 func (s *ReadyzServer) Start() error {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/livez", s.handleLivez)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 
 	s.server = &http.Server{
@@ -50,6 +51,11 @@ func (s *ReadyzServer) Stop() error {
 		return s.server.Shutdown(context.Background())
 	}
 	return nil
+}
+
+func (s *ReadyzServer) handleLivez(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK")) //nolint:errcheck
 }
 
 func (s *ReadyzServer) handleReadyz(w http.ResponseWriter, r *http.Request) {
