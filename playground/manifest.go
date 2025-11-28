@@ -1,7 +1,6 @@
 package playground
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,18 +21,6 @@ type Recipe interface {
 	Artifacts() *ArtifactsBuilder
 	Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
 	Output(manifest *Manifest) map[string]interface{}
-}
-
-// NetworkReadyChecker is an optional interface that recipes can implement
-// to provide network-level readiness checks beyond individual service health.
-// This ensures the network is actually producing blocks and can accept transactions.
-type NetworkReadyChecker interface {
-	// IsNetworkReady returns true if the network is ready to accept transactions.
-	// This can be used to implement /readyz endpoints.
-	IsNetworkReady(ctx context.Context, manifest *Manifest) (bool, error)
-
-	// WaitForNetworkReady blocks until the network is ready or context is cancelled/timeout.
-	WaitForNetworkReady(ctx context.Context, manifest *Manifest, timeout time.Duration) error
 }
 
 // Manifest describes a list of services and their dependencies
@@ -621,7 +608,8 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 }
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
-	if svcManager.ctx.Contender.Enabled {
+
+	if svcManager.ctx.Contender != nil && svcManager.ctx.Contender.Enabled {
 		svcManager.AddService("contender", svcManager.ctx.Contender.Contender())
 	}
 }

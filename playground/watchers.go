@@ -29,21 +29,6 @@ func isChainProducingBlocks(ctx context.Context, elURL string) (bool, error) {
 	return num > 0, nil
 }
 
-func isChainProducingBlocksWithLogging(ctx context.Context, elURL string) (bool, uint64, error) {
-	rpcClient, err := rpc.Dial(elURL)
-	if err != nil {
-		return false, 0, err
-	}
-	defer rpcClient.Close()
-
-	clt := ethclient.NewClient(rpcClient)
-	num, err := clt.BlockNumber(ctx)
-	if err != nil {
-		return false, 0, err
-	}
-	return num > 0, num, nil
-}
-
 func waitForFirstBlock(ctx context.Context, elURL string, timeout time.Duration) error {
 	rpcClient, err := rpc.Dial(elURL)
 	if err != nil {

@@ -303,8 +303,8 @@ func runIt(recipe playground.Recipe) error {
 	}()
 
 	var readyzServer *playground.ReadyzServer
-	if checker, ok := recipe.(playground.NetworkReadyChecker); ok && readyzPort > 0 {
-		readyzServer = playground.NewReadyzServer(checker, svcManager, readyzPort)
+	if readyzPort > 0 {
+		readyzServer = playground.NewReadyzServer(dockerRunner.Instances(), readyzPort)
 		if err := readyzServer.Start(); err != nil {
 			return fmt.Errorf("failed to start readyz server: %w", err)
 		}
@@ -343,20 +343,13 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
+	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
+	networkReadyStart := time.Now()
 	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
 		dockerRunner.Stop()
-		return fmt.Errorf("failed to complete ready: %w", err)
+		return fmt.Errorf("network not ready: %w", err)
 	}
-
-	if checker, ok := recipe.(playground.NetworkReadyChecker); ok {
-		fmt.Printf("\nWaiting for network to be ready for transactions...\n")
-		networkReadyStart := time.Now()
-		if err := checker.WaitForNetworkReady(ctx, svcManager, 60*time.Second); err != nil {
-			dockerRunner.Stop()
-			return fmt.Errorf("network not ready: %w", err)
-		}
-		fmt.Printf("Network is ready for transactions (took %.1fs)\n", time.Since(networkReadyStart).Seconds())
-	}
+	fmt.Printf("Network is ready for transactions (took %.1fs)\n", time.Since(networkReadyStart).Seconds())
 
 	// get the output from the recipe
 	output := recipe.Output(svcManager)

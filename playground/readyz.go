@@ -9,11 +9,10 @@ import (
 )
 
 type ReadyzServer struct {
-	checker  NetworkReadyChecker
-	manifest *Manifest
-	port     int
-	server   *http.Server
-	mu       sync.RWMutex
+	instances []*instance
+	port      int
+	server    *http.Server
+	mu        sync.RWMutex
 }
 
 type ReadyzResponse struct {
@@ -21,11 +20,10 @@ type ReadyzResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-func NewReadyzServer(checker NetworkReadyChecker, manifest *Manifest, port int) *ReadyzServer {
+func NewReadyzServer(instances []*instance, port int) *ReadyzServer {
 	return &ReadyzServer{
-		checker:  checker,
-		manifest: manifest,
-		port:     port,
+		instances: instances,
+		port:      port,
 	}
 }
 
@@ -60,8 +58,7 @@ func (s *ReadyzServer) handleReadyz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
-	ready, err := s.checker.IsNetworkReady(ctx, s.manifest)
+	ready, err := s.isReady()
 
 	response := ReadyzResponse{
 		Ready: ready,
@@ -79,7 +76,26 @@ func (s *ReadyzServer) handleReadyz(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		fmt.Printf("Failed to encode readyz response: %v\n", err)
+	}
+}
+
+func (s *ReadyzServer) isReady() (bool, error) {
+	ctx := context.Background()
+	for _, inst := range s.instances {
+		if _, ok := inst.component.(ServiceReady); ok {
+			elURL := fmt.Sprintf("http://localhost:%d", inst.service.MustGetPort("http").HostPort)
+			ready, err := isChainProducingBlocks(ctx, elURL)
+			if err != nil {
+				return false, err
+			}
+			if !ready {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
 
 func (s *ReadyzServer) Port() int {
