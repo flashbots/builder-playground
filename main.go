@@ -268,7 +268,7 @@ func runIt(recipe playground.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			if err := playground.RunWatchdog(artifacts.Out, dockerRunner.Instances()); err != nil {
+			if err := playground.RunWatchdog(artifacts.Out, svcManager.Services); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
 		}()

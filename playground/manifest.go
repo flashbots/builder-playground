@@ -113,7 +113,7 @@ type ServiceGen interface {
 }
 
 type ServiceReady interface {
-	Ready(instance *instance) error
+	Ready(instance *Service) error
 }
 
 func (s *Manifest) AddService(srv ServiceGen) {
@@ -231,35 +231,6 @@ type NodeRef struct {
 	User      string `json:"user"`
 }
 
-// serviceLogs is a service to access the logs of the running service
-type serviceLogs struct {
-	logRef *os.File
-	path   string
-}
-
-func (s *serviceLogs) readLogs() (string, error) {
-	content, err := os.ReadFile(s.path)
-	if err != nil {
-		return "", fmt.Errorf("failed to read logs: %w", err)
-	}
-	return string(content), nil
-}
-
-func (s *serviceLogs) FindLog(pattern string) (string, error) {
-	logs, err := s.readLogs()
-	if err != nil {
-		return "", fmt.Errorf("failed to read logs: %w", err)
-	}
-
-	lines := strings.Split(logs, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, pattern) {
-			return line, nil
-		}
-	}
-	return "", fmt.Errorf("log pattern %s not found", pattern)
-}
-
 type Service struct {
 	Name string   `json:"name"`
 	Args []string `json:"args"`
@@ -287,14 +258,7 @@ type Service struct {
 	watchdogFn watchdogFn
 }
 
-type watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
-
-type instance struct {
-	service *Service
-
-	logs *serviceLogs
-	// component ServiceGen
-}
+type watchdogFn func(out io.Writer, service *Service, ctx context.Context) error
 
 type DependsOnCondition string
 
