@@ -403,7 +403,7 @@ func logLevelToRethVerbosity(logLevel LogLevel) string {
 
 func (r *RethEL) Apply(manifest *Manifest) {
 	// start the reth el client
-	svc := manifest.NewService("reth").
+	svc := manifest.NewService("el").
 		WithImage("ghcr.io/paradigmxyz/reth").
 		WithTag("v1.8.2").
 		WithEntrypoint("/usr/local/bin/reth").
@@ -456,7 +456,7 @@ type LighthouseBeaconNode struct {
 }
 
 func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
-	svc := manifest.NewService("lighthouse-beacon-node").
+	svc := manifest.NewService("beacon").
 		WithImage("sigp/lighthouse").
 		WithTag("v8.0.0-rc.2").
 		WithEntrypoint("lighthouse").
@@ -511,7 +511,7 @@ type LighthouseValidator struct {
 
 func (l *LighthouseValidator) Apply(manifest *Manifest) {
 	// start validator client
-	manifest.NewService("lighthouse-vc").
+	manifest.NewService("validator").
 		WithImage("sigp/lighthouse").
 		WithTag("v8.0.0-rc.2").
 		WithEntrypoint("lighthouse").

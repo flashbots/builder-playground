@@ -53,7 +53,7 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 }
 
 func (l *L1Recipe) Apply(svcManager *Manifest) {
-	svcManager.AddService("el", &RethEL{
+	svcManager.AddService(&RethEL{
 		UseRethForValidation: l.useRethForValidation,
 		UseNativeReth:        l.useNativeReth,
 	})
@@ -63,7 +63,7 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		// we are going to use the cl-proxy service to connect the beacon node to two builders
 		// one the 'el' builder and another one the remote one
 		elService = "cl-proxy"
-		svcManager.AddService("cl-proxy", &ClProxy{
+		svcManager.AddService(&ClProxy{
 			PrimaryBuilder:   "el",
 			SecondaryBuilder: fmt.Sprintf("http://localhost:%d", l.secondaryELPort),
 		})
@@ -71,11 +71,20 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		elService = "el"
 	}
 
-	svcManager.AddService("beacon", &LighthouseBeaconNode{
+	var mevBoostNode string
+	if l.useSeparateMevBoost {
+		// use local mev-boost which connects to mev-boost-relay
+		mevBoostNode = "mev-boost"
+	} else {
+		// connect directly to mev-boost-relay
+		mevBoostNode = "mev-boost-relay"
+	}
+
+	svcManager.AddService(&LighthouseBeaconNode{
 		ExecutionNode: elService,
-		MevBoostNode:  "mev-boost",
+		MevBoostNode:  mevBoostNode,
 	})
-	svcManager.AddService("validator", &LighthouseValidator{
+	svcManager.AddService(&LighthouseValidator{
 		BeaconNode: "beacon",
 	})
 
@@ -85,12 +94,12 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 			mevBoostValidationServer = "el"
 		}
 
-		svcManager.AddService("mev-boost-relay", &MevBoostRelay{
+		svcManager.AddService(&MevBoostRelay{
 			BeaconClient:     "beacon",
 			ValidationServer: mevBoostValidationServer,
 		})
 
-		svcManager.AddService("mev-boost", &MevBoost{
+		svcManager.AddService(&MevBoost{
 			RelayEndpoints: []string{"mev-boost-relay"},
 		})
 	} else {
@@ -99,7 +108,7 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		if l.useRethForValidation {
 			mevBoostValidationServer = "el"
 		}
-		svcManager.AddService("mev-boost", &MevBoostRelay{
+		svcManager.AddService(&MevBoostRelay{
 			BeaconClient:     "beacon",
 			ValidationServer: mevBoostValidationServer,
 		})

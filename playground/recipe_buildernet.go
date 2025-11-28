@@ -45,16 +45,16 @@ func (b *BuilderNetRecipe) Apply(svcManager *Manifest) {
 	b.l1Recipe.Apply(svcManager)
 
 	// Add builder-hub-postgres service (now includes migrations)
-	svcManager.AddService("builder-hub-postgres", &BuilderHubPostgres{})
+	svcManager.AddService(&BuilderHubPostgres{})
 
 	// Add the builder-hub service
-	svcManager.AddService("builder-hub", &BuilderHub{
+	svcManager.AddService(&BuilderHub{
 		postgres: "builder-hub-postgres",
 	})
 
 	// Optionally add mock proxy for testing
 	if b.includeMockProxy {
-		svcManager.AddService("builder-hub-proxy", &BuilderHubMockProxy{
+		svcManager.AddService(&BuilderHubMockProxy{
 			TargetService: "builder-hub",
 		})
 	}

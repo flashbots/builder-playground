@@ -116,7 +116,7 @@ type ServiceReady interface {
 	Ready(instance *instance) error
 }
 
-func (s *Manifest) AddService(name string, srv ServiceGen) {
+func (s *Manifest) AddService(srv ServiceGen) {
 	srv.Apply(s)
 }
 
@@ -616,6 +616,6 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
 	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddService("contender", svcManager.ctx.Contender.Contender())
+		svcManager.AddService(svcManager.ctx.Contender.Contender())
 	}
 }
