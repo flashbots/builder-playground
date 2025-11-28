@@ -20,7 +20,8 @@ type RollupBoost struct {
 	ELNode  string
 	Builder string
 
-	Flashblocks bool
+	Flashblocks           bool
+	FlashblocksBuilderURL string
 }
 
 func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
@@ -41,6 +42,7 @@ func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 			"--flashblocks",
 			"--flashblocks-host", "0.0.0.0",
 			"--flashblocks-port", `{{Port "flashblocks" 1112}}`,
+			"--flashblocks-builder-url", r.FlashblocksBuilderURL,
 		)
 	}
 }
@@ -65,7 +67,7 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 			"--http.addr", "0.0.0.0",
 			"--http.port", `{{Port "http" 8545}}`,
 			"--chain", "/data/l2-genesis.json",
-			"--datadir", "/data_op_reth",
+			"--datadir", "/data_op_rbuilder",
 			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
@@ -74,7 +76,7 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth")
+		WithVolume("data_op_rbuilder", "/data_op_rbuilder")
 
 	if ctx.Bootnode != nil {
 		service.WithArgs("--trusted-peers", ctx.Bootnode.Connect())
@@ -182,6 +184,7 @@ func (f *BProxy) Run(service *Service, ctx *ExContext) {
 			"--authrpc-peers", strings.Join(peers, ","),
 			"--authrpc-remove-backend-from-peers",
 			"--authrpc-use-priority-queue",
+			"--authrpc-mirror-new-payload",
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret")
 
@@ -972,5 +975,5 @@ func (s *Simulator) Run(service *Service, ctx *ExContext) {
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_simulator")
+		WithVolume("data_simulator", "/data_simulator")
 }

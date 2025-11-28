@@ -131,17 +131,17 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 		// Use bproxy if flashblocks is enabled, otherwise use external builder directly
 		builderRef := externalBuilderRef
-		//flashblocksBuilderRef := flashblocksBuilderURLRef
+		flashblocksBuilderRef := ""
 		if o.flashblocks {
 			builderRef = Connect("bproxy", "authrpc")
-			// flashblocksBuilderRef = ConnectWs("simulator", "flashblocks")
-			// flashblocksBuilderRef = ConnectWs("bproxy", "flashblocks")
+			flashblocksBuilderRef = ConnectWs("bproxy", "flashblocks")
 		}
 
 		svcManager.AddService("rollup-boost", &RollupBoost{
-			ELNode:      "op-geth",
-			Builder:     builderRef,
-			Flashblocks: o.flashblocks,
+			ELNode:                "op-geth",
+			Builder:               builderRef,
+			Flashblocks:           o.flashblocks,
+			FlashblocksBuilderURL: flashblocksBuilderRef,
 		})
 	}
 
