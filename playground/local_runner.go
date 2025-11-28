@@ -22,7 +22,6 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/google/uuid"
 	"gopkg.in/yaml.v2"
 )
 
@@ -67,10 +66,6 @@ type LocalRunner struct {
 
 	// wether to bind the ports to the local interface
 	bindHostPortsLocally bool
-
-	// sessionID is a random sequence that is used to identify the session
-	// it is used to identify the containers in the cleanup process
-	sessionID string
 
 	// networkName is the name of the network to use for the services
 	networkName string
@@ -227,7 +222,6 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		taskUpdateCh:         make(chan struct{}),
 		exitErr:              make(chan error, 2),
 		bindHostPortsLocally: cfg.BindHostPortsLocally,
-		sessionID:            uuid.New().String(),
 		networkName:          cfg.NetworkName,
 		instances:            instances,
 		labels:               cfg.Labels,
@@ -385,7 +379,7 @@ func (d *LocalRunner) ExitErr() <-chan error {
 func (d *LocalRunner) Stop() error {
 	// only stop the containers that belong to this session
 	containers, err := d.client.ContainerList(context.Background(), container.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", d.sessionID))),
+		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", d.manifest.ID))),
 	})
 	if err != nil {
 		return fmt.Errorf("error getting container list: %w", err)
@@ -622,7 +616,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// It is important to use the playground label to identify the containers
 		// during the cleanup process
 		"playground":         "true",
-		"playground.session": d.sessionID,
+		"playground.session": d.manifest.ID,
 		"service":            s.Name,
 	}
 
@@ -892,7 +886,7 @@ func (d *LocalRunner) trackLogs(serviceName string, containerID string) error {
 
 func (d *LocalRunner) trackContainerStatusAndLogs() {
 	eventCh, errCh := d.client.Events(context.Background(), events.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", d.sessionID))),
+		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", d.manifest.ID))),
 	})
 
 	for {
@@ -1038,5 +1032,48 @@ func (d *LocalRunner) Run() error {
 			return err
 		}
 	}
+	return nil
+}
+
+// StopContainersBySessionID removes all Docker containers associated with a specific playground session ID.
+// This is a standalone utility function used by the clean command to stop containers without requiring
+// a LocalRunner instance or manifest reference.
+//
+// TODO: Refactor to reduce code duplication with LocalRunner.Stop()
+// Consider creating a shared dockerClient wrapper with helper methods for container management
+// that both LocalRunner and this function can use.
+func StopContainersBySessionID(id string) error {
+	client, err := newDockerClient()
+	if err != nil {
+		return err
+	}
+
+	containers, err := client.ContainerList(context.Background(), container.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", id))),
+	})
+	if err != nil {
+		return fmt.Errorf("error getting container list: %w", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(containers))
+
+	var errCh chan error
+	errCh = make(chan error, len(containers))
+
+	for _, cont := range containers {
+		go func(contID string) {
+			defer wg.Done()
+			if err := client.ContainerRemove(context.Background(), contID, container.RemoveOptions{
+				RemoveVolumes: true,
+				RemoveLinks:   false,
+				Force:         true,
+			}); err != nil {
+				errCh <- fmt.Errorf("error removing container: %w", err)
+			}
+		}(cont.ID)
+	}
+
+	wg.Wait()
 	return nil
 }

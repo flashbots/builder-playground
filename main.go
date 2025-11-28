@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +34,7 @@ var platform string
 var contenderEnabled bool
 var contenderArgs []string
 var contenderTarget string
+var detached bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -52,6 +54,22 @@ var cookCmd = &cobra.Command{
 			recipeNames = append(recipeNames, recipe.Name())
 		}
 		return fmt.Errorf("please specify a recipe to cook. Available recipes: %s", recipeNames)
+	},
+}
+
+var cleanCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "Clean a recipe",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		manifest, err := playground.ReadManifest(outputFlag)
+		if err != nil {
+			return err
+		}
+		if err := playground.StopContainersBySessionID(manifest.ID); err != nil {
+			return err
+		}
+		fmt.Println("The recipe has been stopped and cleaned.")
+		return nil
 	},
 }
 
@@ -185,6 +203,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
+		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -197,6 +216,9 @@ func main() {
 	rootCmd.AddCommand(artifactsCmd)
 	rootCmd.AddCommand(artifactsAllCmd)
 	rootCmd.AddCommand(inspectCmd)
+
+	rootCmd.AddCommand(cleanCmd)
+	cleanCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -239,6 +261,8 @@ func runIt(recipe playground.Recipe) error {
 			TargetChain: contenderTarget,
 		},
 	}, artifacts)
+	svcManager.ID = uuid.New().String()
+
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
@@ -339,6 +363,10 @@ func runIt(recipe playground.Recipe) error {
 		for k, v := range output {
 			fmt.Printf("- %s: %v\n", k, v)
 		}
+	}
+
+	if detached {
+		return nil
 	}
 
 	watchdogErr := make(chan error, 1)
