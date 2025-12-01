@@ -403,6 +403,30 @@ func loadPredeployAlloc(raw []byte) (string, map[string]interface{}, error) {
 	if p.Address == "" {
 		return "", nil, fmt.Errorf("predeploy JSON missing address")
 	}
+	// Validate address is valid
+	if !gethcommon.IsHexAddress(p.Address) {
+		return "", nil, fmt.Errorf("invalid address %s", p.Address)
+	}
+
+	// Validate balance (if provided) is a hex string and parses as a big.Int
+	if p.Balance != "" {
+		if !strings.HasPrefix(p.Balance, "0x") {
+			return "", nil, fmt.Errorf("predeploy balance must be 0x-prefixed hex: %s", p.Balance)
+		}
+		if _, ok := new(big.Int).SetString(strings.TrimPrefix(p.Balance, "0x"), 16); !ok {
+			return "", nil, fmt.Errorf("invalid predeploy balance hex: %s", p.Balance)
+		}
+	}
+
+	// Validate nonce (if provided) is a hex string and parses as a big.Int
+	if p.Nonce != "" {
+		if !strings.HasPrefix(p.Nonce, "0x") {
+			return "", nil, fmt.Errorf("predeploy nonce must be 0x-prefixed hex: %s", p.Nonce)
+		}
+		if _, ok := new(big.Int).SetString(strings.TrimPrefix(p.Nonce, "0x"), 16); !ok {
+			return "", nil, fmt.Errorf("invalid predeploy nonce hex: %s", p.Nonce)
+		}
+	}
 
 	account := map[string]interface{}{
 		"balance": p.Balance,
