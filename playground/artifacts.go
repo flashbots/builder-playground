@@ -63,6 +63,9 @@ var clConfigContent []byte
 //go:embed utils/query.sh
 var queryReadyCheck []byte
 
+//go:embed utils/entrypoint_v0.7.json
+var entryPointV07JSON []byte
+
 type ArtifactsBuilder struct {
 	applyLatestL1Fork    bool
 	genesisDelay         uint64
@@ -273,6 +276,17 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 			}
 		}
 
+// Optionally inject the ERC-4337 EntryPoint v0.7 predeploy.
+		if b.enableEntryPoint {
+			fmt.Println("Enabling EntryPoint v0.7 predeploy")
+			entryAddr, entryAlloc, err := loadEntryPointAlloc()
+			if err != nil {
+				return nil, fmt.Errorf("failed to load EntryPoint predeploy alloc: %w", err)
+			}
+			input["alloc"] = map[string]interface{}{
+				entryAddr: entryAlloc,
+			}
+		}
 		newOpGenesis, err := overrideJSON(opGenesis, input)
 		if err != nil {
 			return err
@@ -324,6 +338,45 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	return nil
+}
+
+type entryPointAlloc struct {
+	Address string            `json:"address"`
+	Balance string            `json:"balance"`
+	Nonce   string            `json:"nonce"`
+	Code    string            `json:"code"`
+	Storage map[string]string `json:"storage"`
+}
+
+func loadEntryPointAlloc() (string, map[string]interface{}, error) {
+	if len(entryPointV07JSON) == 0 {
+		return "", nil, fmt.Errorf("entrypoint_v0.7 asset is empty")
+	}
+
+	var ep entryPointAlloc
+	if err := json.Unmarshal(entryPointV07JSON, &ep); err != nil {
+		return "", nil, fmt.Errorf("failed to unmarshal entrypoint_v0.7.json: %w", err)
+	}
+	if ep.Address == "" {
+		return "", nil, fmt.Errorf("entrypoint_v0.7.json missing address")
+	}
+
+	account := map[string]interface{}{
+		"balance": ep.Balance,
+		"nonce":   ep.Nonce,
+	}
+	if ep.Code != "" {
+		account["code"] = ep.Code
+	}
+	if len(ep.Storage) > 0 {
+		storage := make(map[string]interface{}, len(ep.Storage))
+		for k, v := range ep.Storage {
+			storage[k] = v
+		}
+		account["storage"] = storage
+	}
+
+	return ep.Address, account, nil
 }
 
 type OpGenesisTmplInput struct {

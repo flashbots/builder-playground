@@ -68,6 +68,22 @@ Flags:
 
 - `--external-builder`: URL of an external builder to use (enables rollup-boost)
 - `--enable-latest-fork` (int): Enables the latest fork (isthmus) at startup (0) or n blocks after genesis.
+- `--enable-entrypoint` (bool): Enables the ERC-4337 EntryPoint v0.7 contract as an L2 predeploy in the OP Stack genesis.
+
+Example with external builder, flashblocks and EntryPoint enabled:
+
+Address For V0.7 is 
+0x0000000071727De22E5E9d8BAf0edAc6f37da032
+
+```bash
+go run main.go cook opstack \
+  --external-builder http://host.docker.internal:4444/ \
+  --enable-latest-fork 0 \
+  --flashblocks \
+  --base-overlay \
+  --flashblocks-builder ws://host.docker.internal:1111/ws \
+  --enable-entrypoint
+```
 
 ### Example Commands
 
