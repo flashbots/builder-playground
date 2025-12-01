@@ -39,7 +39,7 @@ type OpRecipe struct {
 	// whether to enable websocket proxy
 	enableWebsocketProxy bool
 
-// whether to enable chain-monitor
+	// whether to enable chain-monitor
 	enableChainMonitor bool
 
 	// JSON files describing L2 predeploy accounts to inject into L2 genesis

@@ -279,7 +279,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 			}
 		}
 
-// Inject any additional L2 predeploy accounts provided via JSON files.
+		// Inject any additional L2 predeploy accounts provided via JSON files.
 		if len(b.predeployJSONFiles) > 0 {
 			allocs := make(map[string]interface{})
 			input["alloc"] = allocs
