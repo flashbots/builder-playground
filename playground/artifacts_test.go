@@ -32,20 +32,20 @@ func newTestOutput(t *testing.T) *output {
 	return o
 }
 
-func TestArtifactsBuilder_EntryPointAllocToggle(t *testing.T) {
+func TestArtifactsBuilder_PredeployJSONInjection(t *testing.T) {
 	dir, err := os.MkdirTemp("", "artifacts-entrypoint")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
+	// Build without any predeploy JSON configured.
 	builder := NewArtifactsBuilder()
 	builder.OutputDir(dir)
 
-	// Build without EntryPoint enabled.
 	artifacts, err := builder.Build()
 	if err != nil {
-		t.Fatalf("failed to build artifacts without entrypoint: %v", err)
+		t.Fatalf("failed to build artifacts without predeploys: %v", err)
 	}
 
 	l2Path := filepath.Join(artifacts.Out.dst, "l2-genesis.json")
@@ -58,15 +58,15 @@ func TestArtifactsBuilder_EntryPointAllocToggle(t *testing.T) {
 		Alloc map[string]json.RawMessage `json:"alloc"`
 	}
 	if err := json.Unmarshal(data, &genesisNoEP); err != nil {
-		t.Fatalf("failed to unmarshal l2-genesis without entrypoint: %v", err)
+		t.Fatalf("failed to unmarshal l2-genesis without predeploys: %v", err)
 	}
 
-	// Ensure EntryPoint address is not present when disabled.
+	// Ensure EntryPoint address is not present when no predeploy JSON is configured.
 	if _, ok := genesisNoEP.Alloc["0x0000000071727De22E5E9d8BAf0edAc6f37da032"]; ok {
-		t.Fatalf("entrypoint alloc present when flag disabled")
+		t.Fatalf("entrypoint alloc present when no predeploy JSON configured")
 	}
 
-	// Rebuild with EntryPoint enabled in a fresh directory.
+	// Rebuild with EntryPoint predeploy configured in a fresh directory.
 	dir2, err := os.MkdirTemp("", "artifacts-entrypoint-enabled")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -75,11 +75,14 @@ func TestArtifactsBuilder_EntryPointAllocToggle(t *testing.T) {
 
 	builder2 := NewArtifactsBuilder()
 	builder2.OutputDir(dir2)
-	builder2.EnableEntryPoint(true)
+	// Use the existing EntryPoint v0.7 JSON as a predeploy definition.
+	builder2.PredeployJSONFiles([]string{
+		filepath.Join("playground", "utils", "entrypoint_v0.7.json"),
+	})
 
 	artifacts2, err := builder2.Build()
 	if err != nil {
-		t.Fatalf("failed to build artifacts with entrypoint: %v", err)
+		t.Fatalf("failed to build artifacts with EntryPoint predeploy: %v", err)
 	}
 
 	l2Path2 := filepath.Join(artifacts2.Out.dst, "l2-genesis.json")
