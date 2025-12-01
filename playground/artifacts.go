@@ -70,6 +70,7 @@ type ArtifactsBuilder struct {
 	l1BlockTimeInSeconds uint64
 	opBlockTimeInSeconds uint64
 	prefundedAccounts    []string
+	enableEntryPoint     bool
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -103,6 +104,11 @@ func (b *ArtifactsBuilder) L1BlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 
 func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
 	b.opBlockTimeInSeconds = blockTimeSeconds
+	return b
+}
+
+func (b *ArtifactsBuilder) EnableEntryPoint(enableEntryPoint bool) *ArtifactsBuilder {
+	b.enableEntryPoint = enableEntryPoint
 	return b
 }
 

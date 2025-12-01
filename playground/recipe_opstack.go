@@ -39,8 +39,11 @@ type OpRecipe struct {
 	// whether to enable websocket proxy
 	enableWebsocketProxy bool
 
-	// whether to enable chain-monitor
+// whether to enable chain-monitor
 	enableChainMonitor bool
+
+	// whether to enable ERC-4337 EntryPoint v0.7 as an L2 predeploy
+	enableEntryPoint bool
 }
 
 func (o *OpRecipe) Name() string {
@@ -61,7 +64,8 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.baseOverlay, "base-overlay", false, "Whether to use base implementation for flashblocks-rpc")
 	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
-	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
+flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
+	flags.BoolVar(&o.enableEntryPoint, "enable-entrypoint", false, "Enable ERC-4337 EntryPoint v0.7 as an L2 predeploy")
 	return flags
 }
 
@@ -69,6 +73,7 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
 	builder.ApplyLatestL2Fork(o.enableLatestFork)
 	builder.OpBlockTime(o.blockTime)
+	builder.EnableEntryPoint(o.enableEntryPoint)
 	return builder
 }
 
