@@ -59,16 +59,16 @@ var clConfigContent []byte
 //go:embed utils/query.sh
 var queryReadyCheck []byte
 
-//go:embed utils/entrypoint_v0.7.json
-var entryPointV07JSON []byte
-
 type ArtifactsBuilder struct {
 	outputDir         string
 	applyLatestL1Fork bool
 	genesisDelay      uint64
 	applyLatestL2Fork *uint64
 	OpblockTime       uint64
-	enableEntryPoint  bool
+
+	// JSON files describing additional L2 predeploy accounts to inject into
+	// the L2 genesis alloc (e.g. EntryPoint, paymasters, or other system contracts).
+	predeployJSONFiles []string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -105,8 +105,11 @@ func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 	return b
 }
 
-func (b *ArtifactsBuilder) EnableEntryPoint(enableEntryPoint bool) *ArtifactsBuilder {
-	b.enableEntryPoint = enableEntryPoint
+// PredeployJSONFiles configures the builder with one or more JSON files
+// that each describe a single L2 predeploy account to inject into the
+// L2 genesis alloc.
+func (b *ArtifactsBuilder) PredeployJSONFiles(files []string) *ArtifactsBuilder {
+	b.predeployJSONFiles = files
 	return b
 }
 
@@ -304,14 +307,19 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			}
 		}
 
-		// Optionally inject the ERC-4337 EntryPoint v0.7 predeploy.
-		if b.enableEntryPoint {
-			fmt.Println("Enabling EntryPoint v0.7 predeploy")
-			entryAddr, entryAlloc, err := loadEntryPointAlloc()
+		// Inject any additional L2 predeploy accounts provided via JSON files.
+		for _, path := range b.predeployJSONFiles {
+			data, err := os.ReadFile(path)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load EntryPoint predeploy alloc: %w", err)
+				return nil, fmt.Errorf("failed to read L2 predeploy JSON %q: %w", path, err)
 			}
-			allocs[entryAddr] = entryAlloc
+
+			addr, account, err := loadPredeployAlloc(data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load L2 predeploy from %q: %w", path, err)
+			}
+
+			allocs[addr] = account
 		}
 
 		newOpGenesis, err := overrideJSON(opGenesis, input)
@@ -367,43 +375,43 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	return &Artifacts{Out: out}, nil
 }
 
-type entryPointAlloc struct {
-	Address string            `json:"address"`
-	Balance string            `json:"balance"`
-	Nonce   string            `json:"nonce"`
-	Code    string            `json:"code"`
-	Storage map[string]string `json:"storage"`
+// PredeployAlloc is a generic JSON schema for describing a single L2
+// predeploy account to be injected into the L2 genesis alloc.
+type PredeployAlloc struct {
+	Address string                 `json:"address"`
+	Balance string                 `json:"balance"`
+	Nonce   string                 `json:"nonce"`
+	Code    string                 `json:"code"`
+	Storage map[string]interface{} `json:"storage"`
 }
 
-func loadEntryPointAlloc() (string, map[string]interface{}, error) {
-	if len(entryPointV07JSON) == 0 {
-		return "", nil, fmt.Errorf("entrypoint_v0.7 asset is empty")
+// loadPredeployAlloc parses a JSON blob describing a single L2 predeploy
+// account and returns the address plus a genesis alloc entry.
+func loadPredeployAlloc(raw []byte) (string, map[string]interface{}, error) {
+	if len(raw) == 0 {
+		return "", nil, fmt.Errorf("predeploy JSON is empty")
 	}
 
-	var ep entryPointAlloc
-	if err := json.Unmarshal(entryPointV07JSON, &ep); err != nil {
-		return "", nil, fmt.Errorf("failed to unmarshal entrypoint_v0.7.json: %w", err)
+	var p PredeployAlloc
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return "", nil, fmt.Errorf("failed to unmarshal predeploy JSON: %w", err)
 	}
-	if ep.Address == "" {
-		return "", nil, fmt.Errorf("entrypoint_v0.7.json missing address")
+	if p.Address == "" {
+		return "", nil, fmt.Errorf("predeploy JSON missing address")
 	}
 
 	account := map[string]interface{}{
-		"balance": ep.Balance,
-		"nonce":   ep.Nonce,
+		"balance": p.Balance,
+		"nonce":   p.Nonce,
 	}
-	if ep.Code != "" {
-		account["code"] = ep.Code
+	if p.Code != "" {
+		account["code"] = p.Code
 	}
-	if len(ep.Storage) > 0 {
-		storage := make(map[string]interface{}, len(ep.Storage))
-		for k, v := range ep.Storage {
-			storage[k] = v
-		}
-		account["storage"] = storage
+	if len(p.Storage) > 0 {
+		account["storage"] = p.Storage
 	}
 
-	return ep.Address, account, nil
+	return p.Address, account, nil
 }
 
 type OpGenesisTmplInput struct {
