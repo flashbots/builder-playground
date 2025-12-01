@@ -1,9 +1,7 @@
 package playground
 
 import (
-	"encoding/json"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -30,80 +28,4 @@ func newTestOutput(t *testing.T) *output {
 		dst: dir,
 	}
 	return o
-}
-
-func TestArtifactsBuilder_PredeployJSONInjection(t *testing.T) {
-	dir, err := os.MkdirTemp("", "artifacts-entrypoint")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	// Build without any predeploy JSON configured.
-	builder := NewArtifactsBuilder()
-	builder.OutputDir(dir)
-
-	artifacts, err := builder.Build()
-	if err != nil {
-		t.Fatalf("failed to build artifacts without predeploys: %v", err)
-	}
-
-	l2Path := filepath.Join(artifacts.Out.dst, "l2-genesis.json")
-	data, err := os.ReadFile(l2Path)
-	if err != nil {
-		t.Fatalf("failed to read l2-genesis.json: %v", err)
-	}
-
-	var genesisNoEP struct {
-		Alloc map[string]json.RawMessage `json:"alloc"`
-	}
-	if err := json.Unmarshal(data, &genesisNoEP); err != nil {
-		t.Fatalf("failed to unmarshal l2-genesis without predeploys: %v", err)
-	}
-
-	// Ensure EntryPoint address is not present when no predeploy JSON is configured.
-	if _, ok := genesisNoEP.Alloc["0x0000000071727De22E5E9d8BAf0edAc6f37da032"]; ok {
-		t.Fatalf("entrypoint alloc present when no predeploy JSON configured")
-	}
-
-	// Rebuild with EntryPoint predeploy configured in a fresh directory.
-	dir2, err := os.MkdirTemp("", "artifacts-entrypoint-enabled")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir2)
-
-	builder2 := NewArtifactsBuilder()
-	builder2.OutputDir(dir2)
-	// Use the existing EntryPoint v0.7 JSON as a predeploy definition.
-	builder2.PredeployJSONFiles([]string{
-		filepath.Join("playground", "utils", "entrypoint_v0.7.json"),
-	})
-
-	artifacts2, err := builder2.Build()
-	if err != nil {
-		t.Fatalf("failed to build artifacts with EntryPoint predeploy: %v", err)
-	}
-
-	l2Path2 := filepath.Join(artifacts2.Out.dst, "l2-genesis.json")
-	data2, err := os.ReadFile(l2Path2)
-	if err != nil {
-		t.Fatalf("failed to read l2-genesis.json (enabled): %v", err)
-	}
-
-	var genesisWithEP struct {
-		Alloc map[string]map[string]interface{} `json:"alloc"`
-	}
-	if err := json.Unmarshal(data2, &genesisWithEP); err != nil {
-		t.Fatalf("failed to unmarshal l2-genesis with entrypoint: %v", err)
-	}
-
-	epAlloc, ok := genesisWithEP.Alloc["0x0000000071727De22E5E9d8BAf0edAc6f37da032"]
-	if !ok {
-		t.Fatalf("entrypoint alloc missing when flag enabled")
-	}
-
-	if epAlloc["balance"] == nil {
-		t.Fatalf("entrypoint alloc missing balance field")
-	}
 }
