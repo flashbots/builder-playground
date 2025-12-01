@@ -61,10 +61,6 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.baseOverlay, "base-overlay", false, "Whether to use base implementation for flashblocks-rpc")
 	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
-
-	// L2 predeploys are configured via JSON files, which are injected into the L2
-	// genesis alloc. This replaces the old --enable-entrypoint flag with a
-	// more generic and extensible mechanism.
 	flags.StringArrayVar(
 		&o.l2PredeployJSON,
 		"l2-predeploy-json",
