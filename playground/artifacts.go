@@ -372,32 +372,39 @@ func loadPredeployAlloc(raw []byte) (string, map[string]interface{}, error) {
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return "", nil, fmt.Errorf("failed to unmarshal predeploy JSON: %w", err)
 	}
+
+	// Required: address
 	if p.Address == "" {
 		return "", nil, fmt.Errorf("predeploy JSON missing address")
 	}
-	// Validate address is valid
 	if !gethcommon.IsHexAddress(p.Address) {
 		return "", nil, fmt.Errorf("invalid address %s", p.Address)
 	}
 
-	// Validate balance (if provided) is a hex string and parses as a big.Int
-	if p.Balance != "" {
-		if !strings.HasPrefix(p.Balance, "0x") {
-			return "", nil, fmt.Errorf("predeploy balance must be 0x-prefixed hex: %s", p.Balance)
-		}
-		if _, ok := new(big.Int).SetString(strings.TrimPrefix(p.Balance, "0x"), 16); !ok {
-			return "", nil, fmt.Errorf("invalid predeploy balance hex: %s", p.Balance)
-		}
+	// Defaults
+	if p.Balance == "" {
+		p.Balance = "0x0"
+	}
+	if p.Nonce == "" {
+		p.Nonce = "0x1"
 	}
 
-	// Validate nonce (if provided) is a hex string and parses as a big.Int
-	if p.Nonce != "" {
-		if !strings.HasPrefix(p.Nonce, "0x") {
-			return "", nil, fmt.Errorf("predeploy nonce must be 0x-prefixed hex: %s", p.Nonce)
+	// Validation helpers (kept local; could also live in utils.go)
+	validateHexUint := func(name, value string) error {
+		if !strings.HasPrefix(value, "0x") {
+			return fmt.Errorf("%s must be 0x-prefixed hex: %s", name, value)
 		}
-		if _, ok := new(big.Int).SetString(strings.TrimPrefix(p.Nonce, "0x"), 16); !ok {
-			return "", nil, fmt.Errorf("invalid predeploy nonce hex: %s", p.Nonce)
+		if _, ok := new(big.Int).SetString(strings.TrimPrefix(value, "0x"), 16); !ok {
+			return fmt.Errorf("invalid %s hex: %s", name, value)
 		}
+		return nil
+	}
+
+	if err := validateHexUint("predeploy balance", p.Balance); err != nil {
+		return "", nil, err
+	}
+	if err := validateHexUint("predeploy nonce", p.Nonce); err != nil {
+		return "", nil, err
 	}
 
 	account := map[string]interface{}{
