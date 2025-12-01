@@ -65,6 +65,7 @@ type ArtifactsBuilder struct {
 	genesisDelay      uint64
 	applyLatestL2Fork *uint64
 	OpblockTime       uint64
+	enableEntryPoint  bool
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -98,6 +99,11 @@ func (b *ArtifactsBuilder) GenesisDelay(genesisDelaySeconds uint64) *ArtifactsBu
 
 func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
 	b.OpblockTime = blockTimeSeconds
+	return b
+}
+
+func (b *ArtifactsBuilder) EnableEntryPoint(enableEntryPoint bool) *ArtifactsBuilder {
+	b.enableEntryPoint = enableEntryPoint
 	return b
 }
 
