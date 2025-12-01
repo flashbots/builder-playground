@@ -319,6 +319,10 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 				return nil, fmt.Errorf("failed to load L2 predeploy from %q: %w", path, err)
 			}
 
+			if _, exists := allocs[addr]; exists {
+				return nil, fmt.Errorf("L2 predeploy address %s already exists in allocs, cannot inject duplicate address", addr)
+			}
+
 			allocs[addr] = account
 		}
 
