@@ -287,12 +287,12 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 			for _, path := range b.predeployJSONFiles {
 				data, err := os.ReadFile(path)
 				if err != nil {
-					return nil, fmt.Errorf("failed to read L2 predeploy JSON %q: %w", path, err)
+					return fmt.Errorf("failed to read L2 predeploy JSON %q: %w", path, err)
 				}
 
 				addr, account, err := loadPredeployAlloc(data)
 				if err != nil {
-					return nil, fmt.Errorf("failed to load L2 predeploy from %q: %w", path, err)
+					return fmt.Errorf("failed to load L2 predeploy from %q: %w", path, err)
 				}
 
 				allocs[addr] = account
