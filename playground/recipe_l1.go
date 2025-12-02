@@ -17,10 +17,10 @@ type L1Recipe struct {
 	useRethForValidation bool
 
 	// secondaryEL enables the use of a secondary EL connected to the validator beacon node
-	// It is enabled through the use of the cl-proxy service. If the input is a plain number, assumed
-	// it's a port number and the secondary EL is assumed to be running on localhost at that port.
-	// Otherwise, assume it's a full address (e.g http://some-el:8551) where to reach the secondary EL,
-	// use http://host.internal.docker.internal:<port> to reach the host machine from within docker.
+	// It is enabled through the use of the cl-proxy service. If the input is a plain number, it is assumed
+	// to be a port number and the secondary EL is assumed to be running on localhost at that port.
+	// Otherwise, it is assumed to be a full address (e.g http://some-el:8551) where to reach the secondary EL,
+	// use http://host.docker.internal:<port> to reach the host machine from within docker.
 	secondaryEL string
 
 	// if useNativeReth is set to true, the Reth EL execution client for the validator beacon node
@@ -43,7 +43,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("l1", flag.ContinueOnError)
 	flags.BoolVar(&l.latestFork, "latest-fork", false, "use the latest fork")
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
-	flags.StringVar(&l.secondaryEL, "secondary-el", "", "Address or port to use for the secondary builder, if only port provided, address is inferred as http://localhost:<port> (where localhost is within Docker and not on your machine). You can use http://host.docker.internal:<port> to reach your host machine from within Docker.")
+	flags.StringVar(&l.secondaryEL, "secondary-el", "", "Address or port to use for the secondary EL (execution layer); if only a port is provided, address is inferred as http://localhost:<port> (where localhost is within Docker and not on your machine). You can use http://host.docker.internal:<port> to reach your host machine from within Docker.")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
 	flags.BoolVar(&l.useSeparateMevBoost, "use-separate-mev-boost", false, "use separate mev-boost and mev-boost-relay services")
 	return flags
