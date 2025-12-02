@@ -56,7 +56,7 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-var isPortRegex = regexp.MustCompile(`^\d{2,5}$`)
+var looksLikePortRegex = regexp.MustCompile(`^\d{2,5}$`)
 
 func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	svcManager := NewManifest(ctx, artifacts.Out)
@@ -69,7 +69,7 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	var elService string
 	if l.secondaryEL != "" {
 		address := l.secondaryEL
-		if isPortRegex.MatchString(l.secondaryEL) {
+		if looksLikePortRegex.MatchString(l.secondaryEL) {
 			address = fmt.Sprintf("http://localhost:%s", l.secondaryEL)
 		}
 
