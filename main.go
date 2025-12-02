@@ -18,24 +18,25 @@ import (
 var version = "dev"
 
 var (
-	outputFlag       string
-	genesisDelayFlag uint64
-	withOverrides    []string
-	watchdog         bool
-	dryRun           bool
-	interactive      bool
-	timeout          time.Duration
-	logLevelFlag     string
-	bindExternal     bool
-	withPrometheus   bool
-	networkName      string
-	labels           playground.MapStringFlag
-	disableLogs      bool
-	platform         string
-	contenderEnabled bool
-	contenderArgs    []string
-	contenderTarget  string
-	detached         bool
+	outputFlag        string
+	genesisDelayFlag  uint64
+	withOverrides     []string
+	watchdog          bool
+	dryRun            bool
+	interactive       bool
+	timeout           time.Duration
+	logLevelFlag      string
+	bindExternal      bool
+	withPrometheus    bool
+	networkName       string
+	labels            playground.MapStringFlag
+	disableLogs       bool
+	platform          string
+	contenderEnabled  bool
+	contenderArgs     []string
+	contenderTarget   string
+	detached          bool
+	prefundedAccounts []string
 )
 
 var rootCmd = &cobra.Command{
@@ -181,6 +182,7 @@ func main() {
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
 		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present)")
 
 		startCmd.AddCommand(recipeCmd)
 	}
@@ -226,6 +228,7 @@ func runIt(recipe playground.Recipe) error {
 	builder := recipe.Artifacts()
 	builder.OutputDir(outputFlag)
 	builder.GenesisDelay(genesisDelayFlag)
+	builder.PrefundedAccounts(prefundedAccounts)
 	artifacts, err := builder.Build()
 	if err != nil {
 		return err
