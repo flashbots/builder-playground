@@ -719,6 +719,7 @@ func (o *OpReth) Run(service *Service, ctx *ExContext) {
 			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
