@@ -2,6 +2,7 @@ package playground
 
 import (
 	"fmt"
+	"regexp"
 
 	flag "github.com/spf13/pflag"
 )
@@ -15,9 +16,12 @@ type L1Recipe struct {
 	// useRethForValidation signals mev-boost to use the Reth EL node for block validation
 	useRethForValidation bool
 
-	// secondaryELPort enables the use of a secondary EL connected to the validator beacon node
-	// It is enabled through the use of the cl-proxy service
-	secondaryELPort uint64
+	// secondaryEL enables the use of a secondary EL connected to the validator beacon node
+	// It is enabled through the use of the cl-proxy service. If the input is a plain number, assumed
+	// it's a port number and the secondary EL is assumed to be running on localhost at that port.
+	// Otherwise, assume it's a full address (e.g http://some-el:8551) where to reach the secondary EL,
+	// use http://host.internal.docker.internal:<port> to reach the host machine from within docker.
+	secondaryEL string
 
 	// if useNativeReth is set to true, the Reth EL execution client for the validator beacon node
 	// will run on the host machine. This is useful if you want to bind to the Reth database and you
@@ -39,7 +43,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("l1", flag.ContinueOnError)
 	flags.BoolVar(&l.latestFork, "latest-fork", false, "use the latest fork")
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
-	flags.Uint64Var(&l.secondaryELPort, "secondary-el", 0, "port to use for the secondary builder")
+	flags.StringVar(&l.secondaryEL, "secondary-el", "", "Address or port to use for the secondary builder, if only port provided, address is inferred as http://localhost:<port> (where localhost is within Docker and not on your machine). You can use http://host.docker.internal:<port> to reach your host machine from within Docker.")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
 	flags.BoolVar(&l.useSeparateMevBoost, "use-separate-mev-boost", false, "use separate mev-boost and mev-boost-relay services")
 	return flags
@@ -52,6 +56,8 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
+var isPortRegex = regexp.MustCompile(`^\d{2,5}$`)
+
 func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	svcManager := NewManifest(ctx, artifacts.Out)
 
@@ -61,13 +67,18 @@ func (l *L1Recipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	})
 
 	var elService string
-	if l.secondaryELPort != 0 {
+	if l.secondaryEL != "" {
+		address := l.secondaryEL
+		if isPortRegex.MatchString(l.secondaryEL) {
+			address = fmt.Sprintf("http://localhost:%s", l.secondaryEL)
+		}
+
 		// we are going to use the cl-proxy service to connect the beacon node to two builders
 		// one the 'el' builder and another one the remote one
 		elService = "cl-proxy"
 		svcManager.AddService("cl-proxy", &ClProxy{
 			PrimaryBuilder:   "el",
-			SecondaryBuilder: fmt.Sprintf("http://localhost:%d", l.secondaryELPort),
+			SecondaryBuilder: address,
 		})
 	} else {
 		elService = "el"
