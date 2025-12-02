@@ -239,14 +239,15 @@ func runIt(recipe playground.Recipe) error {
 			TargetChain: contenderTarget,
 		},
 	}, artifacts)
-	if err := svcManager.Validate(); err != nil {
-		return fmt.Errorf("failed to validate manifest: %w", err)
-	}
 
 	// generate the dot graph
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
+	}
+
+	if err := svcManager.Validate(); err != nil {
+		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
 
 	// save the manifest.json file
