@@ -62,6 +62,7 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 ## Common Options
 
 - `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.playground/devnet`
+- `--detached` (bool): Run the recipes in the background. Defaults to `false`.
 - `--genesis-delay` (int): The delay in seconds before the genesis block is created. Defaults to `10` seconds
 - `--watchdog` (bool): Enable the watchdog service to monitor the specific chain
 - `--dry-run` (bool): Generates the artifacts and manifest but does not deploy anything (also enabled with the `--mise-en-place` flag)
@@ -91,6 +92,14 @@ $ builder-playground inspect op-geth authrpc
 ```
 
 This command starts a `tcpflow` container in the same network interface as the service and captures the traffic to the specified port.
+
+## Clean
+
+Removes a recipe running in the background
+
+```bash
+$ builder-playground clean [--output ./output]
+```
 
 ## Internals
 
