@@ -186,7 +186,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
-		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-account", []string{}, "Add a prefunded account by passing its private key in hexadecimal format")
+		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-account", []string{}, "Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present)")
 
 		cookCmd.AddCommand(recipeCmd)
 	}

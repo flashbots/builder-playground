@@ -68,7 +68,7 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 - `--log-level` (string): Log level to use (debug, info, warn, error, fatal). Defaults to `info`.
 - `--labels` (key=val): Custom labels to apply to your deployment.
 - `--disable-logs` (bool): Disable the logs for the services. Defaults to `false`.
-- `--prefunded-account` (string, repeated): Fund in L1 genesis this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format with 0x
+- `--prefunded-account` (string, repeated): Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present).
 - `--contender` (bool): Enable [contender](https://github.com/flashbots/contender) spammer. Required to use other contender flags.
   - `--contender.arg` (string): Pass custom args to the contender CLI. 
   Example: `--contender.arg "--tpb 20"`
@@ -76,9 +76,9 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 
 To stop the playground, press `Ctrl+C`.
 
-### L1 Static Prefunded Accounts
+### Static Prefunded Accounts
 
-The following addresses are pre-funded in the L1 genesis allocation, all with a balance of `309485009.8213451 ETH`:
+The following addresses are pre-funded on L1 and to L2 (if present), all with a balance of `309485009.8213451 ETH`:
 
 - `0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266` (Private key `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`)
 - `0x70997970c51812dc3a010c7d01b50e0d17dc79c8` (Private key `0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d`)
