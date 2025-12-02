@@ -441,7 +441,7 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 			"--datadir", "/data_reth",
 			"--color", "never",
 			"--ipcpath", "/data_reth/reth.ipc",
-			"--addr", "127.0.0.1",
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
