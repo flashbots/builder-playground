@@ -33,6 +33,7 @@ var platform string
 var contenderEnabled bool
 var contenderArgs []string
 var contenderTarget string
+var prefundedAccounts []string
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -185,6 +186,7 @@ func main() {
 		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
+		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-account", []string{}, "Add a prefunded account by passing its private key in hexadecimal format")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
@@ -225,6 +227,7 @@ func runIt(recipe playground.Recipe) error {
 	builder := recipe.Artifacts()
 	builder.OutputDir(outputFlag)
 	builder.GenesisDelay(genesisDelayFlag)
+	builder.PrefundedAccounts(prefundedAccounts)
 	artifacts, err := builder.Build()
 	if err != nil {
 		return err
