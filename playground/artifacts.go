@@ -314,16 +314,18 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 				return nil, fmt.Errorf("failed to read L2 predeploy JSON %q: %w", path, err)
 			}
 
-			addr, account, err := loadPredeployAlloc(data)
+			genesisAllocMap, err := loadPredeployAlloc(data)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load L2 predeploy from %q: %w", path, err)
 			}
 
-			if _, exists := allocs[addr]; exists {
-				return nil, fmt.Errorf("L2 predeploy address %s already exists in allocs, cannot inject duplicate address", addr)
-			}
+			for addr, account := range genesisAllocMap {
+				if _, exists := allocs[addr.String()]; exists {
+					return nil, fmt.Errorf("L2 predeploy address %s already exists in allocs, cannot inject duplicate address", addr.String())
+				}
 
-			allocs[addr] = account
+				allocs[addr.String()] = account
+			}
 		}
 
 		newOpGenesis, err := overrideJSON(opGenesis, input)
@@ -381,72 +383,23 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 
 // PredeployAlloc is a generic JSON schema for describing a single L2
 // predeploy account to be injected into the L2 genesis alloc.
-type PredeployAlloc struct {
-	Address string                 `json:"address"`
-	Balance string                 `json:"balance"`
-	Nonce   string                 `json:"nonce"`
-	Code    string                 `json:"code"`
-	Storage map[string]interface{} `json:"storage"`
-}
 
 // loadPredeployAlloc parses a JSON blob describing a single L2 predeploy
 // account and returns the address plus a genesis alloc entry.
-func loadPredeployAlloc(raw []byte) (string, map[string]interface{}, error) {
+func loadPredeployAlloc(raw []byte) (types.GenesisAlloc, error) {
 	if len(raw) == 0 {
-		return "", nil, fmt.Errorf("predeploy JSON is empty")
+		return nil, fmt.Errorf("predeploy JSON is empty")
 	}
 
-	var p PredeployAlloc
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return "", nil, fmt.Errorf("failed to unmarshal predeploy JSON: %w", err)
-	}
-
-	// Required: address
-	if p.Address == "" {
-		return "", nil, fmt.Errorf("predeploy JSON missing address")
-	}
-	if !gethcommon.IsHexAddress(p.Address) {
-		return "", nil, fmt.Errorf("invalid address %s", p.Address)
-	}
-
-	// Defaults
-	if p.Balance == "" {
-		p.Balance = "0x0"
-	}
-	if p.Nonce == "" {
-		p.Nonce = "0x1"
+	var genesisAllocMap types.GenesisAlloc
+	err := genesisAllocMap.UnmarshalJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal predeploy JSON: %w", err)
 	}
 
 	// Validation helpers (kept local; could also live in utils.go)
-	validateHexUint := func(name, value string) error {
-		if !strings.HasPrefix(value, "0x") {
-			return fmt.Errorf("%s must be 0x-prefixed hex: %s", name, value)
-		}
-		if _, ok := new(big.Int).SetString(strings.TrimPrefix(value, "0x"), 16); !ok {
-			return fmt.Errorf("invalid %s hex: %s", name, value)
-		}
-		return nil
-	}
 
-	if err := validateHexUint("predeploy balance", p.Balance); err != nil {
-		return "", nil, err
-	}
-	if err := validateHexUint("predeploy nonce", p.Nonce); err != nil {
-		return "", nil, err
-	}
-
-	account := map[string]interface{}{
-		"balance": p.Balance,
-		"nonce":   p.Nonce,
-	}
-	if p.Code != "" {
-		account["code"] = p.Code
-	}
-	if len(p.Storage) > 0 {
-		account["storage"] = p.Storage
-	}
-
-	return p.Address, account, nil
+	return genesisAllocMap, nil
 }
 
 type OpGenesisTmplInput struct {

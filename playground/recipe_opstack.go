@@ -63,7 +63,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
 	flags.StringArrayVar(
 		&o.l2PredeployJSON,
-		"l2-predeploy-json",
+		"predeploy-json",
 		nil,
 		"Path(s) to JSON file(s) describing L2 predeploy accounts injected into L2 genesis (e.g. EntryPoint)",
 	)
