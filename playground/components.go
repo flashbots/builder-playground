@@ -977,3 +977,16 @@ func (s *Simulator) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data_simulator", "/data_simulator")
 }
+
+type MosaikBootnode struct{}
+
+func (m *MosaikBootnode) Name() string {
+	return "mosaik-bootnode"
+}
+
+func (m *MosaikBootnode) Run(service *Service, ctx *ExContext) {
+	service.
+		WithImage("docker.io/noot99/mosaik-bootnode").
+		WithTag("latest").
+		WithPort("p2p", 20201)
+}

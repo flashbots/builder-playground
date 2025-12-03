@@ -28,6 +28,7 @@ func init() {
 	register(&BProxy{})
 	register(&WebsocketProxy{})
 	register(&Simulator{})
+	register(&MosaikBootnode{})
 }
 
 func FindComponent(name string) ServiceGen {

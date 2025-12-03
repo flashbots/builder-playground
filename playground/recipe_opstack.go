@@ -105,6 +105,8 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	if o.flashblocks {
 		peers = append(peers, "flashblocks-rpc")
 
+		svcManager.AddService("mosaik-bootnode", &MosaikBootnode{})
+
 		svcManager.AddService("simulator", &Simulator{
 			FlashblocksWSService: "rollup-boost",
 		})
