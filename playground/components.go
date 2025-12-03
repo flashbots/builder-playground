@@ -382,7 +382,13 @@ func (o *OpGeth) Name() string {
 	return "op-geth"
 }
 
+func (o *OpGeth) Ready(instance *instance) error {
+	opGethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+	return waitForFirstBlock(context.Background(), opGethURL, 60*time.Second)
+}
+
 var _ ServiceWatchdog = &OpGeth{}
+var _ ServiceReady = &OpGeth{}
 
 func (o *OpGeth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
 	gethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
@@ -477,7 +483,13 @@ func (r *RethEL) Name() string {
 	return "reth"
 }
 
+func (r *RethEL) Ready(instance *instance) error {
+	elURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+	return waitForFirstBlock(context.Background(), elURL, 60*time.Second)
+}
+
 var _ ServiceWatchdog = &RethEL{}
+var _ ServiceReady = &RethEL{}
 
 func (r *RethEL) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
 	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
