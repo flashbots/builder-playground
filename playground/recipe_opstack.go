@@ -73,7 +73,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	// more generic and extensible mechanism.
 	flags.StringArrayVar(
 		&o.l2PredeployJSON,
-		"l2-predeploy-json",
+		"predeploy-json",
 		nil,
 		"Path(s) to JSON file(s) describing L2 predeploy accounts injected into L2 genesis (e.g. EntryPoint)",
 	)
