@@ -2,10 +2,8 @@ configType = "custom"
 l1ChainID = 1337
 fundDevAccounts = false
 useInterop = false
-l1ContractsLocator = "tag://op-contracts/v5.0.0-rc.2"
-# l1ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
-l2ContractsLocator = "tag://op-contracts/v5.0.0-rc.2"
-# l2ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
+l1ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-b112b16f8939fbb732c0693de3d3bd1e8e3e2f0771f91d5ab300a6c9b7b1af73.tar.gz"
+l2ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-b112b16f8939fbb732c0693de3d3bd1e8e3e2f0771f91d5ab300a6c9b7b1af73.tar.gz"
 
 [superchainRoles]
 proxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
@@ -24,6 +22,7 @@ gasLimit = 60000000
 eip1559DenominatorCanyon = 250
 eip1559Denominator = 50
 eip1559Elasticity = 6
+
 [chains.roles]
 l1ProxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 l2ProxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
