@@ -656,6 +656,11 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 }
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
+	// Contender is optional; skip when context or contender config is missing
+	if svcManager == nil || svcManager.ctx == nil || svcManager.ctx.Contender == nil {
+		return
+	}
+
 	if svcManager.ctx.Contender.Enabled {
 		svcManager.AddService(svcManager.ctx.Contender.Contender())
 	}
