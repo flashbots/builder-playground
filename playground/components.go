@@ -27,7 +27,7 @@ type RollupBoost struct {
 func (r *RollupBoost) Apply(manifest *Manifest) {
 	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("v0.7.12-rc1").
+		WithTag("v0.7.12").
         DependsOnHealthy(r.ELNode).
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
