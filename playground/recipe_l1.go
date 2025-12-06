@@ -54,7 +54,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
 	builder.ApplyLatestL1Fork(l.latestFork)
-	builder.L1BlockTime(min(1, uint64(l.blockTime.Seconds())))
+	builder.L1BlockTime(max(1, uint64(l.blockTime.Seconds())))
 
 	return builder
 }
