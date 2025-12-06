@@ -43,7 +43,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("l1", flag.ContinueOnError)
 	flags.BoolVar(&l.latestFork, "latest-fork", false, "use the latest fork")
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
-	flags.StringVar(&l.secondaryEL, "secondary-el", "", "Address or port to use for the secondary EL (execution layer); if only a port is provided, address is inferred as http://localhost:<port> (where localhost is within Docker and not on your machine). You can use http://host.docker.internal:<port> to reach your host machine from within Docker.")
+	flags.StringVar(&l.secondaryEL, "secondary-el", "", "Address or port to use for the secondary EL (execution layer); Can be a port number (e.g., '8551') in which case the full URL is derived as `http://localhost:<port>` or a complete URL (e.g., `http://docker-container-name:8551`), use `http://host.docker.internal:<port>` to reach a secondary execution client that runs on your host and not within Docker.")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
 	flags.BoolVar(&l.useSeparateMevBoost, "use-separate-mev-boost", false, "use separate mev-boost and mev-boost-relay services")
 	return flags

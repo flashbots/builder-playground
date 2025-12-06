@@ -31,7 +31,7 @@ Flags:
 
 - `--latest-fork`: Enable the latest fork at startup
 - `--use-reth-for-validation`: Use Reth EL for block validation in mev-boost.
-- `--secondary-el`: Host or port to use for a secondary el (enables the internal cl-proxy proxy). Can be a port number (e.g., '8545') in which case the full URL is derived as `http://localhost:<port>` or a complete URL (e.g., `http://remote-host:8545`), use `http://host.docker.internal:<port>` to reach a secondary execution client that runs on your host and not within Docker.
+- `--secondary-el`: Host or port to use for a secondary el (enables the internal cl-proxy proxy). Can be a port number (e.g., '8551') in which case the full URL is derived as `http://localhost:<port>` or a complete URL (e.g., `http://remote-host:8551`), use `http://host.docker.internal:<port>` to reach a secondary execution client that runs on your host and not within Docker.
 - `--use-native-reth`: Run the Reth EL binary on the host instead of docker (recommended to bind to the Reth DB)
 - `--use-separate-mev-boost`: Spins a seperate service for mev-boost in addition with mev-boost-relay
 
