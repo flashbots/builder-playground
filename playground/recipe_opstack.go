@@ -1,10 +1,13 @@
 package playground
 
 import (
+	"fmt"
 	flag "github.com/spf13/pflag"
 )
 
 var _ Recipe = &OpRecipe{}
+
+const defaultL2BuilderAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 
 // OpRecipe is a recipe that deploys an OP stack
 type OpRecipe struct {
@@ -36,6 +39,9 @@ type OpRecipe struct {
 
 	// whether to enable websocket proxy
 	enableWebsocketProxy bool
+
+	// whether to enable chain-monitor
+	enableChainMonitor bool
 }
 
 func (o *OpRecipe) Name() string {
@@ -56,6 +62,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.baseOverlay, "base-overlay", false, "Whether to use base implementation for flashblocks-rpc")
 	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
+	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
 	return flags
 }
 
@@ -173,6 +180,21 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 		RollupNode:         "op-node",
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
+
+	if o.enableChainMonitor {
+		l2BlockTime := fmt.Sprintf("%ds", o.blockTime)
+
+		svcManager.AddService("chain-monitor", &ChainMonitor{
+			L1RPC:            Connect("el", "http"),
+			L2BlockTime:      l2BlockTime,
+			L2BuilderAddress: defaultL2BuilderAddress,
+			L2RPC:            Connect("op-geth", "http"),
+		})
+
+		svcManager.MustGetService("chain-monitor").
+			DependsOnHealthy("el").
+			DependsOnHealthy("op-geth")
+	}
 
 	if svcManager.ctx.Contender.TargetChain == "" {
 		svcManager.ctx.Contender.TargetChain = "op-geth"

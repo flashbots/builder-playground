@@ -25,4 +25,5 @@ func init() {
 	register(&BProxy{})
 	register(&WebsocketProxy{})
 	register(&BuilderHub{})
+	register(&ChainMonitor{})
 }

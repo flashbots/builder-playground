@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -74,10 +75,18 @@ func (o *OpRbuilder) Apply(manifest *Manifest) {
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			"--port", `{{Port "rpc" 30303}}`,
 			"--builder.enable-revert-protection",
+			"--rollup.builder-secret-key", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth")
+		WithVolume("data", "/data_op_reth").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if manifest.ctx.Bootnode != nil {
 		service.WithArgs("--trusted-peers", manifest.ctx.Bootnode.Connect())
@@ -211,6 +220,47 @@ func (w *WebsocketProxy) Apply(manifest *Manifest) {
 		)
 }
 
+func (w *WebsocketProxy) Name() string {
+	return "websocket-proxy"
+}
+
+type ChainMonitor struct {
+	L1RPC            string
+	L2BlockTime      string
+	L2BuilderAddress string
+	L2RPC            string
+	ServerListenAddress string
+}
+
+func (c *ChainMonitor) Run(service *Service, ctx *ExContext) {
+	serverListenAddress := c.ServerListenAddress
+	if serverListenAddress == "" {
+		serverListenAddress = "0.0.0.0:{{Port \"metrics\" 8080}}"
+	}
+
+    // we need to extract the port to register this service as exposing metrics
+	if _, portStr, err := net.SplitHostPort(serverListenAddress); err == nil {
+		if portNum, err := strconv.Atoi(portStr); err == nil {
+			service.WithPort("metrics", portNum)
+		}
+	}
+
+	service.WithImage("ghcr.io/flashbots/chain-monitor").
+		WithTag("v0.0.54").
+		WithArgs(
+			"serve",
+			"--l1-rpc", c.L1RPC,
+			"--l2-block-time", c.L2BlockTime,
+			"--l2-monitor-builder-address", c.L2BuilderAddress,
+			"--l2-rpc", c.L2RPC,
+			"--server-listen-address", serverListenAddress,
+		)
+}
+
+func (c *ChainMonitor) Name() string {
+	return "chain-monitor"
+}
+
 type OpBatcher struct {
 	L1Node             string
 	L2Node             string
@@ -257,6 +307,9 @@ func (o *OpNode) Apply(manifest *Manifest) {
 			"--l1.http-poll-interval", "6s",
 			"--l2", Connect(o.L2Node, "authrpc"),
 			"--l2.jwt-secret", "/data/jwtsecret",
+			"--metrics.enabled",
+			"--metrics.addr", "0.0.0.0",
+			"--metrics.port", `{{Port "metrics" 7300}}`,
 			"--sequencer.enabled",
 			"--sequencer.l1-confs", "0",
 			"--verifier.l1-confs", "0",
@@ -269,9 +322,6 @@ func (o *OpNode) Apply(manifest *Manifest) {
 			"--p2p.listen.udp", `{{PortUDP "p2p" 9003}}`,
 			"--p2p.scoring.peers", "light",
 			"--p2p.ban.peers", "true",
-			"--metrics.enabled",
-			"--metrics.addr", "0.0.0.0",
-			"--metrics.port", `{{Port "metrics" 7300}}`,
 			"--pprof.enabled",
 			"--rpc.enable-admin",
 			"--safedb.path", "/data_db",
@@ -355,7 +405,14 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithReadyFn(opGethReadyFn).
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
+		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact).
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 }
 
 func opGethReadyFn(ctx context.Context, instance *instance) error {
@@ -451,7 +508,14 @@ func (r *RethEL) Apply(manifest *Manifest) {
 		}).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth")
+		WithVolume("data", "/data_reth").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -639,7 +703,14 @@ func (o *OpReth) Apply(manifest *Manifest) {
 		}).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth")
+		WithVolume("data", "/data_op_reth").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 }
 
 type MevBoost struct {
