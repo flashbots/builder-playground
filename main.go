@@ -125,15 +125,8 @@ func main() {
 		cookCmd.AddCommand(recipeCmd)
 	}
 
-<<<<<<< HEAD
-=======
-	// reuse the same output flag for the artifacts command
-	artifactsCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-	artifactsAllCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-
 	cmd.InitWaitReadyCmd()
 
->>>>>>> main
 	rootCmd.AddCommand(cookCmd)
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(cmd.WaitReadyCmd)
@@ -279,8 +272,6 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
-<<<<<<< HEAD
-=======
 	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
 	networkReadyStart := time.Now()
 	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
@@ -289,7 +280,6 @@ func runIt(recipe playground.Recipe) error {
 	}
 	fmt.Printf("Network is ready for transactions (took %.1fs)\n", time.Since(networkReadyStart).Seconds())
 
->>>>>>> main
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
 	if len(output) > 0 {

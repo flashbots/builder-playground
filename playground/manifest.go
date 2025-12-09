@@ -285,15 +285,15 @@ type Service struct {
 
 	release    *release
 	watchdogFn watchdogFn
+	readyFn    readyFn
 }
 
 type watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
+type readyFn func(instance *instance) error
 
 type instance struct {
 	service *Service
-
-	logs *serviceLogs
-	// component ServiceGen
+	logs    *serviceLogs
 }
 
 type DependsOnCondition string
@@ -406,6 +406,11 @@ func (s *Service) WithRelease(rel *release) *Service {
 
 func (s *Service) WithWatchdog(watchdogFn watchdogFn) *Service {
 	s.watchdogFn = watchdogFn
+	return s
+}
+
+func (s *Service) WithReadyFn(readyFn readyFn) *Service {
+	s.readyFn = readyFn
 	return s
 }
 
@@ -615,13 +620,7 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 }
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
-<<<<<<< HEAD
 	if svcManager.ctx.Contender.Enabled {
 		svcManager.AddService(svcManager.ctx.Contender.Contender())
-=======
-
-	if svcManager.ctx.Contender != nil && svcManager.ctx.Contender.Enabled {
-		svcManager.AddService("contender", svcManager.ctx.Contender.Contender())
->>>>>>> main
 	}
 }

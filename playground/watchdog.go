@@ -29,3 +29,14 @@ func RunWatchdog(out *output, instances []*instance) error {
 	}
 	return nil
 }
+
+func CompleteReady(instances []*instance) error {
+	for _, s := range instances {
+		if readyFn := s.service.readyFn; readyFn != nil {
+			if err := readyFn(s); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

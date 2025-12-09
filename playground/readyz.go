@@ -90,7 +90,7 @@ func (s *ReadyzServer) handleReadyz(w http.ResponseWriter, r *http.Request) {
 func (s *ReadyzServer) isReady() (bool, error) {
 	ctx := context.Background()
 	for _, inst := range s.instances {
-		if _, ok := inst.component.(ServiceReady); ok {
+		if inst.service.readyFn != nil {
 			elURL := fmt.Sprintf("http://localhost:%d", inst.service.MustGetPort("http").HostPort)
 			ready, err := isChainProducingBlocks(ctx, elURL)
 			if err != nil {
