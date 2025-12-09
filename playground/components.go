@@ -382,7 +382,13 @@ func (o *OpGeth) Name() string {
 	return "op-geth"
 }
 
+func (o *OpGeth) Ready(instance *instance) error {
+	opGethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+	return waitForFirstBlock(context.Background(), opGethURL, 60*time.Second)
+}
+
 var _ ServiceWatchdog = &OpGeth{}
+var _ ServiceReady = &OpGeth{}
 
 func (o *OpGeth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
 	gethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
@@ -441,7 +447,7 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 			"--datadir", "/data_reth",
 			"--color", "never",
 			"--ipcpath", "/data_reth/reth.ipc",
-			"--addr", "127.0.0.1",
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
@@ -477,7 +483,13 @@ func (r *RethEL) Name() string {
 	return "reth"
 }
 
+func (r *RethEL) Ready(instance *instance) error {
+	elURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+	return waitForFirstBlock(context.Background(), elURL, 60*time.Second)
+}
+
 var _ ServiceWatchdog = &RethEL{}
+var _ ServiceReady = &RethEL{}
 
 func (r *RethEL) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
 	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
@@ -719,6 +731,7 @@ func (o *OpReth) Run(service *Service, ctx *ExContext) {
 			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").

@@ -76,6 +76,64 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 
 To stop the playground, press `Ctrl+C`.
 
+## Network Readiness
+
+The playground can expose a `/readyz` HTTP endpoint to check if the network is ready to accept transactions (i.e., blocks are being produced).
+
+### Readyz Endpoint
+
+Enable the readyz server with the `--readyz-port` flag:
+
+```bash
+$ builder-playground cook l1 --readyz-port 8080
+```
+
+Then check readiness:
+
+```bash
+$ curl http://localhost:8080/readyz
+{"ready":true}
+```
+
+Returns:
+- `200 OK` with `{"ready": true}` when the network is producing blocks
+- `503 Service Unavailable` with `{"ready": false, "error": "..."}` otherwise
+
+### Wait-Ready Command
+
+Use the `wait-ready` command to block until the network is ready:
+
+```bash
+$ builder-playground wait-ready [flags]
+```
+
+Flags:
+- `--url` (string): readyz endpoint URL. Defaults to `http://localhost:8080/readyz`
+- `--timeout` (duration): Maximum time to wait. Defaults to `60s`
+- `--interval` (duration): Poll interval. Defaults to `1s`
+
+Example:
+
+```bash
+# In terminal 1: Start the playground with readyz enabled
+$ builder-playground cook l1 --readyz-port 8080
+
+# In terminal 2: Wait for the network to be ready
+$ builder-playground wait-ready --timeout 120s
+Waiting for http://localhost:8080/readyz (timeout: 2m0s, interval: 1s)
+  [1s] Attempt 1: 503 Service Unavailable
+  [2s] Attempt 2: 503 Service Unavailable
+  [3s] Ready! (200 OK)
+```
+
+This is useful for CI/CD pipelines or scripts that need to wait for the network before deploying contracts.
+
+Alternatively, use a bash one-liner:
+
+```bash
+$ timeout 60 bash -c 'until curl -sf http://localhost:8080/readyz | grep -q "\"ready\":true"; do sleep 1; done'
+```
+
 ## Inspect
 
 Builder-playground supports inspecting the connection of a service to a specific port.

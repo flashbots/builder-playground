@@ -355,10 +355,13 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
+	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
+	networkReadyStart := time.Now()
 	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
 		dockerRunner.Stop()
-		return fmt.Errorf("failed to complete ready: %w", err)
+		return fmt.Errorf("network not ready: %w", err)
 	}
+	fmt.Printf("Network is ready for transactions (took %.1fs)\n", time.Since(networkReadyStart).Seconds())
 
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
