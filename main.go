@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/flashbots/builder-playground/playground/cmd"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +34,7 @@ var platform string
 var contenderEnabled bool
 var contenderArgs []string
 var contenderTarget string
+var readyzPort int
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -118,12 +120,23 @@ func main() {
 		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
+		recipeCmd.Flags().IntVar(&readyzPort, "readyz-port", 0, "port for readyz HTTP endpoint (0 to disable)")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
 
+<<<<<<< HEAD
+=======
+	// reuse the same output flag for the artifacts command
+	artifactsCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+	artifactsAllCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+
+	cmd.InitWaitReadyCmd()
+
+>>>>>>> main
 	rootCmd.AddCommand(cookCmd)
 	rootCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(cmd.WaitReadyCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -225,6 +238,16 @@ func runIt(recipe playground.Recipe) error {
 		cancel()
 	}()
 
+	var readyzServer *playground.ReadyzServer
+	if readyzPort > 0 {
+		readyzServer = playground.NewReadyzServer(dockerRunner.Instances(), readyzPort)
+		if err := readyzServer.Start(); err != nil {
+			return fmt.Errorf("failed to start readyz server: %w", err)
+		}
+		defer readyzServer.Stop()
+		fmt.Printf("Readyz endpoint available at http://localhost:%d/readyz\n", readyzPort)
+	}
+
 	if err := dockerRunner.Run(); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
@@ -256,6 +279,17 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
+<<<<<<< HEAD
+=======
+	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
+	networkReadyStart := time.Now()
+	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
+		dockerRunner.Stop()
+		return fmt.Errorf("network not ready: %w", err)
+	}
+	fmt.Printf("Network is ready for transactions (took %.1fs)\n", time.Since(networkReadyStart).Seconds())
+
+>>>>>>> main
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
 	if len(output) > 0 {

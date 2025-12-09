@@ -358,7 +358,23 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 }
 
+<<<<<<< HEAD
 func opGethWatchdogFn(out io.Writer, instance *instance, ctx context.Context) error {
+=======
+func (o *OpGeth) Name() string {
+	return "op-geth"
+}
+
+func (o *OpGeth) Ready(instance *instance) error {
+	opGethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+	return waitForFirstBlock(context.Background(), opGethURL, 60*time.Second)
+}
+
+var _ ServiceWatchdog = &OpGeth{}
+var _ ServiceReady = &OpGeth{}
+
+func (o *OpGeth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+>>>>>>> main
 	gethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 	return watchChainHead(out, gethURL, 2*time.Second)
 }
@@ -450,6 +466,26 @@ func (r *RethEL) Apply(manifest *Manifest) {
 	}
 }
 
+<<<<<<< HEAD
+=======
+func (r *RethEL) Name() string {
+	return "reth"
+}
+
+func (r *RethEL) Ready(instance *instance) error {
+	elURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+	return waitForFirstBlock(context.Background(), elURL, 60*time.Second)
+}
+
+var _ ServiceWatchdog = &RethEL{}
+var _ ServiceReady = &RethEL{}
+
+func (r *RethEL) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+	return watchChainHead(out, rethURL, 12*time.Second)
+}
+
+>>>>>>> main
 type LighthouseBeaconNode struct {
 	ExecutionNode string
 	MevBoostNode  string

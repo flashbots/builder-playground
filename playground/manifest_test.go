@@ -26,7 +26,7 @@ func TestNodeRefString(t *testing.T) {
 			service:  "test",
 			port:     80,
 			user:     "test",
-			expected: "test@test:test",
+			expected: "test@test:80",
 		},
 		{
 			protocol: "http",
@@ -40,7 +40,7 @@ func TestNodeRefString(t *testing.T) {
 			service:  "test",
 			port:     80,
 			user:     "test",
-			expected: "http://test@test:test",
+			expected: "http://test@test:80",
 		},
 		{
 			protocol: "enode",
