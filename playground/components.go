@@ -429,7 +429,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			"--datadir", "/data_reth",
 			"--color", "never",
 			"--ipcpath", "/data_reth/reth.ipc",
-			"--addr", "127.0.0.1",
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
@@ -710,6 +710,7 @@ func (o *OpReth) Apply(manifest *Manifest) {
 			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`).
 		WithRelease(opRethRelease).
 		WithWatchdog(func(out io.Writer, instance *instance, ctx context.Context) error {
