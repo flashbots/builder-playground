@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -201,9 +202,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		if err := json.Unmarshal(contents, &alloc); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
 		}
-		for addr, account := range alloc {
-			gen.Alloc[addr] = account
-		}
+		maps.Copy(gen.Alloc, alloc)
 	}
 
 	block := gen.ToBlock()

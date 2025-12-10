@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -134,20 +135,13 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	if cfg.Overrides == nil {
 		cfg.Overrides = make(map[string]string)
 	}
-	for k, v := range cfg.Manifest.overrides {
-		cfg.Overrides[k] = v
-	}
+	maps.Copy(cfg.Overrides, cfg.Manifest.overrides)
 
 	// Create the concrete instances to run
 	instances := []*instance{}
 	for _, service := range cfg.Manifest.Services {
-		component := FindComponent(service.ComponentName)
-		if component == nil {
-			return nil, fmt.Errorf("component not found '%s'", service.ComponentName)
-		}
 		instance := &instance{
-			service:   service,
-			component: component,
+			service: service,
 		}
 		if cfg.LogInternally {
 			log_output, err := cfg.Out.LogOutput(service.Name)
@@ -169,11 +163,10 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		if ss.Labels[useHostExecutionLabel] == "true" {
 			// If the service wants to run on the host, it must implement the ReleaseService interface
 			// which provides functions to download the release artifact.
-			releaseService, ok := instance.component.(ReleaseService)
-			if !ok {
+			releaseArtifact := instance.service.release
+			if releaseArtifact == nil {
 				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
 			}
-			releaseArtifact := releaseService.ReleaseArtifact()
 			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
 			if err != nil {
 				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
@@ -627,9 +620,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 	}
 
 	// apply the user defined labels
-	for k, v := range d.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, d.labels)
 
 	// add the local ports exposed by the service as labels
 	// we have to do this for now since we do not store the manifest in JSON yet.
@@ -985,7 +976,6 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 		WithArgs("--config.file", "/data/prometheus.yaml").
 		WithPort("metrics", 9090, "tcp").
 		WithArtifact("/data/prometheus.yaml", "prometheus.yaml")
-	srv.ComponentName = "null" // For now, later on we can create a Prometheus component
 	manifest.Services = append(manifest.Services, srv)
 
 	return nil

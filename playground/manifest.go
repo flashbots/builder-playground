@@ -1,8 +1,10 @@
 package playground
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,7 +21,7 @@ type Recipe interface {
 	Description() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
-	Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
+	Apply(manifest *Manifest)
 	Output(manifest *Manifest) map[string]interface{}
 }
 
@@ -107,25 +109,15 @@ func (b *BootnodeRef) Connect() string {
 }
 
 type ServiceGen interface {
-	Run(service *Service, ctx *ExContext)
-	Name() string
+	Apply(manifest *Manifest)
 }
 
 type ServiceReady interface {
 	Ready(instance *instance) error
 }
 
-// ReleaseService is a service that can also be runned as an artifact in the host machine
-type ReleaseService interface {
-	ReleaseArtifact() *release
-}
-
-func (s *Manifest) AddService(name string, srv ServiceGen) {
-	service := s.NewService(name)
-	service.ComponentName = srv.Name()
-	srv.Run(service, s.ctx)
-
-	s.Services = append(s.Services, service)
+func (s *Manifest) AddService(srv ServiceGen) {
+	srv.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -287,18 +279,21 @@ type Service struct {
 	FilesMapped   map[string]string `json:"files_mapped,omitempty"`
 	VolumesMapped map[string]string `json:"volumes_mapped,omitempty"`
 
-	ComponentName string `json:"component_name,omitempty"`
-
 	Tag        string `json:"tag,omitempty"`
 	Image      string `json:"image,omitempty"`
 	Entrypoint string `json:"entrypoint,omitempty"`
+
+	release    *release
+	watchdogFn watchdogFn
+	readyFn    readyFn
 }
+
+type watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
+type readyFn func(instance *instance) error
 
 type instance struct {
 	service *Service
-
-	logs      *serviceLogs
-	component ServiceGen
+	logs    *serviceLogs
 }
 
 type DependsOnCondition string
@@ -357,7 +352,9 @@ func (s *Service) WithLabel(key, value string) *Service {
 }
 
 func (s *Manifest) NewService(name string) *Service {
-	return &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	s.Services = append(s.Services, ss)
+	return ss
 }
 
 func (s *Service) WithImage(image string) *Service {
@@ -399,6 +396,21 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 		}
 	}
 	s.Ports = append(s.Ports, &Port{Name: name, Port: portNumber, Protocol: protocol})
+	return s
+}
+
+func (s *Service) WithRelease(rel *release) *Service {
+	s.release = rel
+	return s
+}
+
+func (s *Service) WithWatchdog(watchdogFn watchdogFn) *Service {
+	s.watchdogFn = watchdogFn
+	return s
+}
+
+func (s *Service) WithReadyFn(readyFn readyFn) *Service {
+	s.readyFn = readyFn
 	return s
 }
 
@@ -609,6 +621,6 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
 	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddService("contender", svcManager.ctx.Contender.Contender())
+		svcManager.AddService(svcManager.ctx.Contender.Contender())
 	}
 }

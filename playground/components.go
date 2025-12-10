@@ -24,8 +24,8 @@ type RollupBoost struct {
 	FlashblocksBuilderURL string
 }
 
-func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
-	service.
+func (r *RollupBoost) Apply(manifest *Manifest) {
+	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("v0.7.5").
 		WithArgs(
@@ -51,16 +51,13 @@ func (r *RollupBoost) Run(service *Service, ctx *ExContext) {
 	}
 }
 
-func (r *RollupBoost) Name() string {
-	return "rollup-boost"
-}
-
 type OpRbuilder struct {
 	Flashblocks bool
 }
 
-func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
-	service.WithImage("ghcr.io/flashbots/op-rbuilder").
+func (o *OpRbuilder) Apply(manifest *Manifest) {
+	service := manifest.NewService("op-rbuilder").
+		WithImage("ghcr.io/flashbots/op-rbuilder").
 		WithTag("v0.2.8").
 		WithArgs(
 			"node",
@@ -82,8 +79,8 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
 
-	if ctx.Bootnode != nil {
-		service.WithArgs("--trusted-peers", ctx.Bootnode.Connect())
+	if manifest.ctx.Bootnode != nil {
+		service.WithArgs("--trusted-peers", manifest.ctx.Bootnode.Connect())
 	}
 
 	if o.Flashblocks {
@@ -95,24 +92,23 @@ func (o *OpRbuilder) Run(service *Service, ctx *ExContext) {
 	}
 }
 
-func (o *OpRbuilder) Name() string {
-	return "op-rbuilder"
-}
-
 type FlashblocksRPC struct {
 	FlashblocksWSService string
 	BaseOverlay          bool
 	UseWebsocketProxy    bool // Whether to add /ws path for websocket proxy
 }
 
-func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
+func (f *FlashblocksRPC) Apply(manifest *Manifest) {
 	websocketURL := ConnectWs(f.FlashblocksWSService, "flashblocks")
 	if f.UseWebsocketProxy {
 		websocketURL += "/ws"
 	}
 
+	var service *Service
+
 	if f.BaseOverlay {
-		service.WithImage("ghcr.io/base/node-reth-dev").
+		service = manifest.NewService("flashblocks-rpc").
+			WithImage("ghcr.io/base/node-reth-dev").
 			WithTag("main").
 			WithEntrypoint("/app/base-reth-node").
 			WithArgs(
@@ -121,7 +117,8 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 				"--enable-metering",
 			)
 	} else {
-		service.WithImage("flashbots/flashblocks-rpc").
+		service = manifest.NewService("flashblocks-rpc").
+			WithImage("flashbots/flashblocks-rpc").
 			WithTag("sha-7caffb9").
 			WithArgs(
 				"node",
@@ -147,15 +144,11 @@ func (f *FlashblocksRPC) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_flashblocks_rpc")
 
-	if ctx.Bootnode != nil {
+	if manifest.ctx.Bootnode != nil {
 		service.WithArgs(
-			"--trusted-peers", ctx.Bootnode.Connect(),
+			"--trusted-peers", manifest.ctx.Bootnode.Connect(),
 		)
 	}
-}
-
-func (f *FlashblocksRPC) Name() string {
-	return "flashblocks-rpc"
 }
 
 type BProxy struct {
@@ -165,12 +158,13 @@ type BProxy struct {
 	FlashblocksBuilderURL string
 }
 
-func (f *BProxy) Run(service *Service, ctx *ExContext) {
+func (f *BProxy) Apply(manifest *Manifest) {
 	peers := []string{}
 	for _, peer := range f.Peers {
 		peers = append(peers, Connect(peer, "authrpc"))
 	}
-	service.WithImage("ghcr.io/flashbots/bproxy").
+	service := manifest.NewService("bproxy").
+		WithImage("ghcr.io/flashbots/bproxy").
 		WithTag("v0.1.2").
 		WithArgs(
 			"serve",
@@ -202,16 +196,13 @@ func (f *BProxy) Run(service *Service, ctx *ExContext) {
 
 }
 
-func (f *BProxy) Name() string {
-	return "bproxy"
-}
-
 type WebsocketProxy struct {
 	Upstream string
 }
 
-func (w *WebsocketProxy) Run(service *Service, ctx *ExContext) {
-	service.WithImage("docker.io/mikawamp/websocket-rpc").
+func (w *WebsocketProxy) Apply(manifest *Manifest) {
+	manifest.NewService("websocket-proxy").
+		WithImage("docker.io/mikawamp/websocket-rpc").
 		WithTag("latest").
 		WithArgs(
 			"--listen-addr", `0.0.0.0:{{Port "flashblocks" 1115}}`,
@@ -221,10 +212,6 @@ func (w *WebsocketProxy) Run(service *Service, ctx *ExContext) {
 		)
 }
 
-func (w *WebsocketProxy) Name() string {
-	return "websocket-proxy"
-}
-
 type OpBatcher struct {
 	L1Node             string
 	L2Node             string
@@ -232,11 +219,11 @@ type OpBatcher struct {
 	MaxChannelDuration uint64
 }
 
-func (o *OpBatcher) Run(service *Service, ctx *ExContext) {
+func (o *OpBatcher) Apply(manifest *Manifest) {
 	if o.MaxChannelDuration == 0 {
 		o.MaxChannelDuration = 2
 	}
-	service.
+	manifest.NewService("op-batcher").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
 		WithTag("v1.12.0-rc.1").
 		WithEntrypoint("op-batcher").
@@ -252,18 +239,14 @@ func (o *OpBatcher) Run(service *Service, ctx *ExContext) {
 		)
 }
 
-func (o *OpBatcher) Name() string {
-	return "op-batcher"
-}
-
 type OpNode struct {
 	L1Node   string
 	L1Beacon string
 	L2Node   string
 }
 
-func (o *OpNode) Run(service *Service, ctx *ExContext) {
-	service.
+func (o *OpNode) Apply(manifest *Manifest) {
+	manifest.NewService("op-node").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
 		WithTag("v1.13.0-rc.1").
 		WithEntrypoint("op-node").
@@ -299,10 +282,6 @@ func (o *OpNode) Run(service *Service, ctx *ExContext) {
 		WithVolume("data", "/data_db")
 }
 
-func (o *OpNode) Name() string {
-	return "op-node"
-}
-
 type OpGeth struct {
 	// outputs
 	Enode *EnodeAddr
@@ -325,15 +304,15 @@ func logLevelToGethVerbosity(logLevel LogLevel) string {
 	}
 }
 
-func (o *OpGeth) Run(service *Service, ctx *ExContext) {
-	o.Enode = ctx.Output.GetEnodeAddr()
+func (o *OpGeth) Apply(manifest *Manifest) {
+	o.Enode = manifest.ctx.Output.GetEnodeAddr()
 
 	var trustedPeers string
-	if ctx.Bootnode != nil {
-		trustedPeers = fmt.Sprintf("--bootnodes %s ", ctx.Bootnode.Connect())
+	if manifest.ctx.Bootnode != nil {
+		trustedPeers = fmt.Sprintf("--bootnodes %s ", manifest.ctx.Bootnode.Connect())
 	}
 
-	service.
+	manifest.NewService("op-geth").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101503.2-rc.5").
 		WithEntrypoint("/bin/sh").
@@ -343,7 +322,7 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 			"geth init --datadir /data_opgeth --state.scheme hash /data/l2-genesis.json && "+
 				"exec geth "+
 				"--datadir /data_opgeth "+
-				"--verbosity "+logLevelToGethVerbosity(ctx.LogLevel)+" "+
+				"--verbosity "+logLevelToGethVerbosity(manifest.ctx.LogLevel)+" "+
 				"--http "+
 				"--http.corsdomain \"*\" "+
 				"--http.vhosts \"*\" "+
@@ -373,18 +352,19 @@ func (o *OpGeth) Run(service *Service, ctx *ExContext) {
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
 		).
 		WithVolume("data", "/data_opgeth").
+		WithWatchdog(opGethWatchdogFn).
+		WithReadyFn(opGethReadyFn).
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 }
 
-func (o *OpGeth) Name() string {
-	return "op-geth"
+func opGethReadyFn(instance *instance) error {
+	opGethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+	return waitForFirstBlock(context.Background(), opGethURL, 60*time.Second)
 }
 
-var _ ServiceWatchdog = &OpGeth{}
-
-func (o *OpGeth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+func opGethWatchdogFn(out io.Writer, instance *instance, ctx context.Context) error {
 	gethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 	return watchChainHead(out, gethURL, 2*time.Second)
 }
@@ -394,22 +374,20 @@ type RethEL struct {
 	UseNativeReth        bool
 }
 
-func (r *RethEL) ReleaseArtifact() *release {
-	return &release{
-		Name:    "reth",
-		Org:     "paradigmxyz",
-		Version: "v1.4.8",
-		Arch: func(goos, goarch string) string {
-			if goos == "linux" {
-				return "x86_64-unknown-linux-gnu"
-			} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-				return "aarch64-apple-darwin"
-			} else if goos == "darwin" && goarch == "amd64" {
-				return "x86_64-apple-darwin"
-			}
-			return ""
-		},
-	}
+var rethELRelease = &release{
+	Name:    "reth",
+	Org:     "paradigmxyz",
+	Version: "v1.4.8",
+	Arch: func(goos, goarch string) string {
+		if goos == "linux" {
+			return "x86_64-unknown-linux-gnu"
+		} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+			return "aarch64-apple-darwin"
+		} else if goos == "darwin" && goarch == "amd64" {
+			return "x86_64-apple-darwin"
+		}
+		return ""
+	},
 }
 
 func logLevelToRethVerbosity(logLevel LogLevel) string {
@@ -429,9 +407,9 @@ func logLevelToRethVerbosity(logLevel LogLevel) string {
 	}
 }
 
-func (r *RethEL) Run(svc *Service, ctx *ExContext) {
+func (r *RethEL) Apply(manifest *Manifest) {
 	// start the reth el client
-	svc.
+	svc := manifest.NewService("el").
 		WithImage("ghcr.io/paradigmxyz/reth").
 		WithTag("v1.8.2").
 		WithEntrypoint("/usr/local/bin/reth").
@@ -441,7 +419,7 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 			"--datadir", "/data_reth",
 			"--color", "never",
 			"--ipcpath", "/data_reth/reth.ipc",
-			"--addr", "127.0.0.1",
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
 			// http config
@@ -461,8 +439,17 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
-			logLevelToRethVerbosity(ctx.LogLevel),
+			logLevelToRethVerbosity(manifest.ctx.LogLevel),
 		).
+		WithRelease(rethELRelease).
+		WithWatchdog(func(out io.Writer, instance *instance, ctx context.Context) error {
+			rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+			return watchChainHead(out, rethURL, 12*time.Second)
+		}).
+		WithReadyFn(func(instance *instance) error {
+			elURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+			return waitForFirstBlock(context.Background(), elURL, 60*time.Second)
+		}).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
@@ -473,24 +460,13 @@ func (r *RethEL) Run(svc *Service, ctx *ExContext) {
 	}
 }
 
-func (r *RethEL) Name() string {
-	return "reth"
-}
-
-var _ ServiceWatchdog = &RethEL{}
-
-func (r *RethEL) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
-	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
-	return watchChainHead(out, rethURL, 12*time.Second)
-}
-
 type LighthouseBeaconNode struct {
 	ExecutionNode string
 	MevBoostNode  string
 }
 
-func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
-	svc.
+func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
+	svc := manifest.NewService("beacon").
 		WithImage("sigp/lighthouse").
 		WithTag("v8.0.0-rc.2").
 		WithEntrypoint("lighthouse").
@@ -539,17 +515,13 @@ func (l *LighthouseBeaconNode) Run(svc *Service, ctx *ExContext) {
 	}
 }
 
-func (l *LighthouseBeaconNode) Name() string {
-	return "lighthouse-beacon-node"
-}
-
 type LighthouseValidator struct {
 	BeaconNode string
 }
 
-func (l *LighthouseValidator) Run(service *Service, ctx *ExContext) {
+func (l *LighthouseValidator) Apply(manifest *Manifest) {
 	// start validator client
-	service.
+	manifest.NewService("validator").
 		WithImage("sigp/lighthouse").
 		WithTag("v8.0.0-rc.2").
 		WithEntrypoint("lighthouse").
@@ -567,17 +539,13 @@ func (l *LighthouseValidator) Run(service *Service, ctx *ExContext) {
 		WithArtifact("/data/testnet-dir", "testnet")
 }
 
-func (l *LighthouseValidator) Name() string {
-	return "lighthouse-validator"
-}
-
 type ClProxy struct {
 	PrimaryBuilder   string
 	SecondaryBuilder string
 }
 
-func (c *ClProxy) Run(service *Service, ctx *ExContext) {
-	service.
+func (c *ClProxy) Apply(manifest *Manifest) {
+	manifest.NewService("cl-proxy").
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
 		WithEntrypoint("cl-proxy").
@@ -588,22 +556,19 @@ func (c *ClProxy) Run(service *Service, ctx *ExContext) {
 		)
 }
 
-func (c *ClProxy) Name() string {
-	return "cl-proxy"
-}
-
 type MevBoostRelay struct {
 	BeaconClient     string
 	ValidationServer string
 }
 
-func (m *MevBoostRelay) Run(service *Service, ctx *ExContext) {
-	service.
+func (m *MevBoostRelay) Apply(manifest *Manifest) {
+	service := manifest.NewService("mev-boost-relay").
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag("latest").
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
 		WithEntrypoint("mev-boost-relay").
 		DependsOnHealthy(m.BeaconClient).
+		WithWatchdog(mevboostRelayWatchdogFn).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
 			"--api-listen-port", `{{Port "http" 5555}}`,
@@ -615,13 +580,7 @@ func (m *MevBoostRelay) Run(service *Service, ctx *ExContext) {
 	}
 }
 
-func (m *MevBoostRelay) Name() string {
-	return "mev-boost-relay"
-}
-
-var _ ServiceWatchdog = &MevBoostRelay{}
-
-func (m *MevBoostRelay) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
+func mevboostRelayWatchdogFn(out io.Writer, instance *instance, ctx context.Context) error {
 	beaconNodeURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 
 	watchGroup := newWatchGroup()
@@ -638,8 +597,8 @@ func (m *MevBoostRelay) Watchdog(out io.Writer, instance *instance, ctx context.
 type BuilderHubPostgres struct {
 }
 
-func (b *BuilderHubPostgres) Run(service *Service, ctx *ExContext) {
-	service.
+func (b *BuilderHubPostgres) Apply(manifest *Manifest) {
+	manifest.NewService("builder-hub-postgres").
 		WithImage("docker.io/flashbots/builder-hub-db").
 		WithTag("latest").
 		WithPort("postgres", 5432).
@@ -655,16 +614,12 @@ func (b *BuilderHubPostgres) Run(service *Service, ctx *ExContext) {
 		})
 }
 
-func (b *BuilderHubPostgres) Name() string {
-	return "builder-hub-postgres"
-}
-
 type BuilderHub struct {
 	postgres string
 }
 
-func (b *BuilderHub) Run(service *Service, ctx *ExContext) {
-	service.
+func (b *BuilderHub) Apply(manifest *Manifest) {
+	manifest.NewService("builder-hub").
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("latest").
 		WithEntrypoint("/app/builder-hub").
@@ -676,16 +631,12 @@ func (b *BuilderHub) Run(service *Service, ctx *ExContext) {
 		DependsOnHealthy(b.postgres)
 }
 
-func (b *BuilderHub) Name() string {
-	return "builder-hub"
-}
-
 type BuilderHubMockProxy struct {
 	TargetService string
 }
 
-func (b *BuilderHubMockProxy) Run(service *Service, ctx *ExContext) {
-	service.
+func (b *BuilderHubMockProxy) Apply(manifest *Manifest) {
+	service := manifest.NewService("builder-hub-mock-proxy").
 		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
 		WithTag("latest").
 		WithPort("http", 8888)
@@ -695,15 +646,29 @@ func (b *BuilderHubMockProxy) Run(service *Service, ctx *ExContext) {
 	}
 }
 
-func (b *BuilderHubMockProxy) Name() string {
-	return "builder-hub-mock-proxy"
-}
-
 type OpReth struct {
 }
 
-func (o *OpReth) Run(service *Service, ctx *ExContext) {
-	service.WithImage("ghcr.io/paradigmxyz/op-reth").
+var opRethRelease = &release{
+	Name:    "op-reth",
+	Repo:    "reth",
+	Org:     "paradigmxyz",
+	Version: "v1.3.12",
+	Arch: func(goos, goarch string) string {
+		if goos == "linux" {
+			return "x86_64-unknown-linux-gnu"
+		} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+			return "aarch64-apple-darwin"
+		} else if goos == "darwin" && goarch == "amd64" {
+			return "x86_64-apple-darwin"
+		}
+		return ""
+	},
+}
+
+func (o *OpReth) Apply(manifest *Manifest) {
+	manifest.NewService("op-reth").
+		WithImage("ghcr.io/paradigmxyz/op-reth").
 		WithTag("nightly").
 		WithEntrypoint("op-reth").
 		WithArgs(
@@ -719,47 +684,23 @@ func (o *OpReth) Run(service *Service, ctx *ExContext) {
 			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
+			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`).
+		WithRelease(opRethRelease).
+		WithWatchdog(func(out io.Writer, instance *instance, ctx context.Context) error {
+			rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+			return watchChainHead(out, rethURL, 2*time.Second)
+		}).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
-}
-
-func (o *OpReth) Name() string {
-	return "op-reth"
-}
-
-func (o *OpReth) ReleaseArtifact() *release {
-	return &release{
-		Name:    "op-reth",
-		Repo:    "reth",
-		Org:     "paradigmxyz",
-		Version: "v1.3.12",
-		Arch: func(goos, goarch string) string {
-			if goos == "linux" {
-				return "x86_64-unknown-linux-gnu"
-			} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-				return "aarch64-apple-darwin"
-			} else if goos == "darwin" && goarch == "amd64" {
-				return "x86_64-apple-darwin"
-			}
-			return ""
-		},
-	}
-}
-
-var _ ServiceWatchdog = &OpReth{}
-
-func (p *OpReth) Watchdog(out io.Writer, instance *instance, ctx context.Context) error {
-	rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
-	return watchChainHead(out, rethURL, 2*time.Second)
 }
 
 type MevBoost struct {
 	RelayEndpoints []string
 }
 
-func (m *MevBoost) Run(service *Service, ctx *ExContext) {
+func (m *MevBoost) Apply(manifest *Manifest) {
 	args := []string{
 		"--addr", "0.0.0.0:" + `{{Port "http" 18550}}`,
 		"--loglevel", "info",
@@ -792,24 +733,17 @@ func (m *MevBoost) Run(service *Service, ctx *ExContext) {
 		}
 	}
 
-	service.WithImage("flashbots/mev-boost").
+	manifest.NewService("mev-boost").
+		WithImage("flashbots/mev-boost").
 		WithTag("latest").
 		WithArgs(args...).
 		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
 }
 
-func (m *MevBoost) Name() string {
-	return "mev-boost"
-}
-
 type nullService struct {
 }
 
-func (n *nullService) Run(service *Service, ctx *ExContext) {
-}
-
-func (n *nullService) Name() string {
-	return "null"
+func (n *nullService) Apply(manifest *Manifest) {
 }
 
 type Contender struct {
@@ -823,10 +757,6 @@ func (cc *ContenderContext) Contender() *Contender {
 		ExtraArgs:   cc.ExtraArgs,
 		TargetChain: cc.TargetChain,
 	}
-}
-
-func (c *Contender) Name() string {
-	return "contender"
 }
 
 // parse "key=value" OR "key value"; remainder after first space is the value (may contain spaces)
@@ -857,7 +787,7 @@ func indexWS(s string) int {
 	return -1
 }
 
-func (c *Contender) Run(service *Service, ctx *ExContext) {
+func (c *Contender) Apply(manifest *Manifest) {
 	type opt struct {
 		name   string
 		val    string
@@ -939,7 +869,8 @@ func (c *Contender) Run(service *Service, ctx *ExContext) {
 		}
 	}
 
-	service.WithImage("flashbots/contender").
+	service := manifest.NewService("contender").
+		WithImage("flashbots/contender").
 		WithTag("latest").
 		WithArgs(args...).
 		DependsOnHealthy("beacon")
