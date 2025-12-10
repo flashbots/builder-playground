@@ -879,3 +879,57 @@ func (c *Contender) Apply(manifest *Manifest) {
 		service.DependsOnRunning("op-node")
 	}
 }
+
+type BuilderHub2 struct {
+}
+
+func (b *BuilderHub2) Apply(manifest *Manifest) {
+	// Database service
+	manifest.NewService("db").
+		WithImage("docker.io/flashbots/builder-hub-db").
+		WithTag("latest").
+		WithPort("postgres", 5432).
+		WithEnv("PGUSER", "postgres").
+		WithEnv("POSTGRES_DB", "postgres").
+		WithEnv("POSTGRES_USER", "postgres").
+		WithEnv("POSTGRES_PASSWORD", "postgres").
+		WithReady(ReadyCheck{
+			Test:        []string{"CMD-SHELL", "pg_isready"},
+			Interval:    5 * time.Second,
+			Timeout:     5 * time.Second,
+			Retries:     5,
+			StartPeriod: 2 * time.Second,
+		})
+
+	// Web service
+	manifest.NewService("web").
+		WithImage("docker.io/flashbots/builder-hub").
+		WithTag("latest").
+		DependsOnHealthy("db").
+		WithPort("http", 8080).
+		WithPort("admin", 8081).
+		WithPort("internal", 8082).
+		WithPort("metrics", 8090).
+		WithEnv("MOCK_SECRETS", "true").
+		WithEnv("POSTGRES_DSN", ConnectRaw("db", "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
+		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
+		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
+		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
+		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
+		WithEnv("DISABLE_ADMIN_AUTH", "1").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8080",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
+
+	// Proxy service
+	manifest.NewService("proxy").
+		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
+		WithTag("latest").
+		WithPort("http", 8888).
+		WithEnv("TARGET", Connect("web", "http")).
+		DependsOnHealthy("web")
+}

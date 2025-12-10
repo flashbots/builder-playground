@@ -27,4 +27,5 @@ func init() {
 	register(&Contender{})
 	register(&BProxy{})
 	register(&WebsocketProxy{})
+	register(&BuilderHub2{})
 }
