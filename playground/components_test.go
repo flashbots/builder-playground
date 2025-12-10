@@ -16,7 +16,7 @@ import (
 )
 
 func TestBuilderHub2(t *testing.T) {
-	testComponent(t, &BuilderHub2{})
+	testComponent(t, &BuilderHub{})
 
 	// TODO: Calling the port directly on the host machine will not work once we have multiple
 	// tests running in parallel
@@ -49,9 +49,7 @@ func testComponent(t *testing.T, s ServiceGen) {
 	svcManager := NewManifest(exCtx, o)
 	s.Apply(svcManager)
 
-	if err := svcManager.Validate(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, svcManager.Validate())
 
 	// Generate random network name with "testing-" prefix
 	networkName := fmt.Sprintf("testing-%d", rand.Int63())
