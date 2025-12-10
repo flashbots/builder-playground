@@ -86,6 +86,9 @@ type LocalRunner struct {
 
 	// imagePuller coordinates image pulling
 	imagePuller *imagePuller
+
+	// callback is called to report service updates
+	callback func(serviceName, update string)
 }
 
 type task struct {
@@ -125,6 +128,7 @@ type RunnerConfig struct {
 	Labels               map[string]string
 	LogInternally        bool
 	Platform             string
+	Callback             func(serviceName, update string)
 }
 
 func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
@@ -219,6 +223,12 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	if cfg.NetworkName == "" {
 		cfg.NetworkName = defaultNetworkName
 	}
+
+	callback := cfg.Callback
+	if callback == nil {
+		callback = func(serviceName, update string) {} // noop
+	}
+
 	d := &LocalRunner{
 		out:                  cfg.Out,
 		manifest:             cfg.Manifest,
@@ -237,6 +247,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		logInternally:        cfg.LogInternally,
 		platform:             cfg.Platform,
 		imagePuller:          newImagePuller(client),
+		callback:             callback,
 	}
 
 	if cfg.Interactive {
@@ -907,6 +918,7 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 			switch event.Action {
 			case events.ActionStart:
 				d.updateTaskStatus(name, taskStatusStarted)
+				d.callback(name, "container started")
 
 				if d.logInternally {
 					// the container has started, we can track the logs now
@@ -918,10 +930,12 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 				}
 			case events.ActionDie:
 				d.updateTaskStatus(name, taskStatusDie)
+				d.callback(name, "container died")
 				log.Info("container died", "name", name)
 
 			case events.ActionHealthStatusHealthy:
 				d.updateTaskStatus(name, taskStatusHealthy)
+				d.callback(name, "container healthy")
 				log.Info("container is healthy", "name", name)
 			}
 
@@ -1006,6 +1020,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	}
 
 	// Image not found locally, pull it
+	d.callback(imageName, "pulling image")
 	return d.imagePuller.PullImage(ctx, imageName)
 }
 
