@@ -89,7 +89,7 @@ func (p *imagePuller) pullImageImpl(ctx context.Context, imageName string) error
 	// Consume the output to ensure pull completes
 	_, err = io.Copy(io.Discard, reader)
 	if err != nil {
-		return fmt.Errorf("error during image pull %s: %w", imageName, err)
+		return fmt.Errorf("failed to read image pull output %s: %w", imageName, err)
 	}
 
 	return nil

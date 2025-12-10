@@ -23,6 +23,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
 
@@ -1025,35 +1026,24 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 }
 
 func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
-	var wg sync.WaitGroup
-	errCh := make(chan error, len(d.manifest.Services))
+	g, ctx := errgroup.WithContext(ctx)
 
 	for _, svc := range d.manifest.Services {
 		if d.isHostService(svc.Name) {
 			continue // Skip host services
 		}
 
-		wg.Add(1)
-		go func(s *Service) {
-			defer wg.Done()
+		s := svc // Capture loop variable
+		g.Go(func() error {
 			imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
 			if err := d.ensureImage(ctx, imageName); err != nil {
-				errCh <- fmt.Errorf("failed to ensure image %s: %w", imageName, err)
+				return fmt.Errorf("failed to ensure image %s: %w", imageName, err)
 			}
-		}(svc)
+			return nil
+		})
 	}
 
-	wg.Wait()
-	close(errCh)
-
-	// Check if any pulls failed
-	for err := range errCh {
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return g.Wait()
 }
 
 func (d *LocalRunner) Run(ctx context.Context) error {
