@@ -23,6 +23,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
 
@@ -1045,25 +1046,19 @@ func StopContainersBySessionID(id string) error {
 		return fmt.Errorf("error getting container list: %w", err)
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(len(containers))
-
-	var errCh chan error
-	errCh = make(chan error, len(containers))
-
+	g := new(errgroup.Group)
 	for _, cont := range containers {
-		go func(contID string) {
-			defer wg.Done()
-			if err := client.ContainerRemove(context.Background(), contID, container.RemoveOptions{
+		g.Go(func() error {
+			if err := client.ContainerRemove(context.Background(), cont.ID, container.RemoveOptions{
 				RemoveVolumes: true,
 				RemoveLinks:   false,
 				Force:         true,
 			}); err != nil {
-				errCh <- fmt.Errorf("error removing container: %w", err)
+				return fmt.Errorf("error removing container: %w", err)
 			}
-		}(cont.ID)
+			return nil
+		})
 	}
 
-	wg.Wait()
-	return nil
+	return g.Wait()
 }
