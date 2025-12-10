@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -134,9 +135,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	if cfg.Overrides == nil {
 		cfg.Overrides = make(map[string]string)
 	}
-	for k, v := range cfg.Manifest.overrides {
-		cfg.Overrides[k] = v
-	}
+	maps.Copy(cfg.Overrides, cfg.Manifest.overrides)
 
 	// Create the concrete instances to run
 	instances := []*instance{}
@@ -621,9 +620,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 	}
 
 	// apply the user defined labels
-	for k, v := range d.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, d.labels)
 
 	// add the local ports exposed by the service as labels
 	// we have to do this for now since we do not store the manifest in JSON yet.
