@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -19,6 +20,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
@@ -84,9 +86,6 @@ type LocalRunner struct {
 
 	// platform is the docker platform to use for the services
 	platform string
-
-	// imagePuller coordinates image pulling
-	imagePuller *imagePuller
 
 	// callback is called to report service updates
 	callback func(serviceName, update string)
@@ -247,7 +246,6 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		labels:               cfg.Labels,
 		logInternally:        cfg.LogInternally,
 		platform:             cfg.Platform,
-		imagePuller:          newImagePuller(client),
 		callback:             callback,
 	}
 
@@ -1010,6 +1008,11 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	return nil
 }
 
+const (
+	pullingImageEvent = "pulling image"
+	imagePulledEvent  = "image pulled"
+)
+
 func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	// Check if image exists locally
 	_, err := d.client.ImageInspect(ctx, imageName)
@@ -1021,8 +1024,22 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	}
 
 	// Image not found locally, pull it
-	d.callback(imageName, "pulling image")
-	return d.imagePuller.PullImage(ctx, imageName)
+	d.callback(imageName, pullingImageEvent)
+
+	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	}
+	defer reader.Close()
+
+	// Consume the output to ensure pull completes
+	_, err = io.Copy(io.Discard, reader)
+	if err != nil {
+		return fmt.Errorf("failed to read image pull output %s: %w", imageName, err)
+	}
+
+	d.callback(imageName, imagePulledEvent)
+	return nil
 }
 
 func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
