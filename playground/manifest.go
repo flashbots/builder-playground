@@ -28,6 +28,7 @@ type Recipe interface {
 // Manifest describes a list of services and their dependencies
 type Manifest struct {
 	ctx *ExContext
+	ID  string `json:"session_id"`
 
 	// list of Services
 	Services []*Service `json:"services"`
