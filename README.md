@@ -91,6 +91,64 @@ The following addresses are pre-funded on L1 and to L2 (if present), all with a 
 - `0x23618e81e3f5cdf7f54c3d65f7fbc0abf5b21e8f` (Private key `0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97`)
 - `0xa0ee7a142d267c1f36714e4a8f75612f20a79720` (Private key `0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6`)
 
+## Network Readiness
+
+The playground can expose a `/readyz` HTTP endpoint to check if the network is ready to accept transactions (i.e., blocks are being produced).
+
+### Readyz Endpoint
+
+Enable the readyz server with the `--readyz-port` flag:
+
+```bash
+$ builder-playground cook l1 --readyz-port 8080
+```
+
+Then check readiness:
+
+```bash
+$ curl http://localhost:8080/readyz
+{"ready":true}
+```
+
+Returns:
+- `200 OK` with `{"ready": true}` when the network is producing blocks
+- `503 Service Unavailable` with `{"ready": false, "error": "..."}` otherwise
+
+### Wait-Ready Command
+
+Use the `wait-ready` command to block until the network is ready:
+
+```bash
+$ builder-playground wait-ready [flags]
+```
+
+Flags:
+- `--url` (string): readyz endpoint URL. Defaults to `http://localhost:8080/readyz`
+- `--timeout` (duration): Maximum time to wait. Defaults to `60s`
+- `--interval` (duration): Poll interval. Defaults to `1s`
+
+Example:
+
+```bash
+# In terminal 1: Start the playground with readyz enabled
+$ builder-playground cook l1 --readyz-port 8080
+
+# In terminal 2: Wait for the network to be ready
+$ builder-playground wait-ready --timeout 120s
+Waiting for http://localhost:8080/readyz (timeout: 2m0s, interval: 1s)
+  [1s] Attempt 1: 503 Service Unavailable
+  [2s] Attempt 2: 503 Service Unavailable
+  [3s] Ready! (200 OK)
+```
+
+This is useful for CI/CD pipelines or scripts that need to wait for the network before deploying contracts.
+
+Alternatively, use a bash one-liner:
+
+```bash
+$ timeout 60 bash -c 'until curl -sf http://localhost:8080/readyz | grep -q "\"ready\":true"; do sleep 1; done'
+```
+
 ## Inspect
 
 Builder-playground supports inspecting the connection of a service to a specific port.

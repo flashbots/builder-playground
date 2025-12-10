@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/flashbots/builder-playground/playground/cmd"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +35,7 @@ var contenderEnabled bool
 var contenderArgs []string
 var contenderTarget string
 var prefundedAccounts []string
+var readyzPort int
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -53,73 +55,6 @@ var cookCmd = &cobra.Command{
 			recipeNames = append(recipeNames, recipe.Name())
 		}
 		return fmt.Errorf("please specify a recipe to cook. Available recipes: %s", recipeNames)
-	},
-}
-
-var artifactsCmd = &cobra.Command{
-	Use:   "artifacts",
-	Short: "List available artifacts",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) != 1 {
-			return fmt.Errorf("please specify a service name")
-		}
-		serviceName := args[0]
-		component := playground.FindComponent(serviceName)
-		if component == nil {
-			return fmt.Errorf("service %s not found", serviceName)
-		}
-		releaseService, ok := component.(playground.ReleaseService)
-		if !ok {
-			return fmt.Errorf("service %s is not a release service", serviceName)
-		}
-		output := outputFlag
-		if output == "" {
-			homeDir, err := playground.GetHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			output = homeDir
-		}
-		location, err := playground.DownloadRelease(output, releaseService.ReleaseArtifact())
-		if err != nil {
-			return fmt.Errorf("failed to download release: %w", err)
-		}
-		fmt.Println(location)
-		return nil
-	},
-}
-
-var artifactsAllCmd = &cobra.Command{
-	Use:   "artifacts-all",
-	Short: "Download all the artifacts available in the catalog (Used for testing purposes)",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Downloading all artifacts...")
-
-		output := outputFlag
-		if output == "" {
-			homeDir, err := playground.GetHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			output = homeDir
-		}
-		for _, component := range playground.Components {
-			releaseService, ok := component.(playground.ReleaseService)
-			if !ok {
-				continue
-			}
-			location, err := playground.DownloadRelease(output, releaseService.ReleaseArtifact())
-			if err != nil {
-				return fmt.Errorf("failed to download release: %w", err)
-			}
-
-			// make sure the artifact is valid to be executed on this platform
-			log.Printf("Downloaded %s to %s\n", releaseService.ReleaseArtifact().Name, location)
-			if err := isExecutableValid(location); err != nil {
-				return fmt.Errorf("failed to check if artifact is valid: %w", err)
-			}
-		}
-		return nil
 	},
 }
 
@@ -187,18 +122,16 @@ func main() {
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
 		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-account", []string{}, "Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present)")
+		recipeCmd.Flags().IntVar(&readyzPort, "readyz-port", 0, "port for readyz HTTP endpoint (0 to disable)")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
 
-	// reuse the same output flag for the artifacts command
-	artifactsCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-	artifactsAllCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+	cmd.InitWaitReadyCmd()
 
 	rootCmd.AddCommand(cookCmd)
-	rootCmd.AddCommand(artifactsCmd)
-	rootCmd.AddCommand(artifactsAllCmd)
 	rootCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(cmd.WaitReadyCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -233,15 +166,17 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	// if contender.tps is set, assume contender is enabled
-	svcManager := recipe.Apply(&playground.ExContext{
+	exCtx := &playground.ExContext{
 		LogLevel: logLevel,
+		// if contender.tps is set, assume contender is enabled
 		Contender: &playground.ContenderContext{
 			Enabled:     contenderEnabled,
 			ExtraArgs:   contenderArgs,
 			TargetChain: contenderTarget,
 		},
-	}, artifacts)
+	}
+	svcManager := playground.NewManifest(exCtx, artifacts.Out)
+	recipe.Apply(svcManager)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
@@ -299,6 +234,16 @@ func runIt(recipe playground.Recipe) error {
 		cancel()
 	}()
 
+	var readyzServer *playground.ReadyzServer
+	if readyzPort > 0 {
+		readyzServer = playground.NewReadyzServer(dockerRunner.Instances(), readyzPort)
+		if err := readyzServer.Start(); err != nil {
+			return fmt.Errorf("failed to start readyz server: %w", err)
+		}
+		defer readyzServer.Stop()
+		fmt.Printf("Readyz endpoint available at http://localhost:%d/readyz\n", readyzPort)
+	}
+
 	if err := dockerRunner.Run(); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
@@ -330,10 +275,13 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
+	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
+	networkReadyStart := time.Now()
 	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
 		dockerRunner.Stop()
-		return fmt.Errorf("failed to complete ready: %w", err)
+		return fmt.Errorf("network not ready: %w", err)
 	}
+	fmt.Printf("Network is ready for transactions (took %.1fs)\n", time.Since(networkReadyStart).Seconds())
 
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
