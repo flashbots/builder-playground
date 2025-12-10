@@ -462,6 +462,7 @@ type ReadyCheck struct {
 	StartPeriod time.Duration `json:"start_period"`
 	Timeout     time.Duration `json:"timeout"`
 	Retries     int           `json:"retries"`
+	UseNC       bool          `json:"use_nc"`
 }
 
 func (s *Service) DependsOnHealthy(name string) *Service {

@@ -2,3 +2,4 @@ local-testnet
 output
 builder-playground
 **/.DS_Store
+e2e-test/

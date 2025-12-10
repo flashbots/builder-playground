@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -83,6 +84,9 @@ type LocalRunner struct {
 
 	// platform is the docker platform to use for the services
 	platform string
+
+	// whether to remove the network name after execution (used in testing)
+	cleanupNetwork bool
 }
 
 type task struct {
@@ -419,6 +423,11 @@ func (d *LocalRunner) Stop() error {
 		}
 	}
 
+	if d.cleanupNetwork {
+		if err := d.client.NetworkRemove(context.Background(), d.networkName); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -677,7 +686,15 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		var test []string
 		if s.ReadyCheck.QueryURL != "" {
 			// This is pretty much hardcoded for now.
-			test = []string{"CMD-SHELL", "chmod +x /artifacts/scripts/query.sh && /artifacts/scripts/query.sh " + s.ReadyCheck.QueryURL}
+			if s.ReadyCheck.UseNC {
+				u, err := url.Parse(s.ReadyCheck.QueryURL)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse ready check url '%s': %v", s.ReadyCheck.QueryURL, err)
+				}
+				test = []string{"CMD-SHELL", "nc -z localhost " + u.Port()}
+			} else {
+				test = []string{"CMD-SHELL", "chmod +x /artifacts/scripts/query.sh && /artifacts/scripts/query.sh " + s.ReadyCheck.QueryURL}
+			}
 		} else {
 			test = s.ReadyCheck.Test
 		}
