@@ -70,7 +70,8 @@ func TestManifestWriteRead(t *testing.T) {
 	artifacts, err := builder.Build()
 	assert.NoError(t, err)
 
-	manifest := recipe.Apply(&ExContext{}, artifacts)
+	manifest := NewManifest(&ExContext{}, artifacts.Out)
+	recipe.Apply(manifest)
 	assert.NoError(t, manifest.SaveJson())
 
 	manifest2, err := ReadManifest(out.dst)
