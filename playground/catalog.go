@@ -28,12 +28,3 @@ func init() {
 	register(&BProxy{})
 	register(&WebsocketProxy{})
 }
-
-func FindComponent(name string) ServiceGen {
-	for _, component := range Components {
-		if component.Name() == name {
-			return component
-		}
-	}
-	return nil
-}
