@@ -312,7 +312,7 @@ func runIt(recipe playground.Recipe) error {
 		fmt.Printf("Readyz endpoint available at http://localhost:%d/readyz\n", readyzPort)
 	}
 
-	if err := dockerRunner.Run(); err != nil {
+	if err := dockerRunner.Run(context.Background()); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
 	}

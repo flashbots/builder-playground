@@ -83,6 +83,9 @@ type LocalRunner struct {
 
 	// platform is the docker platform to use for the services
 	platform string
+
+	// imagePuller coordinates image pulling
+	imagePuller *imagePuller
 }
 
 type task struct {
@@ -233,6 +236,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		labels:               cfg.Labels,
 		logInternally:        cfg.LogInternally,
 		platform:             cfg.Platform,
+		imagePuller:          newImagePuller(client),
 	}
 
 	if cfg.Interactive {
@@ -991,7 +995,53 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	return nil
 }
 
-func (d *LocalRunner) Run() error {
+func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
+	// Check if image exists locally
+	_, err := d.client.ImageInspect(ctx, imageName)
+	if err == nil {
+		return nil // Image already exists
+	}
+	if !client.IsErrNotFound(err) {
+		return err
+	}
+
+	// Image not found locally, pull it
+	return d.imagePuller.PullImage(ctx, imageName)
+}
+
+func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(d.manifest.Services))
+
+	for _, svc := range d.manifest.Services {
+		if d.isHostService(svc.Name) {
+			continue // Skip host services
+		}
+
+		wg.Add(1)
+		go func(s *Service) {
+			defer wg.Done()
+			imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
+			if err := d.ensureImage(ctx, imageName); err != nil {
+				errCh <- fmt.Errorf("failed to ensure image %s: %w", imageName, err)
+			}
+		}(svc)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	// Check if any pulls failed
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (d *LocalRunner) Run(ctx context.Context) error {
 	go d.trackContainerStatusAndLogs()
 
 	yamlData, err := d.generateDockerCompose()
@@ -1008,6 +1058,11 @@ func (d *LocalRunner) Run() error {
 		if instance.logs != nil {
 			d.tasks[instance.service.Name].logs = instance.logs.logRef
 		}
+	}
+
+	// Pull all required images in parallel
+	if err := d.pullNotAvailableImages(ctx); err != nil {
+		return err
 	}
 
 	// First start the services that are running in docker-compose
