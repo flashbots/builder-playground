@@ -14,21 +14,6 @@ import (
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 )
 
-func isChainProducingBlocks(ctx context.Context, elURL string) (bool, error) {
-	rpcClient, err := rpc.Dial(elURL)
-	if err != nil {
-		return false, err
-	}
-	defer rpcClient.Close()
-
-	clt := ethclient.NewClient(rpcClient)
-	num, err := clt.BlockNumber(ctx)
-	if err != nil {
-		return false, err
-	}
-	return num > 0, nil
-}
-
 func waitForFirstBlock(ctx context.Context, elURL string, timeout time.Duration) error {
 	rpcClient, err := rpc.Dial(elURL)
 	if err != nil {
