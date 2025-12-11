@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuilderHub2(t *testing.T) {
+func TestBuilderHub(t *testing.T) {
 	testComponent(t, &BuilderHub{})
 
 	// TODO: Calling the port directly on the host machine will not work once we have multiple
