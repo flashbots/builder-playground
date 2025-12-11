@@ -7,7 +7,7 @@ import (
 )
 
 func TestNodeRefString(t *testing.T) {
-	var testCases = []struct {
+	testCases := []struct {
 		protocol string
 		service  string
 		port     int

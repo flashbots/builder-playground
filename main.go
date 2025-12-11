@@ -19,24 +19,26 @@ import (
 
 var version = "dev"
 
-var outputFlag string
-var genesisDelayFlag uint64
-var withOverrides []string
-var watchdog bool
-var dryRun bool
-var interactive bool
-var timeout time.Duration
-var logLevelFlag string
-var bindExternal bool
-var withPrometheus bool
-var networkName string
-var labels playground.MapStringFlag
-var disableLogs bool
-var platform string
-var contenderEnabled bool
-var contenderArgs []string
-var contenderTarget string
-var detached bool
+var (
+	outputFlag       string
+	genesisDelayFlag uint64
+	withOverrides    []string
+	watchdog         bool
+	dryRun           bool
+	interactive      bool
+	timeout          time.Duration
+	logLevelFlag     string
+	bindExternal     bool
+	withPrometheus   bool
+	networkName      string
+	labels           playground.MapStringFlag
+	disableLogs      bool
+	platform         string
+	contenderEnabled bool
+	contenderArgs    []string
+	contenderTarget  string
+	detached         bool
+)
 
 var rootCmd = &cobra.Command{
 	Use:     "playground",
