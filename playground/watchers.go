@@ -202,6 +202,32 @@ LOOP:
 	}
 }
 
+func waitForBlock(elURL string, targetBlock uint64, timeout time.Duration) error {
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", elURL, err)
+	}
+	defer rpcClient.Close()
+
+	clt := ethclient.NewClient(rpcClient)
+	timeoutCh := time.After(timeout)
+
+	for {
+		select {
+		case <-timeoutCh:
+			return fmt.Errorf("timeout waiting for block %d on %s", targetBlock, elURL)
+		case <-time.After(500 * time.Millisecond):
+			num, err := clt.BlockNumber(context.Background())
+			if err != nil {
+				continue
+			}
+			if num >= targetBlock {
+				return nil
+			}
+		}
+	}
+}
+
 // watchChainHead watches the chain head and ensures that it is advancing
 func watchChainHead(logOutput io.Writer, elURL string, blockTime time.Duration) error {
 	log := mevRCommon.LogSetup(false, "info").WithField("context", "watchChainHead").WithField("el", elURL)
