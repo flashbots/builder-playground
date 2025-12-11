@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +28,7 @@ func (r *RollupBoost) Apply(manifest *Manifest) {
 	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("v0.7.5").
+        DependsOnHealthy(r.ELNode).
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -220,45 +220,27 @@ func (w *WebsocketProxy) Apply(manifest *Manifest) {
 		)
 }
 
-func (w *WebsocketProxy) Name() string {
-	return "websocket-proxy"
-}
-
 type ChainMonitor struct {
 	L1RPC            string
-	L2BlockTime      string
+	L2BlockTime      uint64
 	L2BuilderAddress string
 	L2RPC            string
-	ServerListenAddress string
 }
 
-func (c *ChainMonitor) Run(service *Service, ctx *ExContext) {
-	serverListenAddress := c.ServerListenAddress
-	if serverListenAddress == "" {
-		serverListenAddress = "0.0.0.0:{{Port \"metrics\" 8080}}"
-	}
-
-    // we need to extract the port to register this service as exposing metrics
-	if _, portStr, err := net.SplitHostPort(serverListenAddress); err == nil {
-		if portNum, err := strconv.Atoi(portStr); err == nil {
-			service.WithPort("metrics", portNum)
-		}
-	}
-
-	service.WithImage("ghcr.io/flashbots/chain-monitor").
-		WithTag("v0.0.54").
+func (c *ChainMonitor) Apply(manifest *Manifest) {
+	manifest.NewService("chain-monitor").
+        WithPort("metrics", 8080).
+        WithImage("ghcr.io/flashbots/chain-monitor").
+        WithTag("v0.0.54").
+		DependsOnHealthy(c.L1RPC).
+		DependsOnHealthy(c.L2RPC).
 		WithArgs(
 			"serve",
-			"--l1-rpc", c.L1RPC,
-			"--l2-block-time", c.L2BlockTime,
+			"--l1-rpc", Connect(c.L1RPC, "http"),
+			"--l2-block-time", fmt.Sprintf("%ds", c.L2BlockTime),
 			"--l2-monitor-builder-address", c.L2BuilderAddress,
-			"--l2-rpc", c.L2RPC,
-			"--server-listen-address", serverListenAddress,
+			"--l2-rpc", Connect(c.L2RPC, "http"),
 		)
-}
-
-func (c *ChainMonitor) Name() string {
-	return "chain-monitor"
 }
 
 type OpBatcher struct {

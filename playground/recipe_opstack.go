@@ -1,7 +1,6 @@
 package playground
 
 import (
-	"fmt"
 	flag "github.com/spf13/pflag"
 )
 
@@ -182,18 +181,12 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 	})
 
 	if o.enableChainMonitor {
-		l2BlockTime := fmt.Sprintf("%ds", o.blockTime)
-
-		svcManager.AddService("chain-monitor", &ChainMonitor{
-			L1RPC:            Connect("el", "http"),
-			L2BlockTime:      l2BlockTime,
+		svcManager.AddService(&ChainMonitor{
+			L1RPC:            "el",
+			L2BlockTime:      o.blockTime,
 			L2BuilderAddress: defaultL2BuilderAddress,
-			L2RPC:            Connect("op-geth", "http"),
+			L2RPC:            "op-geth",
 		})
-
-		svcManager.MustGetService("chain-monitor").
-			DependsOnHealthy("el").
-			DependsOnHealthy("op-geth")
 	}
 
 	if svcManager.ctx.Contender.TargetChain == "" {
