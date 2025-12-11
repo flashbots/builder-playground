@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
-	"github.com/flashbots/builder-playground/playground/cmd"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +34,7 @@ var platform string
 var contenderEnabled bool
 var contenderArgs []string
 var contenderTarget string
-var readyzPort int
+var detached bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -57,69 +57,18 @@ var cookCmd = &cobra.Command{
 	},
 }
 
-var artifactsCmd = &cobra.Command{
-	Use:   "artifacts",
-	Short: "List available artifacts",
+var cleanCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "Clean a recipe",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) != 1 {
-			return fmt.Errorf("please specify a service name")
-		}
-		serviceName := args[0]
-		component := playground.FindComponent(serviceName)
-		if component == nil {
-			return fmt.Errorf("service %s not found", serviceName)
-		}
-		releaseService, ok := component.(playground.ReleaseService)
-		if !ok {
-			return fmt.Errorf("service %s is not a release service", serviceName)
-		}
-		output := outputFlag
-		if output == "" {
-			homeDir, err := playground.GetHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			output = homeDir
-		}
-		location, err := playground.DownloadRelease(output, releaseService.ReleaseArtifact())
+		manifest, err := playground.ReadManifest(outputFlag)
 		if err != nil {
-			return fmt.Errorf("failed to download release: %w", err)
+			return err
 		}
-		fmt.Println(location)
-		return nil
-	},
-}
-
-var artifactsAllCmd = &cobra.Command{
-	Use:   "artifacts-all",
-	Short: "Download all the artifacts available in the catalog (Used for testing purposes)",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Downloading all artifacts...")
-
-		output := outputFlag
-		if output == "" {
-			homeDir, err := playground.GetHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			output = homeDir
+		if err := playground.StopContainersBySessionID(manifest.ID); err != nil {
+			return err
 		}
-		for _, component := range playground.Components {
-			releaseService, ok := component.(playground.ReleaseService)
-			if !ok {
-				continue
-			}
-			location, err := playground.DownloadRelease(output, releaseService.ReleaseArtifact())
-			if err != nil {
-				return fmt.Errorf("failed to download release: %w", err)
-			}
-
-			// make sure the artifact is valid to be executed on this platform
-			log.Printf("Downloaded %s to %s\n", releaseService.ReleaseArtifact().Name, location)
-			if err := isExecutableValid(location); err != nil {
-				return fmt.Errorf("failed to check if artifact is valid: %w", err)
-			}
-		}
+		fmt.Println("The recipe has been stopped and cleaned.")
 		return nil
 	},
 }
@@ -187,22 +136,16 @@ func main() {
 		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
-		recipeCmd.Flags().IntVar(&readyzPort, "readyz-port", 0, "port for readyz HTTP endpoint (0 to disable)")
+		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
 
-	// reuse the same output flag for the artifacts command
-	artifactsCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-	artifactsAllCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-
-	cmd.InitWaitReadyCmd()
-
 	rootCmd.AddCommand(cookCmd)
-	rootCmd.AddCommand(artifactsCmd)
-	rootCmd.AddCommand(artifactsAllCmd)
 	rootCmd.AddCommand(inspectCmd)
-	rootCmd.AddCommand(cmd.WaitReadyCmd)
+
+	rootCmd.AddCommand(cleanCmd)
+	cleanCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -236,15 +179,20 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	// if contender.tps is set, assume contender is enabled
-	svcManager := recipe.Apply(&playground.ExContext{
+	exCtx := &playground.ExContext{
 		LogLevel: logLevel,
+		// if contender.tps is set, assume contender is enabled
 		Contender: &playground.ContenderContext{
 			Enabled:     contenderEnabled,
 			ExtraArgs:   contenderArgs,
 			TargetChain: contenderTarget,
 		},
-	}, artifacts)
+	}
+
+	svcManager := playground.NewManifest(exCtx, artifacts.Out)
+	svcManager.ID = uuid.New().String()
+
+	recipe.Apply(svcManager)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
@@ -253,6 +201,10 @@ func runIt(recipe playground.Recipe) error {
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
+	}
+
+	if err := svcManager.Validate(); err != nil {
+		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
 
 	// save the manifest.json file
@@ -310,17 +262,7 @@ func runIt(recipe playground.Recipe) error {
 		cancel()
 	}()
 
-	var readyzServer *playground.ReadyzServer
-	if readyzPort > 0 {
-		readyzServer = playground.NewReadyzServer(dockerRunner.Instances(), readyzPort)
-		if err := readyzServer.Start(); err != nil {
-			return fmt.Errorf("failed to start readyz server: %w", err)
-		}
-		defer readyzServer.Stop()
-		fmt.Printf("Readyz endpoint available at http://localhost:%d/readyz\n", readyzPort)
-	}
-
-	if err := dockerRunner.Run(context.Background()); err != nil {
+	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
 	}
@@ -353,7 +295,7 @@ func runIt(recipe playground.Recipe) error {
 
 	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
 	networkReadyStart := time.Now()
-	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
+	if err := playground.CompleteReady(ctx, dockerRunner.Instances()); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("network not ready: %w", err)
 	}
@@ -366,6 +308,10 @@ func runIt(recipe playground.Recipe) error {
 		for k, v := range output {
 			fmt.Printf("- %s: %v\n", k, v)
 		}
+	}
+
+	if detached {
+		return nil
 	}
 
 	watchdogErr := make(chan error, 1)

@@ -26,8 +26,8 @@ func TestRunnerPullImages(t *testing.T) {
 
 	manifest := &Manifest{
 		Services: []*Service{
-			{Image: imageName, Tag: tag, ComponentName: "null"},
-			{Image: imageName, Tag: tag, ComponentName: "null"},
+			{Image: imageName, Tag: tag},
+			{Image: imageName, Tag: tag},
 		},
 	}
 

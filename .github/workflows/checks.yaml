@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     name: E2E test (${{ matrix.flags }})
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-8x
     strategy:
       matrix:
         flags:
@@ -49,21 +49,3 @@ jobs:
           name: playground-logs-${{ matrix.flags }}
           path: /tmp/playground-logs
           retention-days: 5
-
-  artifacts:
-    name: Artifacts
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.24
-
-      - name: Download and test artifacts
-        run: go run main.go artifacts-all
