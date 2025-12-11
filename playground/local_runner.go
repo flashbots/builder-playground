@@ -976,7 +976,7 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	return nil
 }
 
-func (d *LocalRunner) Run() error {
+func (d *LocalRunner) Run(ctx context.Context) error {
 	go d.trackContainerStatusAndLogs()
 
 	yamlData, err := d.generateDockerCompose()
@@ -996,7 +996,7 @@ func (d *LocalRunner) Run() error {
 	}
 
 	// First start the services that are running in docker-compose
-	cmd := exec.Command("docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
+	cmd := exec.CommandContext(ctx, "docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
 
 	var errOut bytes.Buffer
 	cmd.Stderr = &errOut

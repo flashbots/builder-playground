@@ -254,7 +254,7 @@ func runIt(recipe playground.Recipe) error {
 		cancel()
 	}()
 
-	if err := dockerRunner.Run(); err != nil {
+	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
 	}
@@ -287,7 +287,7 @@ func runIt(recipe playground.Recipe) error {
 
 	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
 	networkReadyStart := time.Now()
-	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
+	if err := playground.CompleteReady(ctx, dockerRunner.Instances()); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("network not ready: %w", err)
 	}
