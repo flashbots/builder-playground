@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     name: E2E test (${{ matrix.flags }})
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-8x
     strategy:
       matrix:
         flags:
