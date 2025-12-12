@@ -206,6 +206,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	d := &LocalRunner{
+		config:        cfg,
 		out:           cfg.Out,
 		manifest:      cfg.Manifest,
 		client:        client,
