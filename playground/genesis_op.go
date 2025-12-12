@@ -18,10 +18,8 @@ import (
 	"github.com/holiman/uint256"
 )
 
-var (
-	// The L2 withdrawals contract predeploy address
-	optimismL2ToL1MessagePasser = common.HexToAddress("0x4200000000000000000000000000000000000016")
-)
+// The L2 withdrawals contract predeploy address
+var optimismL2ToL1MessagePasser = common.HexToAddress("0x4200000000000000000000000000000000000016")
 
 type OpChainConfig struct {
 	*params.ChainConfig

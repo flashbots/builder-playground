@@ -193,7 +193,6 @@ func (f *BProxy) Apply(manifest *Manifest) {
 			"--flashblocks-log-messages",
 		)
 	}
-
 }
 
 type WebsocketProxy struct {
@@ -594,8 +593,7 @@ func mevboostRelayWatchdogFn(out io.Writer, instance *instance, ctx context.Cont
 	return watchGroup.wait()
 }
 
-type OpReth struct {
-}
+type OpReth struct{}
 
 var opRethRelease = &release{
 	Name:    "op-reth",
@@ -688,8 +686,7 @@ func (m *MevBoost) Apply(manifest *Manifest) {
 		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
 }
 
-type nullService struct {
-}
+type nullService struct{}
 
 func (n *nullService) Apply(manifest *Manifest) {
 }
@@ -828,8 +825,7 @@ func (c *Contender) Apply(manifest *Manifest) {
 	}
 }
 
-type BuilderHub struct {
-}
+type BuilderHub struct{}
 
 func (b *BuilderHub) Apply(manifest *Manifest) {
 	// Database service

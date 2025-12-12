@@ -35,7 +35,7 @@ func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 	}
 
 	// create the output folder if it doesn't exist yet
-	if err := os.MkdirAll(outputFolder, 0755); err != nil {
+	if err := os.MkdirAll(outputFolder, 0o755); err != nil {
 		return "", fmt.Errorf("error creating output folder: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 	return outPath, nil
 }
 
-func downloadArtifact(url string, expectedFile string, outPath string) error {
+func downloadArtifact(url, expectedFile, outPath string) error {
 	// Download the file
 	resp, err := http.Get(url)
 	if err != nil {
@@ -110,7 +110,7 @@ func downloadArtifact(url string, expectedFile string, outPath string) error {
 			}
 
 			// change permissions
-			if err := os.Chmod(outPath, 0755); err != nil {
+			if err := os.Chmod(outPath, 0o755); err != nil {
 				return fmt.Errorf("error changing permissions: %v", err)
 			}
 			found = true

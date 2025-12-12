@@ -32,7 +32,7 @@ func TestRunnerPullImages(t *testing.T) {
 	}
 
 	numEvents := 0
-	callback := func(serviceName string, event string) {
+	callback := func(serviceName, event string) {
 		numEvents++
 	}
 
