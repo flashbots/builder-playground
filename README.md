@@ -76,6 +76,31 @@ Here's a complete example showing how to run the L1 recipe with the latest fork 
 $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genesis-delay 15 --log-level debug
 ```
 
+### Generate transaction flow with contender
+
+builder-playground can generate transaction flow to its nodes with [contender](https://github.com/flashbots/contender). Just pass the `--contender` flag to send spam transactions that fill each block:
+
+```bash
+go run main.go cook l1 --contender
+```
+
+The default contender flags are as follows:
+
+- `--min-balance "10 ether"` -- gives each spammer account 10 ETH.
+- `--tps 20` -- sends 20 transactions per second.
+- `-l` -- runs spammer indefinitely (pass `-l <num>` to set a finite number of spam runs).
+
+To add or modify contender flags, use `--contender.arg`:
+
+```bash
+# run the builtin erc20 scenario instead of the default "fill block" scenario, at 100 TPS
+go run main.go cook l1 --contender \
+  --contender.arg "--tps 100" \
+  --contender.arg "erc20"
+```
+
+To read about more contender flag options, see the [contender CLI docs](https://github.com/flashbots/contender/blob/main/docs/cli.md). To see all available flags, [install contender](https://github.com/flashbots/contender/blob/main/docs/installation.md) or [run it in docker](https://github.com/flashbots/contender?tab=readme-ov-file#docker-instructions), and run `contender --help`.
+
 ## Common Options
 
 - `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.playground/devnet`
