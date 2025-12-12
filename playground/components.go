@@ -417,7 +417,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			"--chain", "/data/genesis.json",
 			"--datadir", "/data_reth",
 			"--color", "never",
-			"--ipcpath", "/data_reth/reth.ipc",
+			"--ipcdisable",
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
