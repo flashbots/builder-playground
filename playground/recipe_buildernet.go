@@ -44,7 +44,7 @@ func (b *BuilderNetRecipe) Apply(svcManager *Manifest) {
 	// Start with the L1Recipe manifest
 	b.l1Recipe.Apply(svcManager)
 
-	svcManager.AddService(&BuilderHub2{})
+	svcManager.AddService(&BuilderHub{})
 
 	svcManager.RunContenderIfEnabled()
 }

@@ -594,58 +594,6 @@ func mevboostRelayWatchdogFn(out io.Writer, instance *instance, ctx context.Cont
 	return watchGroup.wait()
 }
 
-type BuilderHubPostgres struct {
-}
-
-func (b *BuilderHubPostgres) Apply(manifest *Manifest) {
-	manifest.NewService("builder-hub-postgres").
-		WithImage("docker.io/flashbots/builder-hub-db").
-		WithTag("latest").
-		WithPort("postgres", 5432).
-		WithEnv("POSTGRES_USER", "postgres").
-		WithEnv("POSTGRES_PASSWORD", "postgres").
-		WithEnv("POSTGRES_DB", "postgres").
-		WithReady(ReadyCheck{
-			Test:        []string{"CMD-SHELL", "pg_isready -U postgres -d postgres"},
-			Interval:    1 * time.Second,
-			Timeout:     30 * time.Second,
-			Retries:     3,
-			StartPeriod: 1 * time.Second,
-		})
-}
-
-type BuilderHub struct {
-	postgres string
-}
-
-func (b *BuilderHub) Apply(manifest *Manifest) {
-	manifest.NewService("builder-hub").
-		WithImage("docker.io/flashbots/builder-hub").
-		WithTag("latest").
-		WithEntrypoint("/app/builder-hub").
-		WithEnv("POSTGRES_DSN", ConnectRaw(b.postgres, "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
-		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
-		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
-		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
-		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
-		DependsOnHealthy(b.postgres)
-}
-
-type BuilderHubMockProxy struct {
-	TargetService string
-}
-
-func (b *BuilderHubMockProxy) Apply(manifest *Manifest) {
-	service := manifest.NewService("builder-hub-mock-proxy").
-		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
-		WithTag("latest").
-		WithPort("http", 8888)
-
-	if b.TargetService != "" {
-		service.DependsOnHealthy(b.TargetService)
-	}
-}
-
 type OpReth struct {
 }
 
@@ -880,10 +828,10 @@ func (c *Contender) Apply(manifest *Manifest) {
 	}
 }
 
-type BuilderHub2 struct {
+type BuilderHub struct {
 }
 
-func (b *BuilderHub2) Apply(manifest *Manifest) {
+func (b *BuilderHub) Apply(manifest *Manifest) {
 	// Database service
 	manifest.NewService("db").
 		WithImage("docker.io/flashbots/builder-hub-db").
@@ -923,6 +871,7 @@ func (b *BuilderHub2) Apply(manifest *Manifest) {
 			Timeout:     30 * time.Second,
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
+			UseNC:       true, // because the endpoint returns 404
 		})
 
 	// Proxy service
