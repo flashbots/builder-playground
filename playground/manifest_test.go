@@ -7,7 +7,7 @@ import (
 )
 
 func TestNodeRefString(t *testing.T) {
-	var testCases = []struct {
+	testCases := []struct {
 		protocol string
 		service  string
 		port     int
@@ -26,7 +26,7 @@ func TestNodeRefString(t *testing.T) {
 			service:  "test",
 			port:     80,
 			user:     "test",
-			expected: "test@test:test",
+			expected: "test@test:80",
 		},
 		{
 			protocol: "http",
@@ -40,7 +40,7 @@ func TestNodeRefString(t *testing.T) {
 			service:  "test",
 			port:     80,
 			user:     "test",
-			expected: "http://test@test:test",
+			expected: "http://test@test:80",
 		},
 		{
 			protocol: "enode",
@@ -70,7 +70,8 @@ func TestManifestWriteRead(t *testing.T) {
 	artifacts, err := builder.Build()
 	assert.NoError(t, err)
 
-	manifest := recipe.Apply(&ExContext{}, artifacts)
+	manifest := NewManifest(&ExContext{Contender: &ContenderContext{}}, artifacts.Out)
+	recipe.Apply(manifest)
 	assert.NoError(t, manifest.SaveJson())
 
 	manifest2, err := ReadManifest(out.dst)

@@ -18,22 +18,11 @@ func init() {
 	register(&MevBoost{})
 	register(&RollupBoost{})
 	register(&OpReth{})
-	register(&BuilderHub{})
-	register(&BuilderHubPostgres{})
-	register(&BuilderHubMockProxy{})
 	register(&nullService{})
 	register(&OpRbuilder{})
 	register(&FlashblocksRPC{})
 	register(&Contender{})
 	register(&BProxy{})
 	register(&WebsocketProxy{})
-}
-
-func FindComponent(name string) ServiceGen {
-	for _, component := range Components {
-		if component.Name() == name {
-			return component
-		}
-	}
-	return nil
+	register(&BuilderHub{})
 }

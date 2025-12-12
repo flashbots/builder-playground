@@ -5,12 +5,14 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/ecdsa"
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -20,8 +22,6 @@ import (
 	"sync"
 	"text/template"
 	"time"
-
-	_ "embed"
 
 	"github.com/OffchainLabs/prysm/v6/config/params"
 	"github.com/OffchainLabs/prysm/v6/crypto/bls/common"
@@ -211,9 +211,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		if err := json.Unmarshal(contents, &alloc); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
 		}
-		for addr, account := range alloc {
-			gen.Alloc[addr] = account
-		}
+		maps.Copy(gen.Alloc, alloc)
 	}
 
 	block := gen.ToBlock()
@@ -458,13 +456,13 @@ func (o *output) CreateDir(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(absPath, 0755); err != nil {
+	if err := os.MkdirAll(absPath, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)
 	}
 	return absPath, nil
 }
 
-func (o *output) CopyFile(src string, dst string) error {
+func (o *output) CopyFile(src, dst string) error {
 	// Open the source file
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -474,7 +472,7 @@ func (o *output) CopyFile(src string, dst string) error {
 
 	// Create the destination directory if it doesn't exist
 	dstPath := filepath.Join(o.dst, dst)
-	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -519,7 +517,7 @@ func (o *output) LogOutput(name string) (*os.File, error) {
 
 	path := filepath.Join(o.dst, "logs", name+".log")
 
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
 	logOutput, err := os.Create(path)
@@ -569,10 +567,10 @@ func (o *output) WriteFile(dst string, data interface{}) error {
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(dst, dataRaw, 0644); err != nil {
+	if err := os.WriteFile(dst, dataRaw, 0o644); err != nil {
 		return err
 	}
 	return nil
@@ -636,7 +634,7 @@ func GetHomeDir() (string, error) {
 	customHomeDir := filepath.Join(homeDir, ".playground")
 
 	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(customHomeDir, 0755); err != nil {
+	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
 		return "", fmt.Errorf("error creating output directory: %v", err)
 	}
 
