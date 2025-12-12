@@ -67,6 +67,7 @@ Flags:
 
 - `--external-builder`: URL of an external builder to use (enables rollup-boost)
 - `--enable-latest-fork` (int): Enables the latest fork (isthmus) at startup (0) or n blocks after genesis.
+- `--predeploy-json` (string[]): One or more paths to JSON files describing L2 predeploy accounts to inject into the L2 genesis (e.g. EntryPoint, paymasters, custom system contracts).
 
 ### Example Commands
 
