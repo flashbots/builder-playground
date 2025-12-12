@@ -289,8 +289,10 @@ type Service struct {
 	readyFn    readyFn
 }
 
-type watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
-type readyFn func(ctx context.Context, instance *instance) error
+type (
+	watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
+	readyFn    func(ctx context.Context, instance *instance) error
+)
 
 type instance struct {
 	service *Service
@@ -435,7 +437,7 @@ func (s *Service) WithArgs(args ...string) *Service {
 	return s
 }
 
-func (s *Service) WithVolume(name string, localPath string) *Service {
+func (s *Service) WithVolume(name, localPath string) *Service {
 	if s.VolumesMapped == nil {
 		s.VolumesMapped = make(map[string]string)
 	}
@@ -443,7 +445,7 @@ func (s *Service) WithVolume(name string, localPath string) *Service {
 	return s
 }
 
-func (s *Service) WithArtifact(localPath string, artifactName string) *Service {
+func (s *Service) WithArtifact(localPath, artifactName string) *Service {
 	if s.FilesMapped == nil {
 		s.FilesMapped = make(map[string]string)
 	}
@@ -488,7 +490,7 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 	// ther can be multiple port and nodere because in the case of op-geth we pass a whole string as nested command args
 
 	funcs := template.FuncMap{
-		"Service": func(name string, portLabel, protocol, user string) string {
+		"Service": func(name, portLabel, protocol, user string) string {
 			if name == "" {
 				panic("BUG: service name cannot be empty")
 			}

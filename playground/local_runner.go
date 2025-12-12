@@ -364,7 +364,7 @@ func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) e
 	}
 }
 
-func (d *LocalRunner) updateTaskStatus(name string, status string) {
+func (d *LocalRunner) updateTaskStatus(name, status string) {
 	d.tasksMtx.Lock()
 	defer d.tasksMtx.Unlock()
 	if status == taskStatusHealthy {
@@ -502,7 +502,7 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 	}
 
 	funcs := template.FuncMap{
-		"Service": func(name string, portLabel, protocol, user string) string {
+		"Service": func(name, portLabel, protocol, user string) string {
 			// For {{Service "name" "portLabel"}}:
 			// - Service runs on host:
 			//   A: target is inside docker: access with localhost:hostPort
@@ -881,7 +881,7 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 }
 
 // trackLogs tracks the logs of a container and writes them to the log output
-func (d *LocalRunner) trackLogs(serviceName string, containerID string) error {
+func (d *LocalRunner) trackLogs(serviceName, containerID string) error {
 	d.tasksMtx.Lock()
 	log_output := d.tasks[serviceName].logs
 	d.tasksMtx.Unlock()

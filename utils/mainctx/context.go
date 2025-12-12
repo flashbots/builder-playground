@@ -2,11 +2,10 @@ package mainctx
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"log"
 )
 
 var (

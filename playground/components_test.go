@@ -89,10 +89,10 @@ func (tt *testFramework) test(s ServiceGen) *Manifest {
 	// use the name of the repo and the current timestamp to generate
 	// a name for the output folder of the test
 	testName := toSnakeCase(t.Name())
-	currentTime := time.Now().Format("2006-02-01-15-04")
+	currentTime := time.Now().Format("2006-01-02-15-04")
 
 	e2eTestDir := filepath.Join("../e2e-test/" + currentTime + "_" + testName)
-	if err := os.MkdirAll(e2eTestDir, 0755); err != nil {
+	if err := os.MkdirAll(e2eTestDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
