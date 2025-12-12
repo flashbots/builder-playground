@@ -371,6 +371,11 @@ func (d *LocalRunner) ExitErr() <-chan error {
 }
 
 func (d *LocalRunner) Stop() error {
+	// stop all the handles
+	for _, handle := range d.handles {
+		handle.Process.Kill()
+	}
+
 	// stop the docker-compose
 	cmd := exec.CommandContext(
 		context.Background(), "docker", "compose",
@@ -378,14 +383,12 @@ func (d *LocalRunner) Stop() error {
 		"down",
 		"-v", // removes containers and volumes
 	)
+	var outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &outBuf
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error taking docker-compose down: %w", err)
-	}
-
-	// stop all the handles
-	for _, handle := range d.handles {
-		handle.Process.Kill()
+		return fmt.Errorf("error taking docker-compose down: %w\n%s", err, outBuf.String())
 	}
 
 	return nil
