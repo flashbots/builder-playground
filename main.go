@@ -232,6 +232,14 @@ func runIt(recipe playground.Recipe) error {
 		LogInternally:        !disableLogs,
 		Platform:             platform,
 	}
+
+	// Add callback to log service updates in debug mode
+	if logLevel == playground.LevelDebug {
+		cfg.Callback = func(serviceName, update string) {
+			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
+		}
+	}
+
 	dockerRunner, err := playground.NewLocalRunner(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
