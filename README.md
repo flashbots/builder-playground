@@ -3,9 +3,26 @@
 [![Goreport status](https://goreportcard.com/badge/github.com/flashbots/builder-playground)](https://goreportcard.com/report/github.com/flashbots/builder-playground)
 [![Test status](https://github.com/flashbots/builder-playground/actions/workflows/checks.yaml/badge.svg?branch=main)](https://github.com/flashbots/builder-playground/actions?query=workflow%3A%22Checks%22)
 
-The builder playground is a tool to deploy an end-to-end environment to locally test EVM block builders.
+Builder Playground is a CLI tool for spinning up self-contained Ethereum development networks for end-to-end block building. With a single command, it deploys complete L1 and L2 stacks—including EL and CL nodes, mev-boost, relays, and builder infrastructure. Designed for speed, determinism, and ease of use, it serves as the foundation for testing block-builder software, BuilderNet VM images, and integration tests across chains.
 
-## Usage
+Recipes (e.g. `l1`, `opstack`) assemble opinionated components and pre-baked configs to bring a full blockchain stack online within seconds. This makes it ideal for:
+
+- Developing and testing block-building pipelines
+- Validating builder/relay behavior against real consensus flows
+- Running repeatable CI and e2e scenarios
+- Experimenting with fork configurations and client combinations
+
+Quick start:
+
+```bash
+# L1 environment with mev-boost relay
+builder-playground cook l1
+
+# L2 OpStack with external builder support
+builder-playground cook opstack --external-builder http://localhost:4444
+```
+
+## Getting started
 
 Clone the repository and use the `cook` command to deploy a specific recipe:
 
@@ -70,7 +87,7 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 - `--labels` (key=val): Custom labels to apply to your deployment.
 - `--disable-logs` (bool): Disable the logs for the services. Defaults to `false`.
 - `--contender` (bool): Enable [contender](https://github.com/flashbots/contender) spammer. Required to use other contender flags.
-  - `--contender.arg` (string): Pass custom args to the contender CLI. 
+  - `--contender.arg` (string): Pass custom args to the contender CLI.
   Example: `--contender.arg "--tpb 20"`
   - `--contender.target` (string): Change the default target node to spam. On the `l1` recipe, the default is "el", and on `opstack` it's "op-geth".
 - `--with-prometheus` (bool); Whether to deploy a Prometheus server and gather metrics. Defaults to `false`.
