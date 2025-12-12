@@ -15,8 +15,57 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuilderHub(t *testing.T) {
-	testComponent(t, &BuilderHub{})
+func TestRecipeOpstackSimple(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&OpRecipe{})
+}
+
+func TestRecipeOpstackExternalBuilder(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&OpRecipe{
+		externalBuilder: "http://host.docker.internal:4444",
+	})
+}
+
+func TestRecipeOpstackEnableForkAfter(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	forkTime := uint64(10)
+	manifest := tt.test(&OpRecipe{
+		enableLatestFork: &forkTime,
+	})
+
+	elService := manifest.MustGetService("op-geth")
+	rethURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+	require.NoError(t, waitForBlock(rethURL, forkTime+1, 1*time.Minute))
+}
+
+func TestRecipeL1Simple(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&L1Recipe{})
+}
+
+func TestRecipeL1UseNativeReth(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&L1Recipe{
+		useNativeReth: true,
+	})
+}
+
+func TestComponentBuilderHub(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&BuilderHub{})
 
 	// TODO: Calling the port directly on the host machine will not work once we have multiple
 	// tests running in parallel
@@ -25,7 +74,18 @@ func TestBuilderHub(t *testing.T) {
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 }
 
-func testComponent(t *testing.T, s ServiceGen) {
+type testFramework struct {
+	t      *testing.T
+	runner *LocalRunner
+}
+
+func newTestFramework(t *testing.T) *testFramework {
+	return &testFramework{t: t}
+}
+
+func (tt *testFramework) test(s ServiceGen) *Manifest {
+	t := tt.t
+
 	// use the name of the repo and the current timestamp to generate
 	// a name for the output folder of the test
 	testName := toSnakeCase(t.Name())
@@ -46,6 +106,17 @@ func testComponent(t *testing.T, s ServiceGen) {
 	o := &output{
 		dst: e2eTestDir,
 	}
+
+	if recipe, ok := s.(Recipe); ok {
+		// We have to parse the flags since they are used to set the
+		// default values for the recipe inputs
+		err := recipe.Flags().Parse([]string{})
+		require.NoError(t, err)
+
+		_, err = recipe.Artifacts().OutputDir(e2eTestDir).Build()
+		require.NoError(t, err)
+	}
+
 	svcManager := NewManifest(exCtx, o)
 	s.Apply(svcManager)
 
@@ -63,19 +134,25 @@ func testComponent(t *testing.T, s ServiceGen) {
 	}
 	dockerRunner, err := NewLocalRunner(cfg)
 	require.NoError(t, err)
+
 	dockerRunner.cleanupNetwork = true
+	tt.runner = dockerRunner
 
-	defer func() {
-		if err := dockerRunner.Stop(); err != nil {
-			t.Log(err)
-		}
-	}()
-
-	err = dockerRunner.Run()
+	err = dockerRunner.Run(context.Background())
 	require.NoError(t, err)
 
 	require.NoError(t, dockerRunner.WaitForReady(context.Background(), 20*time.Second))
-	require.NoError(t, CompleteReady(dockerRunner.Instances()))
+	require.NoError(t, CompleteReady(context.Background(), dockerRunner.Instances()))
+
+	return svcManager
+}
+
+func (tt *testFramework) Close() {
+	if tt.runner != nil {
+		if err := tt.runner.Stop(); err != nil {
+			tt.t.Log(err)
+		}
+	}
 }
 
 func toSnakeCase(s string) string {
