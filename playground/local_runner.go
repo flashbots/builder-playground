@@ -39,6 +39,8 @@ const defaultNetworkName = "ethplayground"
 // Besides, they will also bind to an available public port on the host machine.
 // If the service runs on the host, it will use the host port numbers instead directly.
 type LocalRunner struct {
+	config *RunnerConfig
+
 	out      *output
 	manifest *Manifest
 	client   *client.Client
@@ -58,9 +60,6 @@ type LocalRunner struct {
 	// exitError signals when one of the services fails
 	exitErr chan error
 
-	// signals whether we are running in interactive mode
-	interactive bool
-
 	// TODO: Merge instance with tasks
 	instances []*instance
 
@@ -68,21 +67,6 @@ type LocalRunner struct {
 	tasksMtx     sync.Mutex
 	tasks        map[string]*task
 	taskUpdateCh chan struct{}
-
-	// wether to bind the ports to the local interface
-	bindHostPortsLocally bool
-
-	// networkName is the name of the network to use for the services
-	networkName string
-
-	// labels is the list of labels to apply to each resource being created
-	labels map[string]string
-
-	// logInternally outputs the logs of the service to the artifacts folder
-	logInternally bool
-
-	// platform is the docker platform to use for the services
-	platform string
 
 	// whether to remove the network name after execution (used in testing)
 	cleanupNetwork bool
@@ -222,22 +206,18 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	d := &LocalRunner{
-		out:                  cfg.Out,
-		manifest:             cfg.Manifest,
-		client:               client,
-		reservedPorts:        map[int]bool{},
-		overrides:            cfg.Overrides,
-		handles:              []*exec.Cmd{},
-		tasks:                tasks,
-		taskUpdateCh:         make(chan struct{}),
-		exitErr:              make(chan error, 2),
-		bindHostPortsLocally: cfg.BindHostPortsLocally,
-		networkName:          cfg.NetworkName,
-		instances:            instances,
-		labels:               cfg.Labels,
-		logInternally:        cfg.LogInternally,
-		platform:             cfg.Platform,
-		callback:             callback,
+		config:        cfg,
+		out:           cfg.Out,
+		manifest:      cfg.Manifest,
+		client:        client,
+		reservedPorts: map[int]bool{},
+		overrides:     cfg.Overrides,
+		handles:       []*exec.Cmd{},
+		tasks:         tasks,
+		taskUpdateCh:  make(chan struct{}),
+		exitErr:       make(chan error, 2),
+		instances:     instances,
+		callback:      callback,
 	}
 
 	if cfg.Interactive {
@@ -431,7 +411,7 @@ func (d *LocalRunner) Stop() error {
 	}
 
 	if d.cleanupNetwork {
-		if err := d.client.NetworkRemove(context.Background(), d.networkName); err != nil {
+		if err := d.client.NetworkRemove(context.Background(), d.config.NetworkName); err != nil {
 			return err
 		}
 	}
@@ -448,7 +428,7 @@ func (d *LocalRunner) reservePort(startPort int, protocol string) int {
 		}
 
 		bindAddr := "0.0.0.0"
-		if d.bindHostPortsLocally {
+		if d.config.BindHostPortsLocally {
 			bindAddr = "127.0.0.1"
 		}
 
@@ -637,7 +617,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 	}
 
 	// apply the user defined labels
-	maps.Copy(labels, d.labels)
+	maps.Copy(labels, d.config.Labels)
 
 	// add the local ports exposed by the service as labels
 	// we have to do this for now since we do not store the manifest in JSON yet.
@@ -675,12 +655,12 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// Add volume mount for the output directory
 		"volumes": volumesInLine,
 		// Add the ethereum network
-		"networks": []string{d.networkName},
+		"networks": []string{d.config.NetworkName},
 		"labels":   labels,
 	}
 
-	if d.platform != "" {
-		service["platform"] = d.platform
+	if d.config.Platform != "" {
+		service["platform"] = d.config.Platform
 	}
 
 	if len(envs) > 0 {
@@ -750,7 +730,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 				protocol = "/udp"
 			}
 
-			if d.bindHostPortsLocally {
+			if d.config.BindHostPortsLocally {
 				ports = append(ports, fmt.Sprintf("127.0.0.1:%d:%d%s", p.HostPort, p.Port, protocol))
 			} else {
 				ports = append(ports, fmt.Sprintf("%d:%d%s", p.HostPort, p.Port, protocol))
@@ -772,8 +752,8 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 		// We create a new network to be used by all the services so that
 		// we can do DNS discovery between them.
 		"networks": map[string]interface{}{
-			d.networkName: map[string]interface{}{
-				"name": d.networkName,
+			d.config.NetworkName: map[string]interface{}{
+				"name": d.config.NetworkName,
 			},
 		},
 	}
@@ -921,7 +901,7 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 				d.updateTaskStatus(name, taskStatusStarted)
 				d.callback(name, "container started")
 
-				if d.logInternally {
+				if d.config.LogInternally {
 					// the container has started, we can track the logs now
 					go func() {
 						if err := d.trackLogs(name, event.Actor.ID); err != nil {
