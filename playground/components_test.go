@@ -15,14 +15,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestE2ERecipeOpstackSimple(t *testing.T) {
+func TestRecipeOpstackSimple(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
 	tt.test(&OpRecipe{})
 }
 
-func TestE2ERecipeOpstackExternalBuilder(t *testing.T) {
+func TestRecipeOpstackExternalBuilder(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -31,7 +31,7 @@ func TestE2ERecipeOpstackExternalBuilder(t *testing.T) {
 	})
 }
 
-func TestE2ERecipeOpstackEnableForkAfter(t *testing.T) {
+func TestRecipeOpstackEnableForkAfter(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -45,14 +45,14 @@ func TestE2ERecipeOpstackEnableForkAfter(t *testing.T) {
 	require.NoError(t, waitForBlock(rethURL, forkTime+1, 1*time.Minute))
 }
 
-func TestE2ERecipeL1Simple(t *testing.T) {
+func TestRecipeL1Simple(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
 	tt.test(&L1Recipe{})
 }
 
-func TestE2ERecipeL1UseNativeReth(t *testing.T) {
+func TestRecipeL1UseNativeReth(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -61,7 +61,7 @@ func TestE2ERecipeL1UseNativeReth(t *testing.T) {
 	})
 }
 
-func TestE2EBuilderHub(t *testing.T) {
+func TestComponentBuilderHub(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -80,10 +80,6 @@ type testFramework struct {
 }
 
 func newTestFramework(t *testing.T) *testFramework {
-	if os.Getenv("E2E_TESTS") != "true" {
-		t.Skip("Skipping E2E test: E2E_TESTS environment variable not set to 'true'")
-	}
-
 	return &testFramework{t: t}
 }
 

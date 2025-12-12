@@ -9,8 +9,17 @@ on:
 
 jobs:
   e2e-test:
-    name: E2E test
-    runs-on: ubuntu-latest
+    name: E2E test (${{ matrix.flags }})
+    runs-on: warp-ubuntu-latest-x64-8x
+    strategy:
+      matrix:
+        flags:
+          - "l1"
+          - "l1 --use-native-reth"
+          - "l1 --with-prometheus"
+          - "opstack"
+          - "opstack --external-builder http://host.docker.internal:4444"
+          - "opstack --enable-latest-fork=10"
     steps:
       - name: Check out code
         uses: actions/checkout@v2
@@ -27,14 +36,18 @@ jobs:
         run: ./scripts/ci-build-playground-utils.sh
 
       - name: Run playground
-        run: go test -v ./playground/... -run TestE2E
+        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 4m --watchdog
+
+      - name: Copy playground logs
+        if: ${{ failure() }}
+        run: ./scripts/ci-copy-playground-logs.sh /tmp/playground /tmp/playground-logs
 
       - name: Archive playground logs
         uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
-          name: playground-logs
-          path: ./e2e-logs
+          name: playground-logs-${{ matrix.flags }}
+          path: /tmp/playground-logs
           retention-days: 5
 
   unit-test:
