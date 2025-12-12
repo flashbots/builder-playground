@@ -3,9 +3,26 @@
 [![Goreport status](https://goreportcard.com/badge/github.com/flashbots/builder-playground)](https://goreportcard.com/report/github.com/flashbots/builder-playground)
 [![Test status](https://github.com/flashbots/builder-playground/actions/workflows/checks.yaml/badge.svg?branch=main)](https://github.com/flashbots/builder-playground/actions?query=workflow%3A%22Checks%22)
 
-The builder playground is a tool to deploy an end-to-end environment to locally test EVM block builders.
+Builder Playground is a CLI tool for spinning up self-contained Ethereum development networks for end-to-end block building. With a single command, it deploys complete L1 and L2 stacks—including EL and CL nodes, mev-boost, relays, and builder infrastructure. Designed for speed, determinism, and ease of use, it serves as the foundation for testing block-builder software, BuilderNet VM images, and integration tests across chains.
 
-## Usage
+Recipes (e.g. `l1`, `opstack`) assemble opinionated components and pre-baked configs to bring a full blockchain stack online within seconds. This makes it ideal for:
+
+- Developing and testing block-building pipelines
+- Validating builder/relay behavior against real consensus flows
+- Running repeatable CI and e2e scenarios
+- Experimenting with fork configurations and client combinations
+
+Quick start:
+
+```bash
+# L1 environment with mev-boost relay
+builder-playground cook l1
+
+# L2 OpStack with external builder support
+builder-playground cook opstack --external-builder http://localhost:4444
+```
+
+## Getting started
 
 Clone the repository and use the `cook` command to deploy a specific recipe:
 
@@ -70,69 +87,12 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 - `--labels` (key=val): Custom labels to apply to your deployment.
 - `--disable-logs` (bool): Disable the logs for the services. Defaults to `false`.
 - `--contender` (bool): Enable [contender](https://github.com/flashbots/contender) spammer. Required to use other contender flags.
-  - `--contender.arg` (string): Pass custom args to the contender CLI. 
+  - `--contender.arg` (string): Pass custom args to the contender CLI.
   Example: `--contender.arg "--tpb 20"`
   - `--contender.target` (string): Change the default target node to spam. On the `l1` recipe, the default is "el", and on `opstack` it's "op-geth".
+- `--with-prometheus` (bool); Whether to deploy a Prometheus server and gather metrics. Defaults to `false`.
 
 To stop the playground, press `Ctrl+C`.
-
-## Network Readiness
-
-The playground can expose a `/readyz` HTTP endpoint to check if the network is ready to accept transactions (i.e., blocks are being produced).
-
-### Readyz Endpoint
-
-Enable the readyz server with the `--readyz-port` flag:
-
-```bash
-$ builder-playground cook l1 --readyz-port 8080
-```
-
-Then check readiness:
-
-```bash
-$ curl http://localhost:8080/readyz
-{"ready":true}
-```
-
-Returns:
-- `200 OK` with `{"ready": true}` when the network is producing blocks
-- `503 Service Unavailable` with `{"ready": false, "error": "..."}` otherwise
-
-### Wait-Ready Command
-
-Use the `wait-ready` command to block until the network is ready:
-
-```bash
-$ builder-playground wait-ready [flags]
-```
-
-Flags:
-- `--url` (string): readyz endpoint URL. Defaults to `http://localhost:8080/readyz`
-- `--timeout` (duration): Maximum time to wait. Defaults to `60s`
-- `--interval` (duration): Poll interval. Defaults to `1s`
-
-Example:
-
-```bash
-# In terminal 1: Start the playground with readyz enabled
-$ builder-playground cook l1 --readyz-port 8080
-
-# In terminal 2: Wait for the network to be ready
-$ builder-playground wait-ready --timeout 120s
-Waiting for http://localhost:8080/readyz (timeout: 2m0s, interval: 1s)
-  [1s] Attempt 1: 503 Service Unavailable
-  [2s] Attempt 2: 503 Service Unavailable
-  [3s] Ready! (200 OK)
-```
-
-This is useful for CI/CD pipelines or scripts that need to wait for the network before deploying contracts.
-
-Alternatively, use a bash one-liner:
-
-```bash
-$ timeout 60 bash -c 'until curl -sf http://localhost:8080/readyz | grep -q "\"ready\":true"; do sleep 1; done'
-```
 
 ## Inspect
 
@@ -157,6 +117,26 @@ Removes a recipe running in the background
 
 ```bash
 $ builder-playground clean [--output ./output]
+```
+
+## Telemetry
+
+The Builder Playground includes built-in Prometheus metrics collection. When you run any recipe with the `--with-prometheus` flag, the system automatically deploys a Prometheus server and gathers metrics from all services in your deployment.
+
+Prometheus automatically discovers services by looking for a port with the metrics label. You can define a metrics port in your component like this:
+
+```go
+WithArgs("--metrics", `0.0.0.0:{{Port "metrics" 9090}}`)
+```
+
+By default, Prometheus scrapes the `/metrics` path, but services can override this by specifying a custom path with `WithLabel("metrics_path", "/custom/path")`. All configured services are automatically registered as scrape targets.
+
+### Usage
+Enable Prometheus for any recipe:
+
+```bash
+$ builder-playground cook l1 --with-prometheus
+$ builder-playground cook opstack --with-prometheus
 ```
 
 ## Internals

@@ -1,45 +1,49 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
-var outputFlag string
-var genesisDelayFlag uint64
-var withOverrides []string
-var watchdog bool
-var dryRun bool
-var interactive bool
-var timeout time.Duration
-var logLevelFlag string
-var bindExternal bool
-var withPrometheus bool
-var networkName string
-var labels playground.MapStringFlag
-var disableLogs bool
-var platform string
-var contenderEnabled bool
-var contenderArgs []string
-var contenderTarget string
-var detached bool
+var version = "dev"
+
+var (
+	outputFlag       string
+	genesisDelayFlag uint64
+	withOverrides    []string
+	watchdog         bool
+	dryRun           bool
+	interactive      bool
+	timeout          time.Duration
+	logLevelFlag     string
+	bindExternal     bool
+	withPrometheus   bool
+	networkName      string
+	labels           playground.MapStringFlag
+	disableLogs      bool
+	platform         string
+	contenderEnabled bool
+	contenderArgs    []string
+	contenderTarget  string
+	detached         bool
+)
 
 var rootCmd = &cobra.Command{
-	Use:   "playground",
-	Short: "",
-	Long:  ``,
+	Use:     "playground",
+	Short:   "",
+	Long:    ``,
+	Version: version,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return nil
 	},
@@ -84,19 +88,20 @@ var inspectCmd = &cobra.Command{
 		serviceName := args[0]
 		connectionName := args[1]
 
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt)
-
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			<-sig
-			cancel()
-		}()
+		ctx := mainctx.Get()
 
 		if err := playground.Inspect(ctx, serviceName, connectionName); err != nil {
 			return fmt.Errorf("failed to inspect connection: %w", err)
 		}
 		return nil
+	},
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("playground %s\n", version)
 	},
 }
 
@@ -143,6 +148,7 @@ func main() {
 
 	rootCmd.AddCommand(cookCmd)
 	rootCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(versionCmd)
 
 	rootCmd.AddCommand(cleanCmd)
 	cleanCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
@@ -240,19 +246,20 @@ func runIt(recipe playground.Recipe) error {
 		LogInternally:        !disableLogs,
 		Platform:             platform,
 	}
+
+	// Add callback to log service updates in debug mode
+	if logLevel == playground.LevelDebug {
+		cfg.Callback = func(serviceName, update string) {
+			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
+		}
+	}
+
 	dockerRunner, err := playground.NewLocalRunner(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-sig
-		cancel()
-	}()
+	ctx := mainctx.Get()
 
 	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop()
