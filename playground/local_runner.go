@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
@@ -84,6 +86,9 @@ type LocalRunner struct {
 
 	// whether to remove the network name after execution (used in testing)
 	cleanupNetwork bool
+
+	// callback is called to report service updates
+	callback func(serviceName, update string)
 }
 
 type task struct {
@@ -123,6 +128,7 @@ type RunnerConfig struct {
 	Labels               map[string]string
 	LogInternally        bool
 	Platform             string
+	Callback             func(serviceName, update string)
 }
 
 func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
@@ -209,6 +215,12 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	if cfg.NetworkName == "" {
 		cfg.NetworkName = defaultNetworkName
 	}
+
+	callback := cfg.Callback
+	if callback == nil {
+		callback = func(serviceName, update string) {} // noop
+	}
+
 	d := &LocalRunner{
 		out:                  cfg.Out,
 		manifest:             cfg.Manifest,
@@ -225,6 +237,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		labels:               cfg.Labels,
 		logInternally:        cfg.LogInternally,
 		platform:             cfg.Platform,
+		callback:             callback,
 	}
 
 	if cfg.Interactive {
@@ -906,6 +919,7 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 			switch event.Action {
 			case events.ActionStart:
 				d.updateTaskStatus(name, taskStatusStarted)
+				d.callback(name, "container started")
 
 				if d.logInternally {
 					// the container has started, we can track the logs now
@@ -917,10 +931,12 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 				}
 			case events.ActionDie:
 				d.updateTaskStatus(name, taskStatusDie)
+				d.callback(name, "container died")
 				log.Info("container died", "name", name)
 
 			case events.ActionHealthStatusHealthy:
 				d.updateTaskStatus(name, taskStatusHealthy)
+				d.callback(name, "container healthy")
 				log.Info("container is healthy", "name", name)
 			}
 
@@ -993,7 +1009,62 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	return nil
 }
 
-func (d *LocalRunner) Run() error {
+const (
+	pullingImageEvent = "pulling image"
+	imagePulledEvent  = "image pulled"
+)
+
+func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
+	// Check if image exists locally
+	_, err := d.client.ImageInspect(ctx, imageName)
+	if err == nil {
+		return nil // Image already exists
+	}
+	if !client.IsErrNotFound(err) {
+		return err
+	}
+
+	// Image not found locally, pull it
+	d.callback(imageName, pullingImageEvent)
+
+	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	}
+	defer reader.Close()
+
+	// Consume the output to ensure pull completes
+	_, err = io.Copy(io.Discard, reader)
+	if err != nil {
+		return fmt.Errorf("failed to read image pull output %s: %w", imageName, err)
+	}
+
+	d.callback(imageName, imagePulledEvent)
+	return nil
+}
+
+func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+
+	for _, svc := range d.manifest.Services {
+		if d.isHostService(svc.Name) {
+			continue // Skip host services
+		}
+
+		s := svc // Capture loop variable
+		g.Go(func() error {
+			imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
+			if err := d.ensureImage(ctx, imageName); err != nil {
+				return fmt.Errorf("failed to ensure image %s: %w", imageName, err)
+			}
+			return nil
+		})
+	}
+
+	return g.Wait()
+}
+
+func (d *LocalRunner) Run(ctx context.Context) error {
 	go d.trackContainerStatusAndLogs()
 
 	yamlData, err := d.generateDockerCompose()
@@ -1012,8 +1083,13 @@ func (d *LocalRunner) Run() error {
 		}
 	}
 
+	// Pull all required images in parallel
+	if err := d.pullNotAvailableImages(ctx); err != nil {
+		return err
+	}
+
 	// First start the services that are running in docker-compose
-	cmd := exec.Command("docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
+	cmd := exec.CommandContext(ctx, "docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
 
 	var errOut bytes.Buffer
 	cmd.Stderr = &errOut

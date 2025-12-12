@@ -1,18 +1,17 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
@@ -84,14 +83,7 @@ var inspectCmd = &cobra.Command{
 		serviceName := args[0]
 		connectionName := args[1]
 
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt)
-
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			<-sig
-			cancel()
-		}()
+		ctx := mainctx.Get()
 
 		if err := playground.Inspect(ctx, serviceName, connectionName); err != nil {
 			return fmt.Errorf("failed to inspect connection: %w", err)
@@ -240,21 +232,22 @@ func runIt(recipe playground.Recipe) error {
 		LogInternally:        !disableLogs,
 		Platform:             platform,
 	}
+
+	// Add callback to log service updates in debug mode
+	if logLevel == playground.LevelDebug {
+		cfg.Callback = func(serviceName, update string) {
+			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
+		}
+	}
+
 	dockerRunner, err := playground.NewLocalRunner(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+	ctx := mainctx.Get()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-sig
-		cancel()
-	}()
-
-	if err := dockerRunner.Run(); err != nil {
+	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
 	}
@@ -287,7 +280,7 @@ func runIt(recipe playground.Recipe) error {
 
 	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
 	networkReadyStart := time.Now()
-	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
+	if err := playground.CompleteReady(ctx, dockerRunner.Instances()); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("network not ready: %w", err)
 	}

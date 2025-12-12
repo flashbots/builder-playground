@@ -359,9 +359,9 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 }
 
-func opGethReadyFn(instance *instance) error {
+func opGethReadyFn(ctx context.Context, instance *instance) error {
 	opGethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
-	return waitForFirstBlock(context.Background(), opGethURL, 60*time.Second)
+	return waitForFirstBlock(ctx, opGethURL, 60*time.Second)
 }
 
 func opGethWatchdogFn(out io.Writer, instance *instance, ctx context.Context) error {
@@ -446,9 +446,9 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
 			return watchChainHead(out, rethURL, 12*time.Second)
 		}).
-		WithReadyFn(func(instance *instance) error {
+		WithReadyFn(func(ctx context.Context, instance *instance) error {
 			elURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
-			return waitForFirstBlock(context.Background(), elURL, 60*time.Second)
+			return waitForFirstBlock(ctx, elURL, 60*time.Second)
 		}).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").

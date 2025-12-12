@@ -138,7 +138,7 @@ func (tt *testFramework) test(s ServiceGen) *Manifest {
 	dockerRunner.cleanupNetwork = true
 	tt.runner = dockerRunner
 
-	err = dockerRunner.Run()
+	err = dockerRunner.Run(context.Background())
 	require.NoError(t, err)
 
 	require.NoError(t, dockerRunner.WaitForReady(context.Background(), 20*time.Second))
