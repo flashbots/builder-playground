@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var version = "dev"
+
 var outputFlag string
 var genesisDelayFlag uint64
 var withOverrides []string
@@ -36,9 +38,10 @@ var contenderTarget string
 var detached bool
 
 var rootCmd = &cobra.Command{
-	Use:   "playground",
-	Short: "",
-	Long:  ``,
+	Use:     "playground",
+	Short:   "",
+	Long:    ``,
+	Version: version,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return nil
 	},
@@ -92,6 +95,14 @@ var inspectCmd = &cobra.Command{
 	},
 }
 
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("playground %s\n", version)
+	},
+}
+
 var recipes = []playground.Recipe{
 	&playground.L1Recipe{},
 	&playground.OpRecipe{},
@@ -135,6 +146,7 @@ func main() {
 
 	rootCmd.AddCommand(cookCmd)
 	rootCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(versionCmd)
 
 	rootCmd.AddCommand(cleanCmd)
 	cleanCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
