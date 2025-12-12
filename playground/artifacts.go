@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -35,7 +36,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var defaultOpBlockTimeSeconds = uint64(2)
+var (
+	defaultL1BlockTimeSeconds = uint64(12)
+	defaultOpBlockTimeSeconds = uint64(2)
+)
 
 // minimumGenesisDelay is the minimum delay for the genesis time. This is required
 // because lighthouse takes some time to start and we need to make sure it is ready
@@ -58,19 +62,21 @@ var clConfigContent []byte
 var queryReadyCheck []byte
 
 type ArtifactsBuilder struct {
-	outputDir         string
-	applyLatestL1Fork bool
-	genesisDelay      uint64
-	applyLatestL2Fork *uint64
-	OpblockTime       uint64
+	outputDir            string
+	applyLatestL1Fork    bool
+	genesisDelay         uint64
+	applyLatestL2Fork    *uint64
+	l1BlockTimeInSeconds uint64
+	opBlockTimeInSeconds uint64
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
 	return &ArtifactsBuilder{
-		outputDir:         "",
-		applyLatestL1Fork: false,
-		genesisDelay:      MinimumGenesisDelay,
-		OpblockTime:       defaultOpBlockTimeSeconds,
+		outputDir:            "",
+		applyLatestL1Fork:    false,
+		genesisDelay:         MinimumGenesisDelay,
+		l1BlockTimeInSeconds: defaultL1BlockTimeSeconds,
+		opBlockTimeInSeconds: defaultOpBlockTimeSeconds,
 	}
 }
 
@@ -94,8 +100,13 @@ func (b *ArtifactsBuilder) GenesisDelay(genesisDelaySeconds uint64) *ArtifactsBu
 	return b
 }
 
+func (b *ArtifactsBuilder) L1BlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
+	b.l1BlockTimeInSeconds = blockTimeSeconds
+	return b
+}
+
 func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
-	b.OpblockTime = blockTimeSeconds
+	b.opBlockTimeInSeconds = blockTimeSeconds
 	return b
 }
 
@@ -136,6 +147,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		latestForkEpoch = "18446744073709551615"
 	}
 	clConfigContentStr := strings.Replace(string(clConfigContent), "{{.LatestForkEpoch}}", latestForkEpoch, 1)
+	clConfigContentStr = strings.Replace(clConfigContentStr, "{{.SecondsPerSlot}}", strconv.FormatInt(int64(b.l1BlockTimeInSeconds), 10), 1)
 
 	// load the config.yaml file
 	clConfig, err := params.UnmarshalConfig([]byte(clConfigContentStr), nil)
@@ -258,7 +270,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			forkTime = new(uint64)
 
 			if *b.applyLatestL2Fork != 0 {
-				*forkTime = opTimestamp + b.OpblockTime*(*b.applyLatestL2Fork)
+				*forkTime = opTimestamp + b.opBlockTimeInSeconds*(*b.applyLatestL2Fork)
 			} else {
 				*forkTime = 0
 			}
@@ -317,7 +329,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 					"number": 0,
 				},
 			},
-			"block_time": b.OpblockTime,
+			"block_time": b.opBlockTimeInSeconds,
 			"chain_op_config": map[string]interface{}{ // TODO: Read this from somewhere (genesis??)
 				"eip1559Elasticity":        6,
 				"eip1559Denominator":       50,

@@ -2,6 +2,7 @@ package playground
 
 import (
 	"fmt"
+	"time"
 
 	flag "github.com/spf13/pflag"
 )
@@ -11,6 +12,10 @@ var _ Recipe = &L1Recipe{}
 type L1Recipe struct {
 	// latestFork enables the use of the latest fork at startup
 	latestFork bool
+
+	// blockTime is the block time to use for the L1 nodes
+	// (default is 12 seconds)
+	blockTime time.Duration
 
 	// useRethForValidation signals mev-boost to use the Reth EL node for block validation
 	useRethForValidation bool
@@ -38,6 +43,7 @@ func (l *L1Recipe) Description() string {
 func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("l1", flag.ContinueOnError)
 	flags.BoolVar(&l.latestFork, "latest-fork", false, "use the latest fork")
+	flags.DurationVar(&l.blockTime, "block-time", time.Duration(defaultL1BlockTimeSeconds)*time.Second, "Block time to use for the L1")
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
 	flags.Uint64Var(&l.secondaryELPort, "secondary-el", 0, "port to use for the secondary builder")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
@@ -48,6 +54,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
 	builder.ApplyLatestL1Fork(l.latestFork)
+	builder.L1BlockTime(max(1, uint64(l.blockTime.Seconds())))
 
 	return builder
 }
