@@ -1095,6 +1095,10 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	cmd.Stderr = &errOut
 
 	if err := cmd.Run(); err != nil {
+		// Don't return error if context was cancelled
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
 	}
 
