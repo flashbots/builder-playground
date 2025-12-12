@@ -142,7 +142,7 @@ func (tt *testFramework) test(s ServiceGen) *Manifest {
 	require.NoError(t, err)
 
 	require.NoError(t, dockerRunner.WaitForReady(context.Background(), 20*time.Second))
-	require.NoError(t, CompleteReady(dockerRunner.Instances()))
+	require.NoError(t, CompleteReady(context.Background(), dockerRunner.Instances()))
 
 	return svcManager
 }
