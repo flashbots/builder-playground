@@ -671,7 +671,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 			if s.ReadyCheck.UseNC {
 				u, err := url.Parse(s.ReadyCheck.QueryURL)
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse ready check url '%s': %v", s.ReadyCheck.QueryURL, err)
+					return nil, nil, fmt.Errorf("failed to parse ready check url '%s': %v", s.ReadyCheck.QueryURL, err)
 				}
 				test = []string{"CMD-SHELL", "nc -z localhost " + u.Port()}
 			} else {
