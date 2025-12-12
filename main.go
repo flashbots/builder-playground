@@ -1,18 +1,17 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
@@ -84,14 +83,7 @@ var inspectCmd = &cobra.Command{
 		serviceName := args[0]
 		connectionName := args[1]
 
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt)
-
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			<-sig
-			cancel()
-		}()
+		ctx := mainctx.Get()
 
 		if err := playground.Inspect(ctx, serviceName, connectionName); err != nil {
 			return fmt.Errorf("failed to inspect connection: %w", err)
@@ -245,14 +237,7 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-sig
-		cancel()
-	}()
+	ctx := mainctx.Get()
 
 	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop()
