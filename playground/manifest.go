@@ -290,7 +290,7 @@ type Service struct {
 }
 
 type watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
-type readyFn func(instance *instance) error
+type readyFn func(ctx context.Context, instance *instance) error
 
 type instance struct {
 	service *Service
