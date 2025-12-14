@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -237,7 +236,6 @@ func runIt(recipe playground.Recipe) error {
 	cfg := &playground.RunnerConfig{
 		Out:                  artifacts.Out,
 		Manifest:             svcManager,
-		Interactive:          interactive,
 		BindHostPortsLocally: !bindExternal,
 		NetworkName:          networkName,
 		Labels:               labels,
@@ -245,9 +243,14 @@ func runIt(recipe playground.Recipe) error {
 		Platform:             platform,
 	}
 
+	if interactive {
+		i := playground.NewInteractiveDisplay(svcManager)
+		cfg.Callback = i.HandleUpdate
+	}
+
 	// Add callback to log service updates in debug mode
 	if logLevel == playground.LevelDebug {
-		cfg.Callback = func(serviceName, update string) {
+		cfg.Callback = func(serviceName string, update playground.TaskStatus) {
 			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
 		}
 	}
@@ -339,28 +342,5 @@ func runIt(recipe playground.Recipe) error {
 	if err := dockerRunner.Stop(); err != nil {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
-	return nil
-}
-
-func isExecutableValid(path string) error {
-	// First check if file exists
-	_, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("file does not exist or is inaccessible: %w", err)
-	}
-
-	// Try to execute with a harmless flag or in a way that won't run the main program
-	cmd := exec.Command(path, "--version")
-	// Redirect output to /dev/null
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("cannot start executable: %w", err)
-	}
-
-	// Immediately kill the process since we just want to test if it starts
-	cmd.Process.Kill()
-
 	return nil
 }

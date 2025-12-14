@@ -17,8 +17,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
@@ -57,32 +55,29 @@ type LocalRunner struct {
 	exitErr chan error
 
 	// tasks tracks the status of each service
-	tasksMtx     sync.Mutex
-	tasks        map[string]*task
-	taskUpdateCh chan struct{}
+	tasksMtx sync.Mutex
+	tasks    map[string]*task
 
 	// whether to remove the network name after execution (used in testing)
 	cleanupNetwork bool
 }
 
 type task struct {
-	status string
+	status TaskStatus
 	ready  bool
 	logs   *os.File
 }
 
-var (
-	taskStatusPending = "pending"
-	taskStatusStarted = "started"
-	taskStatusDie     = "die"
-	taskStatusHealthy = "healthy"
-)
+type TaskStatus string
 
-type taskUI struct {
-	tasks    map[string]string
-	spinners map[string]spinner.Model
-	style    lipgloss.Style
-}
+var (
+	TaskStatusPulling TaskStatus = "pulling"
+	TaskStatusPulled  TaskStatus = "pulled"
+	TaskStatusPending TaskStatus = "pending"
+	TaskStatusStarted TaskStatus = "started"
+	TaskStatusDie     TaskStatus = "die"
+	TaskStatusHealthy TaskStatus = "healthy"
+)
 
 func newDockerClient() (*client.Client, error) {
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -95,13 +90,12 @@ func newDockerClient() (*client.Client, error) {
 type RunnerConfig struct {
 	Out                  *output
 	Manifest             *Manifest
-	Interactive          bool
 	BindHostPortsLocally bool
 	NetworkName          string
 	Labels               map[string]string
 	LogInternally        bool
 	Platform             string
-	Callback             func(serviceName, update string)
+	Callback             func(serviceName string, update TaskStatus)
 }
 
 func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
@@ -139,7 +133,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		}
 
 		tasks[service.Name] = &task{
-			status: taskStatusPending,
+			status: TaskStatusPending,
 			logs:   logs,
 		}
 	}
@@ -149,7 +143,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	if cfg.Callback == nil {
-		cfg.Callback = func(serviceName, update string) {} // noop
+		cfg.Callback = func(serviceName string, update TaskStatus) {} // noop
 	}
 
 	d := &LocalRunner{
@@ -160,85 +154,10 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		reservedPorts: map[int]bool{},
 		handles:       []*exec.Cmd{},
 		tasks:         tasks,
-		taskUpdateCh:  make(chan struct{}),
 		exitErr:       make(chan error, 2),
 	}
 
-	if cfg.Interactive {
-		go d.printStatus()
-
-		select {
-		case d.taskUpdateCh <- struct{}{}:
-		default:
-		}
-	}
-
 	return d, nil
-}
-
-func (d *LocalRunner) printStatus() {
-	fmt.Print("\033[s")
-	lineOffset := 0
-
-	// Get ordered service names from manifest
-	orderedServices := make([]string, 0, len(d.manifest.Services))
-	for _, svc := range d.manifest.Services {
-		orderedServices = append(orderedServices, svc.Name)
-	}
-
-	// Initialize UI state
-	ui := taskUI{
-		tasks:    make(map[string]string),
-		spinners: make(map[string]spinner.Model),
-		style:    lipgloss.NewStyle(),
-	}
-
-	// Initialize spinners for each service
-	for _, name := range orderedServices {
-		sp := spinner.New()
-		sp.Spinner = spinner.Dot
-		ui.spinners[name] = sp
-	}
-
-	for {
-		select {
-		case <-d.taskUpdateCh:
-			d.tasksMtx.Lock()
-
-			// Clear the previous lines and move cursor up
-			if lineOffset > 0 {
-				fmt.Printf("\033[%dA", lineOffset)
-				fmt.Print("\033[J")
-			}
-
-			lineOffset = 0
-			// Use ordered services instead of ranging over map
-			for _, name := range orderedServices {
-				status := d.tasks[name].status
-				var statusLine string
-
-				switch status {
-				case taskStatusStarted:
-					sp := ui.spinners[name]
-					sp.Tick()
-					ui.spinners[name] = sp
-					statusLine = ui.style.Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("%s [%s] Running", sp.View(), name))
-				case taskStatusDie:
-					statusLine = ui.style.Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("✗ [%s] Failed", name))
-				case taskStatusPending:
-					sp := ui.spinners[name]
-					sp.Tick()
-					ui.spinners[name] = sp
-					statusLine = ui.style.Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pending", sp.View(), name))
-				}
-
-				fmt.Println(statusLine)
-				lineOffset++
-			}
-
-			d.tasksMtx.Unlock()
-		}
-	}
 }
 
 func (d *LocalRunner) AreReady() bool {
@@ -252,7 +171,7 @@ func (d *LocalRunner) AreReady() bool {
 		}
 
 		// first ensure the task has started
-		if task.status != taskStatusStarted {
+		if task.status != TaskStatusStarted {
 			return false
 		}
 
@@ -284,23 +203,20 @@ func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) e
 	}
 }
 
-func (d *LocalRunner) updateTaskStatus(name, status string) {
+func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	d.tasksMtx.Lock()
 	defer d.tasksMtx.Unlock()
-	if status == taskStatusHealthy {
+	if status == TaskStatusHealthy {
 		d.tasks[name].ready = true
 	} else {
 		d.tasks[name].status = status
 	}
 
-	if status == taskStatusDie {
+	if status == TaskStatusDie {
 		d.exitErr <- fmt.Errorf("container %s failed", name)
 	}
 
-	select {
-	case d.taskUpdateCh <- struct{}{}:
-	default:
-	}
+	d.config.Callback(name, status)
 }
 
 func (d *LocalRunner) ExitErr() <-chan error {
@@ -837,8 +753,7 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 
 			switch event.Action {
 			case events.ActionStart:
-				d.updateTaskStatus(name, taskStatusStarted)
-				d.config.Callback(name, "container started")
+				d.updateTaskStatus(name, TaskStatusStarted)
 
 				if d.config.LogInternally {
 					// the container has started, we can track the logs now
@@ -849,13 +764,11 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 					}()
 				}
 			case events.ActionDie:
-				d.updateTaskStatus(name, taskStatusDie)
-				d.config.Callback(name, "container died")
+				d.updateTaskStatus(name, TaskStatusDie)
 				log.Info("container died", "name", name)
 
 			case events.ActionHealthStatusHealthy:
-				d.updateTaskStatus(name, taskStatusHealthy)
-				d.config.Callback(name, "container healthy")
+				d.updateTaskStatus(name, TaskStatusHealthy)
 				log.Info("container is healthy", "name", name)
 			}
 
@@ -928,11 +841,6 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	return nil
 }
 
-const (
-	pullingImageEvent = "pulling image"
-	imagePulledEvent  = "image pulled"
-)
-
 func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	// Check if image exists locally
 	_, err := d.client.ImageInspect(ctx, imageName)
@@ -944,7 +852,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	}
 
 	// Image not found locally, pull it
-	d.config.Callback(imageName, pullingImageEvent)
+	d.config.Callback(imageName, TaskStatusPulling)
 
 	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
@@ -958,7 +866,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 		return fmt.Errorf("failed to read image pull output %s: %w", imageName, err)
 	}
 
-	d.config.Callback(imageName, imagePulledEvent)
+	d.config.Callback(imageName, TaskStatusPulled)
 	return nil
 }
 
