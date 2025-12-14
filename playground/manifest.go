@@ -144,7 +144,7 @@ type ServiceGen interface {
 }
 
 type ServiceReady interface {
-	Ready(instance *instance) error
+	Ready(service *Service) error
 }
 
 func (s *Manifest) AddService(srv ServiceGen) {
@@ -321,14 +321,9 @@ type Service struct {
 }
 
 type (
-	watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
-	readyFn    func(ctx context.Context, instance *instance) error
+	watchdogFn func(out io.Writer, service *Service, ctx context.Context) error
+	readyFn    func(ctx context.Context, service *Service) error
 )
-
-type instance struct {
-	service *Service
-	logs    *serviceLogs
-}
 
 type DependsOnCondition string
 

@@ -56,9 +56,6 @@ type LocalRunner struct {
 	// exitError signals when one of the services fails
 	exitErr chan error
 
-	// TODO: Merge instance with tasks
-	instances []*instance
-
 	// tasks tracks the status of each service
 	tasksMtx     sync.Mutex
 	tasks        map[string]*task
@@ -113,49 +110,37 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	// Create the concrete instances to run
-	instances := []*instance{}
-	for _, service := range cfg.Manifest.Services {
-		instance := &instance{
-			service: service,
-		}
-		if cfg.LogInternally {
-			log_output, err := cfg.Out.LogOutput(service.Name)
-			if err != nil {
-				return nil, fmt.Errorf("error getting log output: %w", err)
-			}
-			instance.logs = &serviceLogs{
-				logRef: log_output,
-				path:   log_output.Name(),
-			}
-		}
-		instances = append(instances, instance)
-	}
-
 	// download any local release artifacts for the services that require them
 	// TODO: it feels a bit weird to have all this logic on the new command. We should split it later on.
-	for _, instance := range instances {
-		ss := instance.service
-		if ss.Labels[useHostExecutionLabel] == "true" {
+	for _, service := range cfg.Manifest.Services {
+		if service.Labels[useHostExecutionLabel] == "true" {
 			// If the service wants to run on the host, it must implement the ReleaseService interface
 			// which provides functions to download the release artifact.
-			releaseArtifact := instance.service.release
+			releaseArtifact := service.release
 			if releaseArtifact == nil {
-				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
+				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", service.Name)
 			}
 			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
 			if err != nil {
-				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
+				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", service.Name, err)
 			}
-			instance.service.HostPath = bin
+			service.HostPath = bin
 		}
 	}
 
 	tasks := map[string]*task{}
-	for _, svc := range cfg.Manifest.Services {
-		tasks[svc.Name] = &task{
+	for _, service := range cfg.Manifest.Services {
+		var logs *os.File
+
+		if cfg.LogInternally {
+			if logs, err = cfg.Out.LogOutput(service.Name); err != nil {
+				return nil, fmt.Errorf("error getting log output: %w", err)
+			}
+		}
+
+		tasks[service.Name] = &task{
 			status: taskStatusPending,
-			logs:   nil,
+			logs:   logs,
 		}
 	}
 
@@ -177,7 +162,6 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		tasks:         tasks,
 		taskUpdateCh:  make(chan struct{}),
 		exitErr:       make(chan error, 2),
-		instances:     instances,
 	}
 
 	if cfg.Interactive {
@@ -190,10 +174,6 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	return d, nil
-}
-
-func (d *LocalRunner) Instances() []*instance {
-	return d.instances
 }
 
 func (d *LocalRunner) printStatus() {
@@ -1013,13 +993,6 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 
 	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
 		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
-	}
-
-	// generate the output log file for each service so that it is available after Run is done
-	for _, instance := range d.instances {
-		if instance.logs != nil {
-			d.tasks[instance.service.Name].logs = instance.logs.logRef
-		}
 	}
 
 	// Pull all required images in parallel

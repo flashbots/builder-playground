@@ -292,7 +292,7 @@ func runIt(recipe playground.Recipe) error {
 
 	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
 	networkReadyStart := time.Now()
-	if err := playground.CompleteReady(ctx, dockerRunner.Instances()); err != nil {
+	if err := playground.CompleteReady(ctx, svcManager.Services); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("network not ready: %w", err)
 	}
@@ -314,7 +314,7 @@ func runIt(recipe playground.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			if err := playground.RunWatchdog(artifacts.Out, dockerRunner.Instances()); err != nil {
+			if err := playground.RunWatchdog(artifacts.Out, svcManager.Services); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
 		}()
