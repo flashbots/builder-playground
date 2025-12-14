@@ -230,17 +230,13 @@ func runIt(recipe playground.Recipe) error {
 		return nil
 	}
 
-	// validate that override is being applied to a service in the manifest
-	for k := range overrides {
-		if _, ok := svcManager.GetService(k); !ok {
-			return fmt.Errorf("service '%s' in override not found in manifest", k)
-		}
+	if err := svcManager.ApplyOverrides(overrides); err != nil {
+		return err
 	}
 
 	cfg := &playground.RunnerConfig{
 		Out:                  artifacts.Out,
 		Manifest:             svcManager,
-		Overrides:            overrides,
 		Interactive:          interactive,
 		BindHostPortsLocally: !bindExternal,
 		NetworkName:          networkName,

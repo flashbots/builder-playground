@@ -49,10 +49,6 @@ type LocalRunner struct {
 	// since we reserve ports for all the services before they are used
 	reservedPorts map[int]bool
 
-	// overrides is a map of service name to the path of the executable to run
-	// on the host machine instead of a container.
-	overrides map[string]string
-
 	// handles stores the references to the processes that are running on host machine
 	// they are executed sequentially so we do not need to lock the handles
 	handles []*exec.Cmd
@@ -105,7 +101,6 @@ func newDockerClient() (*client.Client, error) {
 type RunnerConfig struct {
 	Out                  *output
 	Manifest             *Manifest
-	Overrides            map[string]string
 	Interactive          bool
 	BindHostPortsLocally bool
 	NetworkName          string
@@ -120,12 +115,6 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
-
-	// merge the overrides with the manifest overrides
-	if cfg.Overrides == nil {
-		cfg.Overrides = make(map[string]string)
-	}
-	maps.Copy(cfg.Overrides, cfg.Manifest.overrides)
 
 	// Create the concrete instances to run
 	instances := []*instance{}
@@ -161,30 +150,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
 			}
-			cfg.Overrides[ss.Name] = bin
-		}
-	}
-
-	// Now, the override can either be one of two things (we are overloading the override map):
-	// - docker image: In that case, change the manifest and remove from override map
-	// - a path to an executable: In that case, we need to run it on the host machine
-	// and use the override map <- We only check this case, and if it is not a path, we assume
-	// it is a docker image. If it is not a docker image either, the error will be catched during the execution
-	for k, v := range cfg.Overrides {
-		if _, err := os.Stat(v); err != nil {
-			// this is a path to an executable, remove it from the overrides since we
-			// assume it s a docker image and add it to manifest
-			parts := strings.Split(v, ":")
-			if len(parts) != 2 {
-				return nil, fmt.Errorf("invalid override docker image %s, expected image:tag", v)
-			}
-
-			srv := cfg.Manifest.MustGetService(k)
-			srv.Image = parts[0]
-			srv.Tag = parts[1]
-
-			delete(cfg.Overrides, k)
-			continue
+			instance.service.HostPath = bin
 		}
 	}
 
@@ -211,7 +177,6 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		manifest:      cfg.Manifest,
 		client:        client,
 		reservedPorts: map[int]bool{},
-		overrides:     cfg.Overrides,
 		handles:       []*exec.Cmd{},
 		tasks:         tasks,
 		taskUpdateCh:  make(chan struct{}),
@@ -743,8 +708,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 }
 
 func (d *LocalRunner) isHostService(name string) bool {
-	_, ok := d.overrides[name]
-	return ok
+	return d.manifest.MustGetService(name).HostPath != ""
 }
 
 func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
@@ -834,7 +798,7 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 		}
 	}
 
-	execPath := d.overrides[ss.Name]
+	execPath := ss.HostPath
 	cmd := exec.Command(execPath, args...)
 
 	logOutput, err := d.out.LogOutput(ss.Name)

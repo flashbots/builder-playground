@@ -40,6 +40,36 @@ type Manifest struct {
 	out *output
 }
 
+func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
+	// Now, the override can either be one of two things (we are overloading the override map):
+	// - docker image: In that case, change the manifest and remove from override map
+	// - a path to an executable: In that case, we need to run it on the host machine
+	// and use the override map <- We only check this case, and if it is not a path, we assume
+	// it is a docker image. If it is not a docker image either, the error will be catched during the execution
+	for k, v := range overrides {
+		srv, ok := m.GetService(k)
+		if !ok {
+			return fmt.Errorf("service '%s' not found", k)
+		}
+
+		if _, err := os.Stat(v); err == nil {
+			srv.HostPath = v
+		} else {
+			// this is a path to an executable, remove it from the overrides since we
+			// assume it s a docker image and add it to manifest
+			parts := strings.Split(v, ":")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid override docker image %s, expected image:tag", v)
+			}
+
+			srv.Image = parts[0]
+			srv.Tag = parts[1]
+		}
+	}
+
+	return nil
+}
+
 func NewManifest(ctx *ExContext, out *output) *Manifest {
 	ctx.Output = out
 	return &Manifest{ctx: ctx, out: out, overrides: make(map[string]string)}
@@ -283,6 +313,7 @@ type Service struct {
 	Tag        string `json:"tag,omitempty"`
 	Image      string `json:"image,omitempty"`
 	Entrypoint string `json:"entrypoint,omitempty"`
+	HostPath   string `json:"host_path,omitempty"`
 
 	release    *release
 	watchdogFn watchdogFn
