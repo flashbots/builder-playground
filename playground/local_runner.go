@@ -66,9 +66,6 @@ type LocalRunner struct {
 
 	// whether to remove the network name after execution (used in testing)
 	cleanupNetwork bool
-
-	// callback is called to report service updates
-	callback func(serviceName, update string)
 }
 
 type task struct {
@@ -166,9 +163,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		cfg.NetworkName = defaultNetworkName
 	}
 
-	callback := cfg.Callback
-	if callback == nil {
-		callback = func(serviceName, update string) {} // noop
+	if cfg.Callback == nil {
+		cfg.Callback = func(serviceName, update string) {} // noop
 	}
 
 	d := &LocalRunner{
@@ -182,7 +178,6 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		taskUpdateCh:  make(chan struct{}),
 		exitErr:       make(chan error, 2),
 		instances:     instances,
-		callback:      callback,
 	}
 
 	if cfg.Interactive {
@@ -863,7 +858,7 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 			switch event.Action {
 			case events.ActionStart:
 				d.updateTaskStatus(name, taskStatusStarted)
-				d.callback(name, "container started")
+				d.config.Callback(name, "container started")
 
 				if d.config.LogInternally {
 					// the container has started, we can track the logs now
@@ -875,12 +870,12 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 				}
 			case events.ActionDie:
 				d.updateTaskStatus(name, taskStatusDie)
-				d.callback(name, "container died")
+				d.config.Callback(name, "container died")
 				log.Info("container died", "name", name)
 
 			case events.ActionHealthStatusHealthy:
 				d.updateTaskStatus(name, taskStatusHealthy)
-				d.callback(name, "container healthy")
+				d.config.Callback(name, "container healthy")
 				log.Info("container is healthy", "name", name)
 			}
 
@@ -969,7 +964,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	}
 
 	// Image not found locally, pull it
-	d.callback(imageName, pullingImageEvent)
+	d.config.Callback(imageName, pullingImageEvent)
 
 	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
@@ -983,7 +978,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 		return fmt.Errorf("failed to read image pull output %s: %w", imageName, err)
 	}
 
-	d.callback(imageName, imagePulledEvent)
+	d.config.Callback(imageName, imagePulledEvent)
 	return nil
 }
 
