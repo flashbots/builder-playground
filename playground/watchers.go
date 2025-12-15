@@ -14,21 +14,6 @@ import (
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 )
 
-func isChainProducingBlocks(ctx context.Context, elURL string) (bool, error) {
-	rpcClient, err := rpc.Dial(elURL)
-	if err != nil {
-		return false, err
-	}
-	defer rpcClient.Close()
-
-	clt := ethclient.NewClient(rpcClient)
-	num, err := clt.BlockNumber(ctx)
-	if err != nil {
-		return false, err
-	}
-	return num > 0, nil
-}
-
 func waitForFirstBlock(ctx context.Context, elURL string, timeout time.Duration) error {
 	rpcClient, err := rpc.Dial(elURL)
 	if err != nil {
@@ -213,6 +198,32 @@ LOOP:
 
 			fmt.Printf("Block Proposed: Slot: %d, Builder: %s, Block: %d\n", val.Slot, val.BuilderPubkey, val.BlockNumber)
 			lastSlot = val.Slot
+		}
+	}
+}
+
+func waitForBlock(elURL string, targetBlock uint64, timeout time.Duration) error {
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", elURL, err)
+	}
+	defer rpcClient.Close()
+
+	clt := ethclient.NewClient(rpcClient)
+	timeoutCh := time.After(timeout)
+
+	for {
+		select {
+		case <-timeoutCh:
+			return fmt.Errorf("timeout waiting for block %d on %s", targetBlock, elURL)
+		case <-time.After(500 * time.Millisecond):
+			num, err := clt.BlockNumber(context.Background())
+			if err != nil {
+				continue
+			}
+			if num >= targetBlock {
+				return nil
+			}
 		}
 	}
 }

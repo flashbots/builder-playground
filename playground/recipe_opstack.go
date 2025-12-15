@@ -6,6 +6,8 @@ import (
 
 var _ Recipe = &OpRecipe{}
 
+const defaultL2BuilderAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+
 // OpRecipe is a recipe that deploys an OP stack
 type OpRecipe struct {
 	// externalBuilder is the URL of the external builder to use. If enabled, the recipe deploys
@@ -36,6 +38,9 @@ type OpRecipe struct {
 
 	// whether to enable websocket proxy
 	enableWebsocketProxy bool
+
+	// whether to enable chain-monitor
+	enableChainMonitor bool
 }
 
 func (o *OpRecipe) Name() string {
@@ -56,6 +61,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.baseOverlay, "base-overlay", false, "Whether to use base implementation for flashblocks-rpc")
 	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
+	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
 	return flags
 }
 
@@ -173,6 +179,15 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 		RollupNode:         "op-node",
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
+
+	if o.enableChainMonitor {
+		svcManager.AddService(&ChainMonitor{
+			L1RPC:            "el",
+			L2BlockTime:      o.blockTime,
+			L2BuilderAddress: defaultL2BuilderAddress,
+			L2RPC:            "op-geth",
+		})
+	}
 
 	if svcManager.ctx.Contender.TargetChain == "" {
 		svcManager.ctx.Contender.TargetChain = "op-geth"

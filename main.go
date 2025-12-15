@@ -1,45 +1,47 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"os/signal"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
-	"github.com/flashbots/builder-playground/playground/cmd"
+	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/spf13/cobra"
 )
 
-var outputFlag string
-var genesisDelayFlag uint64
-var withOverrides []string
-var watchdog bool
-var dryRun bool
-var interactive bool
-var timeout time.Duration
-var logLevelFlag string
-var bindExternal bool
-var withPrometheus bool
-var networkName string
-var labels playground.MapStringFlag
-var disableLogs bool
-var platform string
-var contenderEnabled bool
-var contenderArgs []string
-var contenderTarget string
-var readyzPort int
+var version = "dev"
+
+var (
+	outputFlag       string
+	genesisDelayFlag uint64
+	withOverrides    []string
+	watchdog         bool
+	dryRun           bool
+	interactive      bool
+	timeout          time.Duration
+	logLevelFlag     string
+	bindExternal     bool
+	withPrometheus   bool
+	networkName      string
+	labels           playground.MapStringFlag
+	disableLogs      bool
+	platform         string
+	contenderEnabled bool
+	contenderArgs    []string
+	contenderTarget  string
+	detached         bool
+)
 
 var rootCmd = &cobra.Command{
-	Use:   "playground",
-	Short: "",
-	Long:  ``,
+	Use:     "playground",
+	Short:   "",
+	Long:    ``,
+	Version: version,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return nil
 	},
@@ -57,6 +59,22 @@ var cookCmd = &cobra.Command{
 	},
 }
 
+var cleanCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "Clean a recipe",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		manifest, err := playground.ReadManifest(outputFlag)
+		if err != nil {
+			return err
+		}
+		if err := playground.StopContainersBySessionID(manifest.ID); err != nil {
+			return err
+		}
+		fmt.Println("The recipe has been stopped and cleaned.")
+		return nil
+	},
+}
+
 var inspectCmd = &cobra.Command{
 	Use:   "inspect",
 	Short: "Inspect a connection between two services",
@@ -68,19 +86,20 @@ var inspectCmd = &cobra.Command{
 		serviceName := args[0]
 		connectionName := args[1]
 
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt)
-
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			<-sig
-			cancel()
-		}()
+		ctx := mainctx.Get()
 
 		if err := playground.Inspect(ctx, serviceName, connectionName); err != nil {
 			return fmt.Errorf("failed to inspect connection: %w", err)
 		}
 		return nil
+	},
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("playground %s\n", version)
 	},
 }
 
@@ -96,6 +115,8 @@ func main() {
 			Use:   recipe.Name(),
 			Short: recipe.Description(),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				// Silence usage for internal errors, not flag parsing errors
+				cmd.SilenceUsage = true
 				return runIt(recipe)
 			},
 		}
@@ -120,16 +141,17 @@ func main() {
 		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
-		recipeCmd.Flags().IntVar(&readyzPort, "readyz-port", 0, "port for readyz HTTP endpoint (0 to disable)")
+		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
 
 		cookCmd.AddCommand(recipeCmd)
 	}
 
-	cmd.InitWaitReadyCmd()
-
 	rootCmd.AddCommand(cookCmd)
 	rootCmd.AddCommand(inspectCmd)
-	rootCmd.AddCommand(cmd.WaitReadyCmd)
+	rootCmd.AddCommand(versionCmd)
+
+	rootCmd.AddCommand(cleanCmd)
+	cleanCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -172,7 +194,9 @@ func runIt(recipe playground.Recipe) error {
 			TargetChain: contenderTarget,
 		},
 	}
+
 	svcManager := playground.NewManifest(exCtx, artifacts.Out)
+
 	recipe.Apply(svcManager)
 	if err := svcManager.Validate(); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
@@ -182,6 +206,10 @@ func runIt(recipe playground.Recipe) error {
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
+	}
+
+	if err := svcManager.Validate(); err != nil {
+		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
 
 	// save the manifest.json file
@@ -199,49 +227,40 @@ func runIt(recipe playground.Recipe) error {
 		return nil
 	}
 
-	// validate that override is being applied to a service in the manifest
-	for k := range overrides {
-		if _, ok := svcManager.GetService(k); !ok {
-			return fmt.Errorf("service '%s' in override not found in manifest", k)
-		}
+	if err := svcManager.ApplyOverrides(overrides); err != nil {
+		return err
 	}
 
 	cfg := &playground.RunnerConfig{
 		Out:                  artifacts.Out,
 		Manifest:             svcManager,
-		Overrides:            overrides,
-		Interactive:          interactive,
 		BindHostPortsLocally: !bindExternal,
 		NetworkName:          networkName,
 		Labels:               labels,
 		LogInternally:        !disableLogs,
 		Platform:             platform,
 	}
+
+	if interactive {
+		i := playground.NewInteractiveDisplay(svcManager)
+		cfg.Callback = i.HandleUpdate
+	}
+
+	// Add callback to log service updates in debug mode
+	if logLevel == playground.LevelDebug {
+		cfg.Callback = func(serviceName string, update playground.TaskStatus) {
+			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
+		}
+	}
+
 	dockerRunner, err := playground.NewLocalRunner(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+	ctx := mainctx.Get()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-sig
-		cancel()
-	}()
-
-	var readyzServer *playground.ReadyzServer
-	if readyzPort > 0 {
-		readyzServer = playground.NewReadyzServer(dockerRunner.Instances(), readyzPort)
-		if err := readyzServer.Start(); err != nil {
-			return fmt.Errorf("failed to start readyz server: %w", err)
-		}
-		defer readyzServer.Stop()
-		fmt.Printf("Readyz endpoint available at http://localhost:%d/readyz\n", readyzPort)
-	}
-
-	if err := dockerRunner.Run(); err != nil {
+	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("failed to run docker: %w", err)
 	}
@@ -274,7 +293,7 @@ func runIt(recipe playground.Recipe) error {
 
 	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
 	networkReadyStart := time.Now()
-	if err := playground.CompleteReady(dockerRunner.Instances()); err != nil {
+	if err := playground.CompleteReady(ctx, svcManager.Services); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("network not ready: %w", err)
 	}
@@ -289,10 +308,14 @@ func runIt(recipe playground.Recipe) error {
 		}
 	}
 
+	if detached {
+		return nil
+	}
+
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			if err := playground.RunWatchdog(artifacts.Out, dockerRunner.Instances()); err != nil {
+			if err := playground.RunWatchdog(artifacts.Out, svcManager.Services); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
 		}()
@@ -317,28 +340,5 @@ func runIt(recipe playground.Recipe) error {
 	if err := dockerRunner.Stop(); err != nil {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
-	return nil
-}
-
-func isExecutableValid(path string) error {
-	// First check if file exists
-	_, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("file does not exist or is inaccessible: %w", err)
-	}
-
-	// Try to execute with a harmless flag or in a way that won't run the main program
-	cmd := exec.Command(path, "--version")
-	// Redirect output to /dev/null
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("cannot start executable: %w", err)
-	}
-
-	// Immediately kill the process since we just want to test if it starts
-	cmd.Process.Kill()
-
 	return nil
 }

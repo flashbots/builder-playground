@@ -28,6 +28,7 @@ func (r *RollupBoost) Apply(manifest *Manifest) {
 	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("v0.7.5").
+        DependsOnHealthy(r.ELNode).
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -74,10 +75,18 @@ func (o *OpRbuilder) Apply(manifest *Manifest) {
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			"--port", `{{Port "rpc" 30303}}`,
 			"--builder.enable-revert-protection",
+			"--rollup.builder-secret-key", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth")
+		WithVolume("data", "/data_op_reth").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if manifest.ctx.Bootnode != nil {
 		service.WithArgs("--trusted-peers", manifest.ctx.Bootnode.Connect())
@@ -193,7 +202,6 @@ func (f *BProxy) Apply(manifest *Manifest) {
 			"--flashblocks-log-messages",
 		)
 	}
-
 }
 
 type WebsocketProxy struct {
@@ -209,6 +217,29 @@ func (w *WebsocketProxy) Apply(manifest *Manifest) {
 			"--upstream-ws", ConnectWs(w.Upstream, "flashblocks"),
 			"--enable-compression",
 			"--client-ping-enabled",
+		)
+}
+
+type ChainMonitor struct {
+	L1RPC            string
+	L2BlockTime      uint64
+	L2BuilderAddress string
+	L2RPC            string
+}
+
+func (c *ChainMonitor) Apply(manifest *Manifest) {
+	manifest.NewService("chain-monitor").
+        WithPort("metrics", 8080).
+        WithImage("ghcr.io/flashbots/chain-monitor").
+        WithTag("v0.0.54").
+		DependsOnHealthy(c.L1RPC).
+		DependsOnHealthy(c.L2RPC).
+		WithArgs(
+			"serve",
+			"--l1-rpc", Connect(c.L1RPC, "http"),
+			"--l2-block-time", fmt.Sprintf("%ds", c.L2BlockTime),
+			"--l2-monitor-builder-address", c.L2BuilderAddress,
+			"--l2-rpc", Connect(c.L2RPC, "http"),
 		)
 }
 
@@ -258,6 +289,9 @@ func (o *OpNode) Apply(manifest *Manifest) {
 			"--l1.http-poll-interval", "6s",
 			"--l2", Connect(o.L2Node, "authrpc"),
 			"--l2.jwt-secret", "/data/jwtsecret",
+			"--metrics.enabled",
+			"--metrics.addr", "0.0.0.0",
+			"--metrics.port", `{{Port "metrics" 7300}}`,
 			"--sequencer.enabled",
 			"--sequencer.l1-confs", "0",
 			"--verifier.l1-confs", "0",
@@ -270,9 +304,6 @@ func (o *OpNode) Apply(manifest *Manifest) {
 			"--p2p.listen.udp", `{{PortUDP "p2p" 9003}}`,
 			"--p2p.scoring.peers", "light",
 			"--p2p.ban.peers", "true",
-			"--metrics.enabled",
-			"--metrics.addr", "0.0.0.0",
-			"--metrics.port", `{{Port "metrics" 7300}}`,
 			"--pprof.enabled",
 			"--rpc.enable-admin",
 			"--safedb.path", "/data_db",
@@ -356,16 +387,23 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithReadyFn(opGethReadyFn).
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
+		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact).
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 }
 
-func opGethReadyFn(instance *instance) error {
-	opGethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
-	return waitForFirstBlock(context.Background(), opGethURL, 60*time.Second)
+func opGethReadyFn(ctx context.Context, service *Service) error {
+	opGethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+	return waitForFirstBlock(ctx, opGethURL, 60*time.Second)
 }
 
-func opGethWatchdogFn(out io.Writer, instance *instance, ctx context.Context) error {
-	gethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+func opGethWatchdogFn(out io.Writer, service *Service, ctx context.Context) error {
+	gethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 	return watchChainHead(out, gethURL, 2*time.Second)
 }
 
@@ -418,7 +456,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			"--chain", "/data/genesis.json",
 			"--datadir", "/data_reth",
 			"--color", "never",
-			"--ipcpath", "/data_reth/reth.ipc",
+			"--ipcdisable",
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
@@ -442,17 +480,24 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			logLevelToRethVerbosity(manifest.ctx.LogLevel),
 		).
 		WithRelease(rethELRelease).
-		WithWatchdog(func(out io.Writer, instance *instance, ctx context.Context) error {
-			rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+		WithWatchdog(func(out io.Writer, service *Service, ctx context.Context) error {
+			rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 			return watchChainHead(out, rethURL, 12*time.Second)
 		}).
-		WithReadyFn(func(instance *instance) error {
-			elURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
-			return waitForFirstBlock(context.Background(), elURL, 60*time.Second)
+		WithReadyFn(func(ctx context.Context, service *Service) error {
+			elURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
+			return waitForFirstBlock(ctx, elURL, 60*time.Second)
 		}).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth")
+		WithVolume("data", "/data_reth").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -536,7 +581,9 @@ func (l *LighthouseValidator) Apply(manifest *Manifest) {
 			"--prefer-builder-proposals",
 		).
 		WithArtifact("/data/validator", "data_validator").
-		WithArtifact("/data/testnet-dir", "testnet")
+		WithArtifact("/data/testnet-dir", "testnet").
+		// HACK: Mount a Docker-managed volume to avoid permission issues with removing logs.
+		WithVolume("validator-logs", "/data/validator/validators/logs")
 }
 
 type ClProxy struct {
@@ -580,8 +627,8 @@ func (m *MevBoostRelay) Apply(manifest *Manifest) {
 	}
 }
 
-func mevboostRelayWatchdogFn(out io.Writer, instance *instance, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+func mevboostRelayWatchdogFn(out io.Writer, service *Service, ctx context.Context) error {
+	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 
 	watchGroup := newWatchGroup()
 	watchGroup.watch(func() error {
@@ -594,60 +641,7 @@ func mevboostRelayWatchdogFn(out io.Writer, instance *instance, ctx context.Cont
 	return watchGroup.wait()
 }
 
-type BuilderHubPostgres struct {
-}
-
-func (b *BuilderHubPostgres) Apply(manifest *Manifest) {
-	manifest.NewService("builder-hub-postgres").
-		WithImage("docker.io/flashbots/builder-hub-db").
-		WithTag("latest").
-		WithPort("postgres", 5432).
-		WithEnv("POSTGRES_USER", "postgres").
-		WithEnv("POSTGRES_PASSWORD", "postgres").
-		WithEnv("POSTGRES_DB", "postgres").
-		WithReady(ReadyCheck{
-			Test:        []string{"CMD-SHELL", "pg_isready -U postgres -d postgres"},
-			Interval:    1 * time.Second,
-			Timeout:     30 * time.Second,
-			Retries:     3,
-			StartPeriod: 1 * time.Second,
-		})
-}
-
-type BuilderHub struct {
-	postgres string
-}
-
-func (b *BuilderHub) Apply(manifest *Manifest) {
-	manifest.NewService("builder-hub").
-		WithImage("docker.io/flashbots/builder-hub").
-		WithTag("latest").
-		WithEntrypoint("/app/builder-hub").
-		WithEnv("POSTGRES_DSN", ConnectRaw(b.postgres, "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
-		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
-		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
-		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
-		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
-		DependsOnHealthy(b.postgres)
-}
-
-type BuilderHubMockProxy struct {
-	TargetService string
-}
-
-func (b *BuilderHubMockProxy) Apply(manifest *Manifest) {
-	service := manifest.NewService("builder-hub-mock-proxy").
-		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
-		WithTag("latest").
-		WithPort("http", 8888)
-
-	if b.TargetService != "" {
-		service.DependsOnHealthy(b.TargetService)
-	}
-}
-
-type OpReth struct {
-}
+type OpReth struct{}
 
 var opRethRelease = &release{
 	Name:    "op-reth",
@@ -687,13 +681,20 @@ func (o *OpReth) Apply(manifest *Manifest) {
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`).
 		WithRelease(opRethRelease).
-		WithWatchdog(func(out io.Writer, instance *instance, ctx context.Context) error {
-			rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+		WithWatchdog(func(out io.Writer, service *Service, ctx context.Context) error {
+			rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 			return watchChainHead(out, rethURL, 2*time.Second)
 		}).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth")
+		WithVolume("data", "/data_op_reth").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8545",
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 }
 
 type MevBoost struct {
@@ -740,8 +741,7 @@ func (m *MevBoost) Apply(manifest *Manifest) {
 		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
 }
 
-type nullService struct {
-}
+type nullService struct{}
 
 func (n *nullService) Apply(manifest *Manifest) {
 }
@@ -878,4 +878,58 @@ func (c *Contender) Apply(manifest *Manifest) {
 	if c.TargetChain == "op-geth" {
 		service.DependsOnRunning("op-node")
 	}
+}
+
+type BuilderHub struct{}
+
+func (b *BuilderHub) Apply(manifest *Manifest) {
+	// Database service
+	manifest.NewService("db").
+		WithImage("docker.io/flashbots/builder-hub-db").
+		WithTag("latest").
+		WithPort("postgres", 5432).
+		WithEnv("PGUSER", "postgres").
+		WithEnv("POSTGRES_DB", "postgres").
+		WithEnv("POSTGRES_USER", "postgres").
+		WithEnv("POSTGRES_PASSWORD", "postgres").
+		WithReady(ReadyCheck{
+			Test:        []string{"CMD-SHELL", "pg_isready"},
+			Interval:    5 * time.Second,
+			Timeout:     5 * time.Second,
+			Retries:     5,
+			StartPeriod: 2 * time.Second,
+		})
+
+	// Web service
+	manifest.NewService("web").
+		WithImage("docker.io/flashbots/builder-hub").
+		WithTag("latest").
+		DependsOnHealthy("db").
+		WithPort("http", 8080).
+		WithPort("admin", 8081).
+		WithPort("internal", 8082).
+		WithPort("metrics", 8090).
+		WithEnv("MOCK_SECRETS", "true").
+		WithEnv("POSTGRES_DSN", ConnectRaw("db", "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
+		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
+		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
+		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
+		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
+		WithEnv("DISABLE_ADMIN_AUTH", "1").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8080",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+			UseNC:       true, // because the endpoint returns 404
+		})
+
+	// Proxy service
+	manifest.NewService("proxy").
+		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
+		WithTag("latest").
+		WithPort("http", 8888).
+		WithEnv("TARGET", Connect("web", "http")).
+		DependsOnHealthy("web")
 }

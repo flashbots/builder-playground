@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/ecdsa"
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -16,12 +17,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
 	"time"
-
-	_ "embed"
 
 	"github.com/OffchainLabs/prysm/v6/config/params"
 	"github.com/OffchainLabs/prysm/v6/crypto/bls/common"
@@ -37,6 +37,7 @@ import (
 )
 
 var (
+	defaultL1BlockTimeSeconds = uint64(12)
 	defaultOpBlockTimeSeconds = uint64(2)
 )
 
@@ -61,19 +62,21 @@ var clConfigContent []byte
 var queryReadyCheck []byte
 
 type ArtifactsBuilder struct {
-	outputDir         string
-	applyLatestL1Fork bool
-	genesisDelay      uint64
-	applyLatestL2Fork *uint64
-	OpblockTime       uint64
+	outputDir            string
+	applyLatestL1Fork    bool
+	genesisDelay         uint64
+	applyLatestL2Fork    *uint64
+	l1BlockTimeInSeconds uint64
+	opBlockTimeInSeconds uint64
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
 	return &ArtifactsBuilder{
-		outputDir:         "",
-		applyLatestL1Fork: false,
-		genesisDelay:      MinimumGenesisDelay,
-		OpblockTime:       defaultOpBlockTimeSeconds,
+		outputDir:            "",
+		applyLatestL1Fork:    false,
+		genesisDelay:         MinimumGenesisDelay,
+		l1BlockTimeInSeconds: defaultL1BlockTimeSeconds,
+		opBlockTimeInSeconds: defaultOpBlockTimeSeconds,
 	}
 }
 
@@ -97,8 +100,13 @@ func (b *ArtifactsBuilder) GenesisDelay(genesisDelaySeconds uint64) *ArtifactsBu
 	return b
 }
 
+func (b *ArtifactsBuilder) L1BlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
+	b.l1BlockTimeInSeconds = blockTimeSeconds
+	return b
+}
+
 func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
-	b.OpblockTime = blockTimeSeconds
+	b.opBlockTimeInSeconds = blockTimeSeconds
 	return b
 }
 
@@ -139,6 +147,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		latestForkEpoch = "18446744073709551615"
 	}
 	clConfigContentStr := strings.Replace(string(clConfigContent), "{{.LatestForkEpoch}}", latestForkEpoch, 1)
+	clConfigContentStr = strings.Replace(clConfigContentStr, "{{.SecondsPerSlot}}", strconv.FormatInt(int64(b.l1BlockTimeInSeconds), 10), 1)
 
 	// load the config.yaml file
 	clConfig, err := params.UnmarshalConfig([]byte(clConfigContentStr), nil)
@@ -261,7 +270,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			forkTime = new(uint64)
 
 			if *b.applyLatestL2Fork != 0 {
-				*forkTime = opTimestamp + b.OpblockTime*(*b.applyLatestL2Fork)
+				*forkTime = opTimestamp + b.opBlockTimeInSeconds*(*b.applyLatestL2Fork)
 			} else {
 				*forkTime = 0
 			}
@@ -320,7 +329,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 					"number": 0,
 				},
 			},
-			"block_time": b.OpblockTime,
+			"block_time": b.opBlockTimeInSeconds,
 			"chain_op_config": map[string]interface{}{ // TODO: Read this from somewhere (genesis??)
 				"eip1559Elasticity":        6,
 				"eip1559Denominator":       50,
@@ -447,13 +456,13 @@ func (o *output) CreateDir(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(absPath, 0755); err != nil {
+	if err := os.MkdirAll(absPath, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)
 	}
 	return absPath, nil
 }
 
-func (o *output) CopyFile(src string, dst string) error {
+func (o *output) CopyFile(src, dst string) error {
 	// Open the source file
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -463,7 +472,7 @@ func (o *output) CopyFile(src string, dst string) error {
 
 	// Create the destination directory if it doesn't exist
 	dstPath := filepath.Join(o.dst, dst)
-	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -508,7 +517,7 @@ func (o *output) LogOutput(name string) (*os.File, error) {
 
 	path := filepath.Join(o.dst, "logs", name+".log")
 
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
 	logOutput, err := os.Create(path)
@@ -558,10 +567,10 @@ func (o *output) WriteFile(dst string, data interface{}) error {
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(dst, dataRaw, 0644); err != nil {
+	if err := os.WriteFile(dst, dataRaw, 0o644); err != nil {
 		return err
 	}
 	return nil
@@ -625,7 +634,7 @@ func GetHomeDir() (string, error) {
 	customHomeDir := filepath.Join(homeDir, ".playground")
 
 	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(customHomeDir, 0755); err != nil {
+	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
 		return "", fmt.Errorf("error creating output directory: %v", err)
 	}
 

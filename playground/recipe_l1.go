@@ -3,6 +3,7 @@ package playground
 import (
 	"fmt"
 	"regexp"
+	"time"
 
 	flag "github.com/spf13/pflag"
 )
@@ -12,6 +13,10 @@ var _ Recipe = &L1Recipe{}
 type L1Recipe struct {
 	// latestFork enables the use of the latest fork at startup
 	latestFork bool
+
+	// blockTime is the block time to use for the L1 nodes
+	// (default is 12 seconds)
+	blockTime time.Duration
 
 	// useRethForValidation signals mev-boost to use the Reth EL node for block validation
 	useRethForValidation bool
@@ -42,6 +47,7 @@ func (l *L1Recipe) Description() string {
 func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags := flag.NewFlagSet("l1", flag.ContinueOnError)
 	flags.BoolVar(&l.latestFork, "latest-fork", false, "use the latest fork")
+	flags.DurationVar(&l.blockTime, "block-time", time.Duration(defaultL1BlockTimeSeconds)*time.Second, "Block time to use for the L1")
 	flags.BoolVar(&l.useRethForValidation, "use-reth-for-validation", false, "use reth for validation")
 	flags.StringVar(&l.secondaryEL, "secondary-el", "", "Address or port to use for the secondary EL (execution layer); Can be a port number (e.g., '8551') in which case the full URL is derived as `http://localhost:<port>` or a complete URL (e.g., `http://docker-container-name:8551`), use `http://host.docker.internal:<port>` to reach a secondary execution client that runs on your host and not within Docker.")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
@@ -52,6 +58,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
 	builder.ApplyLatestL1Fork(l.latestFork)
+	builder.L1BlockTime(max(1, uint64(l.blockTime.Seconds())))
 
 	return builder
 }
