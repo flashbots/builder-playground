@@ -61,16 +61,22 @@ var cookCmd = &cobra.Command{
 
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
-	Short: "Clean a recipe",
+	Short: "Clean a playground session",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manifest, err := playground.ReadManifest(outputFlag)
-		if err != nil {
-			return err
+		sessions := args
+		if len(sessions) == 0 {
+			var err error
+			sessions, err = playground.GetLocalSessions()
+			if err != nil {
+				return err
+			}
 		}
-		if err := playground.StopContainersBySessionID(manifest.ID); err != nil {
-			return err
+		for _, session := range sessions {
+			if err := playground.StopSession(session); err != nil {
+				return err
+			}
+			fmt.Println("Cleaning session:", session)
 		}
-		fmt.Println("The recipe has been stopped and cleaned.")
 		return nil
 	},
 }

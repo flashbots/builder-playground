@@ -139,10 +139,22 @@ This command starts a `tcpflow` container in the same network interface as the s
 
 ## Clean
 
-Removes a recipe running in the background
+Remove local playground sessions:
 
 ```bash
-$ builder-playground clean [--output ./output]
+$ builder-playground clean
+```
+
+You can also remove specific session:
+
+```bash
+$ builder-playground list
+honest-opossum
+major-hornet
+sacred-giraffe
+$ builder-playground clean honest-opossum sacred-giraffe
+Cleaning session: honest-opossum
+Cleaning session: sacred-giraffe
 ```
 
 ## Telemetry
