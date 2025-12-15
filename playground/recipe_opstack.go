@@ -6,6 +6,8 @@ import (
 
 var _ Recipe = &OpRecipe{}
 
+const defaultL2BuilderAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+
 // OpRecipe is a recipe that deploys an OP stack
 type OpRecipe struct {
 	// externalBuilder is the URL of the external builder to use. If enabled, the recipe deploys
@@ -41,6 +43,9 @@ type OpRecipe struct {
 	// (e.g. ERC-4337 EntryPoint, paymasters, or other system contracts).
 	// Each file should define a single account in a simple JSON format.
 	l2PredeployJSON []string
+  
+	// whether to enable chain-monitor
+	enableChainMonitor bool
 }
 
 func (o *OpRecipe) Name() string {
@@ -67,6 +72,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 		nil,
 		"Path(s) to JSON file(s) describing L2 predeploy accounts injected into L2 genesis (e.g. EntryPoint)",
 	)
+	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
 	return flags
 }
 
@@ -80,13 +86,12 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	return builder
 }
 
-func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
-	svcManager := NewManifest(ctx, artifacts.Out)
-	svcManager.AddService("el", &RethEL{})
-	svcManager.AddService("beacon", &LighthouseBeaconNode{
+func (o *OpRecipe) Apply(svcManager *Manifest) {
+	svcManager.AddService(&RethEL{})
+	svcManager.AddService(&LighthouseBeaconNode{
 		ExecutionNode: "el",
 	})
-	svcManager.AddService("validator", &LighthouseValidator{
+	svcManager.AddService(&LighthouseValidator{
 		BeaconNode: "beacon",
 	})
 
@@ -95,20 +100,20 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 	peers := []string{}
 
 	opGeth := &OpGeth{}
-	svcManager.AddService("op-geth", opGeth)
+	svcManager.AddService(opGeth)
 
-	ctx.Bootnode = &BootnodeRef{
+	svcManager.ctx.Bootnode = &BootnodeRef{
 		Service: "op-geth",
 		ID:      opGeth.Enode.NodeID(),
 	}
 
 	if o.externalBuilder == "op-reth" {
 		// Add a new op-reth service and connect it to Rollup-boost
-		svcManager.AddService("op-reth", &OpReth{})
+		svcManager.AddService(&OpReth{})
 
 		externalBuilderRef = Connect("op-reth", "authrpc")
 	} else if o.externalBuilder == "op-rbuilder" {
-		svcManager.AddService("op-rbuilder", &OpRbuilder{
+		svcManager.AddService(&OpRbuilder{
 			Flashblocks: o.flashblocks,
 		})
 		externalBuilderRef = Connect("op-rbuilder", "authrpc")
@@ -125,7 +130,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	// Only enable bproxy if flashblocks is enabled (since flashblocks-rpc is the only service that needs it)
 	if o.flashblocks {
-		svcManager.AddService("bproxy", &BProxy{
+		svcManager.AddService(&BProxy{
 			TargetAuthrpc:         externalBuilderRef,
 			Peers:                 peers,
 			Flashblocks:           o.flashblocks,
@@ -135,7 +140,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 
 	// Only enable websocket-proxy if the flag is set
 	if o.enableWebsocketProxy {
-		svcManager.AddService("websocket-proxy", &WebsocketProxy{
+		svcManager.AddService(&WebsocketProxy{
 			Upstream: "rollup-boost",
 		})
 	}
@@ -152,7 +157,7 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			flashblocksBuilderRef = ConnectWs("bproxy", "flashblocks")
 		}
 
-		svcManager.AddService("rollup-boost", &RollupBoost{
+		svcManager.AddService(&RollupBoost{
 			ELNode:                "op-geth",
 			Builder:               builderRef,
 			Flashblocks:           o.flashblocks,
@@ -169,32 +174,39 @@ func (o *OpRecipe) Apply(ctx *ExContext, artifacts *Artifacts) *Manifest {
 			useWebsocketProxy = true
 		}
 
-		svcManager.AddService("flashblocks-rpc", &FlashblocksRPC{
+		svcManager.AddService(&FlashblocksRPC{
 			FlashblocksWSService: flashblocksWSService,
 			BaseOverlay:          o.baseOverlay,
 			UseWebsocketProxy:    useWebsocketProxy,
 		})
 	}
 
-	svcManager.AddService("op-node", &OpNode{
+	svcManager.AddService(&OpNode{
 		L1Node:   "el",
 		L1Beacon: "beacon",
 		L2Node:   elNode,
 	})
 
-	svcManager.AddService("op-batcher", &OpBatcher{
+	svcManager.AddService(&OpBatcher{
 		L1Node:             "el",
 		L2Node:             "op-geth",
 		RollupNode:         "op-node",
 		MaxChannelDuration: o.batcherMaxChannelDuration,
 	})
 
+	if o.enableChainMonitor {
+		svcManager.AddService(&ChainMonitor{
+			L1RPC:            "el",
+			L2BlockTime:      o.blockTime,
+			L2BuilderAddress: defaultL2BuilderAddress,
+			L2RPC:            "op-geth",
+		})
+	}
+
 	if svcManager.ctx.Contender.TargetChain == "" {
 		svcManager.ctx.Contender.TargetChain = "op-geth"
 	}
 	svcManager.RunContenderIfEnabled()
-
-	return svcManager
 }
 
 func (o *OpRecipe) Output(manifest *Manifest) map[string]interface{} {

@@ -8,9 +8,9 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  e2e-test:
     name: E2E test (${{ matrix.flags }})
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-8x
     strategy:
       matrix:
         flags:
@@ -50,12 +50,9 @@ jobs:
           path: /tmp/playground-logs
           retention-days: 5
 
-  artifacts:
-    name: Artifacts
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-13]
-    runs-on: ${{ matrix.os }}
+  unit-test:
+    name: Unit test
+    runs-on: ubuntu-latest
     steps:
       - name: Check out code
         uses: actions/checkout@v2
@@ -65,5 +62,41 @@ jobs:
         with:
           go-version: 1.24
 
-      - name: Download and test artifacts
-        run: go run main.go artifacts-all
+      - name: Install docker compose
+        run: ./scripts/ci-setup-docker-compose.sh
+
+      - name: Run unit tests
+        run: go test -v ./playground/...
+
+  lint:
+    name: Lint
+    runs-on: warp-ubuntu-latest-x64-8x
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ^1.24
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Install gofumpt
+        run: go install mvdan.cc/gofumpt@v0.6.0
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.2
+
+      - name: Lint
+        run: make lint
+
+      - name: Ensure go mod tidy runs without changes
+        run: |
+          go mod tidy
+          git update-index -q --really-refresh
+          git diff-index HEAD

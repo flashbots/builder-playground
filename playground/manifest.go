@@ -1,8 +1,10 @@
 package playground
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,13 +21,14 @@ type Recipe interface {
 	Description() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
-	Apply(ctx *ExContext, artifacts *Artifacts) *Manifest
+	Apply(manifest *Manifest)
 	Output(manifest *Manifest) map[string]interface{}
 }
 
 // Manifest describes a list of services and their dependencies
 type Manifest struct {
 	ctx *ExContext
+	ID  string `json:"session_id"`
 
 	// list of Services
 	Services []*Service `json:"services"`
@@ -107,25 +110,15 @@ func (b *BootnodeRef) Connect() string {
 }
 
 type ServiceGen interface {
-	Run(service *Service, ctx *ExContext)
-	Name() string
+	Apply(manifest *Manifest)
 }
 
 type ServiceReady interface {
 	Ready(instance *instance) error
 }
 
-// ReleaseService is a service that can also be runned as an artifact in the host machine
-type ReleaseService interface {
-	ReleaseArtifact() *release
-}
-
-func (s *Manifest) AddService(name string, srv ServiceGen) {
-	service := s.NewService(name)
-	service.ComponentName = srv.Name()
-	srv.Run(service, s.ctx)
-
-	s.Services = append(s.Services, service)
+func (s *Manifest) AddService(srv ServiceGen) {
+	srv.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -287,18 +280,23 @@ type Service struct {
 	FilesMapped   map[string]string `json:"files_mapped,omitempty"`
 	VolumesMapped map[string]string `json:"volumes_mapped,omitempty"`
 
-	ComponentName string `json:"component_name,omitempty"`
-
 	Tag        string `json:"tag,omitempty"`
 	Image      string `json:"image,omitempty"`
 	Entrypoint string `json:"entrypoint,omitempty"`
+
+	release    *release
+	watchdogFn watchdogFn
+	readyFn    readyFn
 }
+
+type (
+	watchdogFn func(out io.Writer, instance *instance, ctx context.Context) error
+	readyFn    func(ctx context.Context, instance *instance) error
+)
 
 type instance struct {
 	service *Service
-
-	logs      *serviceLogs
-	component ServiceGen
+	logs    *serviceLogs
 }
 
 type DependsOnCondition string
@@ -357,7 +355,9 @@ func (s *Service) WithLabel(key, value string) *Service {
 }
 
 func (s *Manifest) NewService(name string) *Service {
-	return &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	s.Services = append(s.Services, ss)
+	return ss
 }
 
 func (s *Service) WithImage(image string) *Service {
@@ -402,6 +402,21 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 	return s
 }
 
+func (s *Service) WithRelease(rel *release) *Service {
+	s.release = rel
+	return s
+}
+
+func (s *Service) WithWatchdog(watchdogFn watchdogFn) *Service {
+	s.watchdogFn = watchdogFn
+	return s
+}
+
+func (s *Service) WithReadyFn(readyFn readyFn) *Service {
+	s.readyFn = readyFn
+	return s
+}
+
 func (s *Service) applyTemplate(arg string) {
 	var port []Port
 	var nodeRef []NodeRef
@@ -422,7 +437,7 @@ func (s *Service) WithArgs(args ...string) *Service {
 	return s
 }
 
-func (s *Service) WithVolume(name string, localPath string) *Service {
+func (s *Service) WithVolume(name, localPath string) *Service {
 	if s.VolumesMapped == nil {
 		s.VolumesMapped = make(map[string]string)
 	}
@@ -430,7 +445,7 @@ func (s *Service) WithVolume(name string, localPath string) *Service {
 	return s
 }
 
-func (s *Service) WithArtifact(localPath string, artifactName string) *Service {
+func (s *Service) WithArtifact(localPath, artifactName string) *Service {
 	if s.FilesMapped == nil {
 		s.FilesMapped = make(map[string]string)
 	}
@@ -450,6 +465,7 @@ type ReadyCheck struct {
 	StartPeriod time.Duration `json:"start_period"`
 	Timeout     time.Duration `json:"timeout"`
 	Retries     int           `json:"retries"`
+	UseNC       bool          `json:"use_nc"`
 }
 
 func (s *Service) DependsOnHealthy(name string) *Service {
@@ -474,7 +490,7 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 	// ther can be multiple port and nodere because in the case of op-geth we pass a whole string as nested command args
 
 	funcs := template.FuncMap{
-		"Service": func(name string, portLabel, protocol, user string) string {
+		"Service": func(name, portLabel, protocol, user string) string {
 			if name == "" {
 				panic("BUG: service name cannot be empty")
 			}
@@ -609,6 +625,6 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
 	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddService("contender", svcManager.ctx.Contender.Contender())
+		svcManager.AddService(svcManager.ctx.Contender.Contender())
 	}
 }

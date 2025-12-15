@@ -3,12 +3,7 @@ package playground
 import (
 	"context"
 	"fmt"
-	"io"
 )
-
-type ServiceWatchdog interface {
-	Watchdog(out io.Writer, instance *instance, ctx context.Context) error
-}
 
 func RunWatchdog(out *output, instances []*instance) error {
 	watchdogErr := make(chan error, len(instances))
@@ -19,9 +14,9 @@ func RunWatchdog(out *output, instances []*instance) error {
 	}
 
 	for _, s := range instances {
-		if watchdogFn, ok := s.component.(ServiceWatchdog); ok {
+		if watchdogFn := s.service.watchdogFn; watchdogFn != nil {
 			go func() {
-				if err := watchdogFn.Watchdog(output, s, context.Background()); err != nil {
+				if err := watchdogFn(output, s, context.Background()); err != nil {
 					watchdogErr <- fmt.Errorf("service %s watchdog failed: %w", s.service.Name, err)
 				}
 			}()
@@ -35,10 +30,10 @@ func RunWatchdog(out *output, instances []*instance) error {
 	return nil
 }
 
-func CompleteReady(instances []*instance) error {
+func CompleteReady(ctx context.Context, instances []*instance) error {
 	for _, s := range instances {
-		if readyFn, ok := s.component.(ServiceReady); ok {
-			if err := readyFn.Ready(s); err != nil {
+		if readyFn := s.service.readyFn; readyFn != nil {
+			if err := readyFn(ctx, s); err != nil {
 				return err
 			}
 		}

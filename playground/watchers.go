@@ -14,6 +14,45 @@ import (
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
 )
 
+func waitForFirstBlock(ctx context.Context, elURL string, timeout time.Duration) error {
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		fmt.Printf("  [%s] Failed to connect: %v\n", elURL, err)
+		return err
+	}
+	defer rpcClient.Close()
+
+	clt := ethclient.NewClient(rpcClient)
+	fmt.Printf("  [%s] Connected, waiting for first block...\n", elURL)
+
+	timeoutCh := time.After(timeout)
+	checkCount := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeoutCh:
+			return fmt.Errorf("timeout waiting for first block on %s", elURL)
+		case <-time.After(500 * time.Millisecond):
+			num, err := clt.BlockNumber(ctx)
+			checkCount++
+			if err != nil {
+				if checkCount%10 == 0 {
+					fmt.Printf("  [%s] Error getting block number: %v\n", elURL, err)
+				}
+				continue
+			}
+			if num > 0 {
+				fmt.Printf("  [%s] First block detected: %d\n", elURL, num)
+				return nil
+			}
+			if checkCount%10 == 0 {
+				fmt.Printf("  [%s] Block number: %d (waiting for > 0)\n", elURL, num)
+			}
+		}
+	}
+}
+
 func waitForChainAlive(ctx context.Context, logOutput io.Writer, beaconNodeURL string, timeout time.Duration) error {
 	// Test that blocks are being produced
 	log := mevRCommon.LogSetup(false, "info").WithField("context", "waitForChainAlive")
@@ -159,6 +198,32 @@ LOOP:
 
 			fmt.Printf("Block Proposed: Slot: %d, Builder: %s, Block: %d\n", val.Slot, val.BuilderPubkey, val.BlockNumber)
 			lastSlot = val.Slot
+		}
+	}
+}
+
+func waitForBlock(elURL string, targetBlock uint64, timeout time.Duration) error {
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", elURL, err)
+	}
+	defer rpcClient.Close()
+
+	clt := ethclient.NewClient(rpcClient)
+	timeoutCh := time.After(timeout)
+
+	for {
+		select {
+		case <-timeoutCh:
+			return fmt.Errorf("timeout waiting for block %d on %s", targetBlock, elURL)
+		case <-time.After(500 * time.Millisecond):
+			num, err := clt.BlockNumber(context.Background())
+			if err != nil {
+				continue
+			}
+			if num >= targetBlock {
+				return nil
+			}
 		}
 	}
 }
