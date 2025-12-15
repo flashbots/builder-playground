@@ -117,6 +117,8 @@ func main() {
 			Use:   recipe.Name(),
 			Short: recipe.Description(),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				// Silence usage for internal errors, not flag parsing errors
+				cmd.SilenceUsage = true
 				return runIt(recipe)
 			},
 		}
