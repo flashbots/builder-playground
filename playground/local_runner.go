@@ -368,53 +368,26 @@ func (d *LocalRunner) ExitErr() <-chan error {
 }
 
 func (d *LocalRunner) Stop() error {
-	// only stop the containers that belong to this session
-	containers, err := d.client.ContainerList(context.Background(), container.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", d.manifest.ID))),
-	})
-	if err != nil {
-		return fmt.Errorf("error getting container list: %w", err)
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(len(containers))
-
-	var errCh chan error
-	errCh = make(chan error, len(containers))
-
-	for _, cont := range containers {
-		go func(contID string) {
-			defer wg.Done()
-			if err := d.client.ContainerRemove(context.Background(), contID, container.RemoveOptions{
-				RemoveVolumes: true,
-				RemoveLinks:   false,
-				Force:         true,
-			}); err != nil {
-				errCh <- fmt.Errorf("error removing container: %w", err)
-			}
-		}(cont.ID)
-	}
-
-	wg.Wait()
-
 	// stop all the handles
 	for _, handle := range d.handles {
 		handle.Process.Kill()
 	}
 
-	close(errCh)
+	// stop the docker-compose
+	cmd := exec.CommandContext(
+		context.Background(), "docker", "compose",
+		"-p", d.manifest.ID,
+		"down",
+		"-v", // removes containers and volumes
+	)
+	var outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &outBuf
 
-	for err := range errCh {
-		if err != nil {
-			return err
-		}
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error taking docker-compose down: %w\n%s", err, outBuf.String())
 	}
 
-	if d.cleanupNetwork {
-		if err := d.client.NetworkRemove(context.Background(), d.config.NetworkName); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -586,26 +559,26 @@ func (d *LocalRunner) validateImageExists(image string) error {
 	return fmt.Errorf("image %s not found", image)
 }
 
-func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}, error) {
+func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}, []string, error) {
 	// apply the template again on the arguments to figure out the connections
 	// at this point all of them are valid, we just have to resolve them again. We assume for now
 	// everyone is going to be on docker at the same network.
 	args, envs, err := d.applyTemplate(s)
 	if err != nil {
-		return nil, fmt.Errorf("failed to apply template, err: %w", err)
+		return nil, nil, fmt.Errorf("failed to apply template, err: %w", err)
 	}
 
 	// The containers have access to the full set of artifacts on the /artifacts folder
 	// so, we have to bind it as a volume on the container.
 	outputFolder, err := d.out.AbsoluteDstPath()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path for output folder: %w", err)
+		return nil, nil, fmt.Errorf("failed to get absolute path for output folder: %w", err)
 	}
 
 	// Validate that the image exists
 	imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
 	if err := d.validateImageExists(imageName); err != nil {
-		return nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
+		return nil, nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
 	}
 
 	labels := map[string]string{
@@ -635,12 +608,11 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 	}
 
 	// create the bind volumes
+	var createdVolumes []string
 	for localPath, volumeName := range s.VolumesMapped {
-		volumeDirAbsPath, err := d.createVolume(s.Name, volumeName)
-		if err != nil {
-			return nil, err
-		}
-		volumes[volumeDirAbsPath] = localPath
+		dockerVolumeName := d.createVolumeName(s.Name, volumeName)
+		volumes[dockerVolumeName] = localPath
+		createdVolumes = append(createdVolumes, dockerVolumeName)
 	}
 
 	volumesInLine := []string{}
@@ -674,7 +646,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 			if s.ReadyCheck.UseNC {
 				u, err := url.Parse(s.ReadyCheck.QueryURL)
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse ready check url '%s': %v", s.ReadyCheck.QueryURL, err)
+					return nil, nil, fmt.Errorf("failed to parse ready check url '%s': %v", s.ReadyCheck.QueryURL, err)
 				}
 				test = []string{"CMD-SHELL", "nc -z localhost " + u.Port()}
 			} else {
@@ -739,7 +711,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		service["ports"] = ports
 	}
 
-	return service, nil
+	return service, createdVolumes, nil
 }
 
 func (d *LocalRunner) isHostService(name string) bool {
@@ -769,18 +741,27 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 		}
 	}
 
+	volumes := map[string]struct{}{}
 	for _, svc := range d.manifest.Services {
 		if d.isHostService(svc.Name) {
 			// skip services that are going to be launched on host
 			continue
 		}
-		var err error
-		if services[svc.Name], err = d.toDockerComposeService(svc); err != nil {
+		var (
+			err           error
+			dockerVolumes []string
+		)
+		services[svc.Name], dockerVolumes, err = d.toDockerComposeService(svc)
+		if err != nil {
 			return nil, fmt.Errorf("failed to convert service %s to docker compose service: %w", svc.Name, err)
+		}
+		for _, volumeName := range dockerVolumes {
+			volumes[volumeName] = struct{}{}
 		}
 	}
 
 	compose["services"] = services
+	compose["volumes"] = volumes
 	yamlData, err := yaml.Marshal(compose)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal docker compose: %w", err)
@@ -789,7 +770,11 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	return yamlData, nil
 }
 
-func (d *LocalRunner) createVolume(service, volumeName string) (string, error) {
+func (d *LocalRunner) createVolumeName(service, volumeName string) string {
+	return fmt.Sprintf("volume-%s-%s", service, volumeName)
+}
+
+func (d *LocalRunner) createVolumeDir(service, volumeName string) (string, error) {
 	// create the volume in the output folder
 	volumeDirAbsPath, err := d.out.CreateDir(fmt.Sprintf("volume-%s-%s", service, volumeName))
 	if err != nil {
@@ -809,7 +794,7 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 	// Create the volumes for this service
 	volumesMapped := map[string]string{}
 	for pathInDocker, volumeName := range ss.VolumesMapped {
-		volumeDirAbsPath, err := d.createVolume(ss.Name, volumeName)
+		volumeDirAbsPath, err := d.createVolumeDir(ss.Name, volumeName)
 		if err != nil {
 			return err
 		}
@@ -1069,7 +1054,13 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	}
 
 	// First start the services that are running in docker-compose
-	cmd := exec.CommandContext(ctx, "docker", "compose", "-f", d.out.dst+"/docker-compose.yaml", "up", "-d")
+	cmd := exec.CommandContext(
+		ctx, "docker", "compose",
+		"-p", d.manifest.ID, // identify project with id for doing "docker compose down" on it later
+		"-f", d.out.dst+"/docker-compose.yaml",
+		"up",
+		"-d",
+	)
 
 	var errOut bytes.Buffer
 	cmd.Stderr = &errOut
@@ -1083,24 +1074,16 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	}
 
 	// Second, start the services that are running on the host machine
-	errCh := make(chan error)
-	go func() {
-		for _, svc := range d.manifest.Services {
-			if d.isHostService(svc.Name) {
-				if err := d.runOnHost(svc); err != nil {
-					errCh <- err
-				}
-			}
-		}
-		close(errCh)
-	}()
-
-	for err := range errCh {
-		if err != nil {
-			return err
+	g := new(errgroup.Group)
+	for _, svc := range d.manifest.Services {
+		if d.isHostService(svc.Name) {
+			g.Go(func() error {
+				return d.runOnHost(svc)
+			})
 		}
 	}
-	return nil
+
+	return g.Wait()
 }
 
 // StopContainersBySessionID removes all Docker containers associated with a specific playground session ID.

@@ -11,6 +11,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/google/uuid"
 	flag "github.com/spf13/pflag"
 )
 
@@ -42,7 +43,12 @@ type Manifest struct {
 
 func NewManifest(ctx *ExContext, out *output) *Manifest {
 	ctx.Output = out
-	return &Manifest{ctx: ctx, out: out, overrides: make(map[string]string)}
+	return &Manifest{
+		ID:        uuid.New().String(),
+		ctx:       ctx,
+		out:       out,
+		overrides: make(map[string]string),
+	}
 }
 
 type LogLevel string

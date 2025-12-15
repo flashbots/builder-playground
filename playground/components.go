@@ -581,7 +581,9 @@ func (l *LighthouseValidator) Apply(manifest *Manifest) {
 			"--prefer-builder-proposals",
 		).
 		WithArtifact("/data/validator", "data_validator").
-		WithArtifact("/data/testnet-dir", "testnet")
+		WithArtifact("/data/testnet-dir", "testnet").
+		// HACK: Mount a Docker-managed volume to avoid permission issues with removing logs.
+		WithVolume("validator-logs", "/data/validator/validators/logs")
 }
 
 type ClProxy struct {
