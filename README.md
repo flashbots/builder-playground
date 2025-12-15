@@ -47,6 +47,7 @@ $ builder-playground cook l1 [flags]
 Flags:
 
 - `--latest-fork`: Enable the latest fork at startup
+- `--block-time`: Change the default block time (`12s`), to be provided in duration format (e.g. `--block-time=1s`)
 - `--use-reth-for-validation`: Use Reth EL for block validation in mev-boost.
 - `--secondary-el`: Port to use for a secondary el (enables the internal cl-proxy proxy)
 - `--use-native-reth`: Run the Reth EL binary on the host instead of docker (recommended to bind to the Reth DB)
