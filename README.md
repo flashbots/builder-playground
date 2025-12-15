@@ -101,6 +101,14 @@ go run main.go cook l1 --contender \
 
 To read about more contender flag options, see the [contender CLI docs](https://github.com/flashbots/contender/blob/main/docs/cli.md). To see all available flags, [install contender](https://github.com/flashbots/contender/blob/main/docs/installation.md) or [run it in docker](https://github.com/flashbots/contender?tab=readme-ov-file#docker-instructions), and run `contender --help`.
 
+To see what contender is doing internally, check its docker logs:
+
+```bash
+# get docker logs with contender's container ID
+docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
+# press CTRL+C to stop printing logs
+```
+
 ## Common Options
 
 - `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.playground/devnet`
