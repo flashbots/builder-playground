@@ -95,6 +95,34 @@ var inspectCmd = &cobra.Command{
 	},
 }
 
+var logsCmd = &cobra.Command{
+	Use:   "logs",
+	Short: "Show logs for a service",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// one argument, the name of the service
+		if len(args) != 1 {
+			return fmt.Errorf("please specify a service name")
+		}
+		serviceName := args[0]
+
+		ctx := mainctx.Get()
+		cmd.SilenceUsage = true
+		if err := playground.Logs(ctx, serviceName); err != nil && !strings.Contains(err.Error(), "signal") {
+			return fmt.Errorf("failed to show logs: %w", err)
+		}
+		return nil
+	},
+}
+
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all running services",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := mainctx.Get()
+		return playground.List(ctx)
+	},
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version",
@@ -148,6 +176,8 @@ func main() {
 
 	rootCmd.AddCommand(cookCmd)
 	rootCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(logsCmd)
+	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(versionCmd)
 
 	rootCmd.AddCommand(cleanCmd)
