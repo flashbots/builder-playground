@@ -12,7 +12,6 @@ import (
 
 	"github.com/flashbots/builder-playground/playground"
 	"github.com/flashbots/builder-playground/utils/mainctx"
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
@@ -198,7 +197,6 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	svcManager := playground.NewManifest(exCtx, artifacts.Out)
-	svcManager.ID = uuid.New().String()
 
 	recipe.Apply(svcManager)
 	if err := svcManager.Validate(); err != nil {

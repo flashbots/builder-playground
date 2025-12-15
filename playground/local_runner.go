@@ -388,11 +388,6 @@ func (d *LocalRunner) Stop() error {
 		return fmt.Errorf("error taking docker-compose down: %w\n%s", err, outBuf.String())
 	}
 
-	if d.cleanupNetwork {
-		if err := d.client.NetworkRemove(context.Background(), d.config.NetworkName); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

@@ -25,7 +25,7 @@ build: ## Build the CLI
 
 .PHONY: test
 test: ## Run tests
-	go test ./...
+	go test -v -count=1 ./...
 
 
 .PHONY: lint
