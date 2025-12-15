@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -228,18 +227,13 @@ func runIt(recipe playground.Recipe) error {
 		return nil
 	}
 
-	// validate that override is being applied to a service in the manifest
-	for k := range overrides {
-		if _, ok := svcManager.GetService(k); !ok {
-			return fmt.Errorf("service '%s' in override not found in manifest", k)
-		}
+	if err := svcManager.ApplyOverrides(overrides); err != nil {
+		return err
 	}
 
 	cfg := &playground.RunnerConfig{
 		Out:                  artifacts.Out,
 		Manifest:             svcManager,
-		Overrides:            overrides,
-		Interactive:          interactive,
 		BindHostPortsLocally: !bindExternal,
 		NetworkName:          networkName,
 		Labels:               labels,
@@ -247,9 +241,14 @@ func runIt(recipe playground.Recipe) error {
 		Platform:             platform,
 	}
 
+	if interactive {
+		i := playground.NewInteractiveDisplay(svcManager)
+		cfg.Callback = i.HandleUpdate
+	}
+
 	// Add callback to log service updates in debug mode
 	if logLevel == playground.LevelDebug {
-		cfg.Callback = func(serviceName, update string) {
+		cfg.Callback = func(serviceName string, update playground.TaskStatus) {
 			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
 		}
 	}
@@ -294,7 +293,7 @@ func runIt(recipe playground.Recipe) error {
 
 	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
 	networkReadyStart := time.Now()
-	if err := playground.CompleteReady(ctx, dockerRunner.Instances()); err != nil {
+	if err := playground.CompleteReady(ctx, svcManager.Services); err != nil {
 		dockerRunner.Stop()
 		return fmt.Errorf("network not ready: %w", err)
 	}
@@ -316,7 +315,7 @@ func runIt(recipe playground.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			if err := playground.RunWatchdog(artifacts.Out, dockerRunner.Instances()); err != nil {
+			if err := playground.RunWatchdog(artifacts.Out, svcManager.Services); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
 		}()
@@ -341,28 +340,5 @@ func runIt(recipe playground.Recipe) error {
 	if err := dockerRunner.Stop(); err != nil {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
-	return nil
-}
-
-func isExecutableValid(path string) error {
-	// First check if file exists
-	_, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("file does not exist or is inaccessible: %w", err)
-	}
-
-	// Try to execute with a harmless flag or in a way that won't run the main program
-	cmd := exec.Command(path, "--version")
-	// Redirect output to /dev/null
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("cannot start executable: %w", err)
-	}
-
-	// Immediately kill the process since we just want to test if it starts
-	cmd.Process.Kill()
-
 	return nil
 }

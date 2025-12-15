@@ -17,8 +17,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
@@ -49,10 +47,6 @@ type LocalRunner struct {
 	// since we reserve ports for all the services before they are used
 	reservedPorts map[int]bool
 
-	// overrides is a map of service name to the path of the executable to run
-	// on the host machine instead of a container.
-	overrides map[string]string
-
 	// handles stores the references to the processes that are running on host machine
 	// they are executed sequentially so we do not need to lock the handles
 	handles []*exec.Cmd
@@ -60,39 +54,30 @@ type LocalRunner struct {
 	// exitError signals when one of the services fails
 	exitErr chan error
 
-	// TODO: Merge instance with tasks
-	instances []*instance
-
 	// tasks tracks the status of each service
-	tasksMtx     sync.Mutex
-	tasks        map[string]*task
-	taskUpdateCh chan struct{}
+	tasksMtx sync.Mutex
+	tasks    map[string]*task
 
 	// whether to remove the network name after execution (used in testing)
 	cleanupNetwork bool
-
-	// callback is called to report service updates
-	callback func(serviceName, update string)
 }
 
 type task struct {
-	status string
+	status TaskStatus
 	ready  bool
 	logs   *os.File
 }
 
-var (
-	taskStatusPending = "pending"
-	taskStatusStarted = "started"
-	taskStatusDie     = "die"
-	taskStatusHealthy = "healthy"
-)
+type TaskStatus string
 
-type taskUI struct {
-	tasks    map[string]string
-	spinners map[string]spinner.Model
-	style    lipgloss.Style
-}
+var (
+	TaskStatusPulling TaskStatus = "pulling"
+	TaskStatusPulled  TaskStatus = "pulled"
+	TaskStatusPending TaskStatus = "pending"
+	TaskStatusStarted TaskStatus = "started"
+	TaskStatusDie     TaskStatus = "die"
+	TaskStatusHealthy TaskStatus = "healthy"
+)
 
 func newDockerClient() (*client.Client, error) {
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -105,14 +90,12 @@ func newDockerClient() (*client.Client, error) {
 type RunnerConfig struct {
 	Out                  *output
 	Manifest             *Manifest
-	Overrides            map[string]string
-	Interactive          bool
 	BindHostPortsLocally bool
 	NetworkName          string
 	Labels               map[string]string
 	LogInternally        bool
 	Platform             string
-	Callback             func(serviceName, update string)
+	Callback             func(serviceName string, update TaskStatus)
 }
 
 func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
@@ -121,78 +104,37 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	// merge the overrides with the manifest overrides
-	if cfg.Overrides == nil {
-		cfg.Overrides = make(map[string]string)
-	}
-	maps.Copy(cfg.Overrides, cfg.Manifest.overrides)
-
-	// Create the concrete instances to run
-	instances := []*instance{}
-	for _, service := range cfg.Manifest.Services {
-		instance := &instance{
-			service: service,
-		}
-		if cfg.LogInternally {
-			log_output, err := cfg.Out.LogOutput(service.Name)
-			if err != nil {
-				return nil, fmt.Errorf("error getting log output: %w", err)
-			}
-			instance.logs = &serviceLogs{
-				logRef: log_output,
-				path:   log_output.Name(),
-			}
-		}
-		instances = append(instances, instance)
-	}
-
 	// download any local release artifacts for the services that require them
 	// TODO: it feels a bit weird to have all this logic on the new command. We should split it later on.
-	for _, instance := range instances {
-		ss := instance.service
-		if ss.Labels[useHostExecutionLabel] == "true" {
+	for _, service := range cfg.Manifest.Services {
+		if service.Labels[useHostExecutionLabel] == "true" {
 			// If the service wants to run on the host, it must implement the ReleaseService interface
 			// which provides functions to download the release artifact.
-			releaseArtifact := instance.service.release
+			releaseArtifact := service.release
 			if releaseArtifact == nil {
-				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", ss.Name)
+				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", service.Name)
 			}
 			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
 			if err != nil {
-				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", ss.Name, err)
+				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", service.Name, err)
 			}
-			cfg.Overrides[ss.Name] = bin
-		}
-	}
-
-	// Now, the override can either be one of two things (we are overloading the override map):
-	// - docker image: In that case, change the manifest and remove from override map
-	// - a path to an executable: In that case, we need to run it on the host machine
-	// and use the override map <- We only check this case, and if it is not a path, we assume
-	// it is a docker image. If it is not a docker image either, the error will be catched during the execution
-	for k, v := range cfg.Overrides {
-		if _, err := os.Stat(v); err != nil {
-			// this is a path to an executable, remove it from the overrides since we
-			// assume it s a docker image and add it to manifest
-			parts := strings.Split(v, ":")
-			if len(parts) != 2 {
-				return nil, fmt.Errorf("invalid override docker image %s, expected image:tag", v)
-			}
-
-			srv := cfg.Manifest.MustGetService(k)
-			srv.Image = parts[0]
-			srv.Tag = parts[1]
-
-			delete(cfg.Overrides, k)
-			continue
+			service.HostPath = bin
 		}
 	}
 
 	tasks := map[string]*task{}
-	for _, svc := range cfg.Manifest.Services {
-		tasks[svc.Name] = &task{
-			status: taskStatusPending,
-			logs:   nil,
+	for _, service := range cfg.Manifest.Services {
+		var logs *os.File
+
+		if cfg.LogInternally {
+			if logs, err = cfg.Out.LogOutput(service.Name); err != nil {
+				return nil, fmt.Errorf("error getting log output: %w", err)
+			}
+		}
+
+		tasks[service.Name] = &task{
+			status: TaskStatusPending,
+			logs:   logs,
 		}
 	}
 
@@ -200,9 +142,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		cfg.NetworkName = defaultNetworkName
 	}
 
-	callback := cfg.Callback
-	if callback == nil {
-		callback = func(serviceName, update string) {} // noop
+	if cfg.Callback == nil {
+		cfg.Callback = func(serviceName string, update TaskStatus) {} // noop
 	}
 
 	d := &LocalRunner{
@@ -211,94 +152,12 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		manifest:      cfg.Manifest,
 		client:        client,
 		reservedPorts: map[int]bool{},
-		overrides:     cfg.Overrides,
 		handles:       []*exec.Cmd{},
 		tasks:         tasks,
-		taskUpdateCh:  make(chan struct{}),
 		exitErr:       make(chan error, 2),
-		instances:     instances,
-		callback:      callback,
-	}
-
-	if cfg.Interactive {
-		go d.printStatus()
-
-		select {
-		case d.taskUpdateCh <- struct{}{}:
-		default:
-		}
 	}
 
 	return d, nil
-}
-
-func (d *LocalRunner) Instances() []*instance {
-	return d.instances
-}
-
-func (d *LocalRunner) printStatus() {
-	fmt.Print("\033[s")
-	lineOffset := 0
-
-	// Get ordered service names from manifest
-	orderedServices := make([]string, 0, len(d.manifest.Services))
-	for _, svc := range d.manifest.Services {
-		orderedServices = append(orderedServices, svc.Name)
-	}
-
-	// Initialize UI state
-	ui := taskUI{
-		tasks:    make(map[string]string),
-		spinners: make(map[string]spinner.Model),
-		style:    lipgloss.NewStyle(),
-	}
-
-	// Initialize spinners for each service
-	for _, name := range orderedServices {
-		sp := spinner.New()
-		sp.Spinner = spinner.Dot
-		ui.spinners[name] = sp
-	}
-
-	for {
-		select {
-		case <-d.taskUpdateCh:
-			d.tasksMtx.Lock()
-
-			// Clear the previous lines and move cursor up
-			if lineOffset > 0 {
-				fmt.Printf("\033[%dA", lineOffset)
-				fmt.Print("\033[J")
-			}
-
-			lineOffset = 0
-			// Use ordered services instead of ranging over map
-			for _, name := range orderedServices {
-				status := d.tasks[name].status
-				var statusLine string
-
-				switch status {
-				case taskStatusStarted:
-					sp := ui.spinners[name]
-					sp.Tick()
-					ui.spinners[name] = sp
-					statusLine = ui.style.Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("%s [%s] Running", sp.View(), name))
-				case taskStatusDie:
-					statusLine = ui.style.Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("✗ [%s] Failed", name))
-				case taskStatusPending:
-					sp := ui.spinners[name]
-					sp.Tick()
-					ui.spinners[name] = sp
-					statusLine = ui.style.Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pending", sp.View(), name))
-				}
-
-				fmt.Println(statusLine)
-				lineOffset++
-			}
-
-			d.tasksMtx.Unlock()
-		}
-	}
 }
 
 func (d *LocalRunner) AreReady() bool {
@@ -312,7 +171,7 @@ func (d *LocalRunner) AreReady() bool {
 		}
 
 		// first ensure the task has started
-		if task.status != taskStatusStarted {
+		if task.status != TaskStatusStarted {
 			return false
 		}
 
@@ -344,23 +203,20 @@ func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) e
 	}
 }
 
-func (d *LocalRunner) updateTaskStatus(name, status string) {
+func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	d.tasksMtx.Lock()
 	defer d.tasksMtx.Unlock()
-	if status == taskStatusHealthy {
+	if status == TaskStatusHealthy {
 		d.tasks[name].ready = true
 	} else {
 		d.tasks[name].status = status
 	}
 
-	if status == taskStatusDie {
+	if status == TaskStatusDie {
 		d.exitErr <- fmt.Errorf("container %s failed", name)
 	}
 
-	select {
-	case d.taskUpdateCh <- struct{}{}:
-	default:
-	}
+	d.config.Callback(name, status)
 }
 
 func (d *LocalRunner) ExitErr() <-chan error {
@@ -715,8 +571,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 }
 
 func (d *LocalRunner) isHostService(name string) bool {
-	_, ok := d.overrides[name]
-	return ok
+	return d.manifest.MustGetService(name).HostPath != ""
 }
 
 func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
@@ -819,7 +674,7 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 		}
 	}
 
-	execPath := d.overrides[ss.Name]
+	execPath := ss.HostPath
 	cmd := exec.Command(execPath, args...)
 
 	logOutput, err := d.out.LogOutput(ss.Name)
@@ -883,8 +738,7 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 
 			switch event.Action {
 			case events.ActionStart:
-				d.updateTaskStatus(name, taskStatusStarted)
-				d.callback(name, "container started")
+				d.updateTaskStatus(name, TaskStatusStarted)
 
 				if d.config.LogInternally {
 					// the container has started, we can track the logs now
@@ -895,13 +749,11 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 					}()
 				}
 			case events.ActionDie:
-				d.updateTaskStatus(name, taskStatusDie)
-				d.callback(name, "container died")
+				d.updateTaskStatus(name, TaskStatusDie)
 				log.Info("container died", "name", name)
 
 			case events.ActionHealthStatusHealthy:
-				d.updateTaskStatus(name, taskStatusHealthy)
-				d.callback(name, "container healthy")
+				d.updateTaskStatus(name, TaskStatusHealthy)
 				log.Info("container is healthy", "name", name)
 			}
 
@@ -974,11 +826,6 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	return nil
 }
 
-const (
-	pullingImageEvent = "pulling image"
-	imagePulledEvent  = "image pulled"
-)
-
 func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	// Check if image exists locally
 	_, err := d.client.ImageInspect(ctx, imageName)
@@ -990,7 +837,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	}
 
 	// Image not found locally, pull it
-	d.callback(imageName, pullingImageEvent)
+	d.config.Callback(imageName, TaskStatusPulling)
 
 	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
@@ -1004,7 +851,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 		return fmt.Errorf("failed to read image pull output %s: %w", imageName, err)
 	}
 
-	d.callback(imageName, imagePulledEvent)
+	d.config.Callback(imageName, TaskStatusPulled)
 	return nil
 }
 
@@ -1039,13 +886,6 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 
 	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
 		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
-	}
-
-	// generate the output log file for each service so that it is available after Run is done
-	for _, instance := range d.instances {
-		if instance.logs != nil {
-			d.tasks[instance.service.Name].logs = instance.logs.logRef
-		}
 	}
 
 	// Pull all required images in parallel

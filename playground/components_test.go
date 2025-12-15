@@ -19,15 +19,15 @@ func TestRecipeOpstackSimple(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&OpRecipe{})
+	tt.test(&OpRecipe{}, nil)
 }
 
 func TestRecipeOpstackExternalBuilder(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&OpRecipe{
-		externalBuilder: "http://host.docker.internal:4444",
+	tt.test(&OpRecipe{}, []string{
+		"--external-builder", "http://host.docker.internal:4444",
 	})
 }
 
@@ -36,8 +36,8 @@ func TestRecipeOpstackEnableForkAfter(t *testing.T) {
 	defer tt.Close()
 
 	forkTime := uint64(10)
-	manifest := tt.test(&OpRecipe{
-		enableLatestFork: &forkTime,
+	manifest := tt.test(&OpRecipe{}, []string{
+		"--enable-latest-fork", "10",
 	})
 
 	elService := manifest.MustGetService("op-geth")
@@ -49,15 +49,15 @@ func TestRecipeL1Simple(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&L1Recipe{})
+	tt.test(&L1Recipe{}, nil)
 }
 
 func TestRecipeL1UseNativeReth(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&L1Recipe{
-		useNativeReth: true,
+	tt.test(&L1Recipe{}, []string{
+		"--use-native-reth",
 	})
 }
 
@@ -65,7 +65,7 @@ func TestComponentBuilderHub(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&BuilderHub{})
+	tt.test(&BuilderHub{}, nil)
 
 	// TODO: Calling the port directly on the host machine will not work once we have multiple
 	// tests running in parallel
@@ -83,7 +83,7 @@ func newTestFramework(t *testing.T) *testFramework {
 	return &testFramework{t: t}
 }
 
-func (tt *testFramework) test(s ServiceGen) *Manifest {
+func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	t := tt.t
 
 	// use the name of the repo and the current timestamp to generate
@@ -104,13 +104,14 @@ func (tt *testFramework) test(s ServiceGen) *Manifest {
 	}
 
 	o := &output{
-		dst: e2eTestDir,
+		dst:     e2eTestDir,
+		homeDir: filepath.Join(e2eTestDir, "artifacts"),
 	}
 
 	if recipe, ok := s.(Recipe); ok {
 		// We have to parse the flags since they are used to set the
 		// default values for the recipe inputs
-		err := recipe.Flags().Parse([]string{})
+		err := recipe.Flags().Parse(args)
 		require.NoError(t, err)
 
 		_, err = recipe.Artifacts().OutputDir(e2eTestDir).Build()
@@ -142,7 +143,7 @@ func (tt *testFramework) test(s ServiceGen) *Manifest {
 	require.NoError(t, err)
 
 	require.NoError(t, dockerRunner.WaitForReady(context.Background(), 20*time.Second))
-	require.NoError(t, CompleteReady(context.Background(), dockerRunner.Instances()))
+	require.NoError(t, CompleteReady(context.Background(), svcManager.Services))
 
 	return svcManager
 }

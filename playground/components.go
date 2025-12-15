@@ -397,13 +397,13 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		})
 }
 
-func opGethReadyFn(ctx context.Context, instance *instance) error {
-	opGethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+func opGethReadyFn(ctx context.Context, service *Service) error {
+	opGethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 	return waitForFirstBlock(ctx, opGethURL, 60*time.Second)
 }
 
-func opGethWatchdogFn(out io.Writer, instance *instance, ctx context.Context) error {
-	gethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+func opGethWatchdogFn(out io.Writer, service *Service, ctx context.Context) error {
+	gethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 	return watchChainHead(out, gethURL, 2*time.Second)
 }
 
@@ -456,7 +456,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			"--chain", "/data/genesis.json",
 			"--datadir", "/data_reth",
 			"--color", "never",
-			"--ipcpath", "/data_reth/reth.ipc",
+			"--ipcdisable",
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
@@ -480,12 +480,12 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			logLevelToRethVerbosity(manifest.ctx.LogLevel),
 		).
 		WithRelease(rethELRelease).
-		WithWatchdog(func(out io.Writer, instance *instance, ctx context.Context) error {
-			rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+		WithWatchdog(func(out io.Writer, service *Service, ctx context.Context) error {
+			rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 			return watchChainHead(out, rethURL, 12*time.Second)
 		}).
-		WithReadyFn(func(ctx context.Context, instance *instance) error {
-			elURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+		WithReadyFn(func(ctx context.Context, service *Service) error {
+			elURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 			return waitForFirstBlock(ctx, elURL, 60*time.Second)
 		}).
 		WithArtifact("/data/genesis.json", "genesis.json").
@@ -627,8 +627,8 @@ func (m *MevBoostRelay) Apply(manifest *Manifest) {
 	}
 }
 
-func mevboostRelayWatchdogFn(out io.Writer, instance *instance, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+func mevboostRelayWatchdogFn(out io.Writer, service *Service, ctx context.Context) error {
+	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 
 	watchGroup := newWatchGroup()
 	watchGroup.watch(func() error {
@@ -681,8 +681,8 @@ func (o *OpReth) Apply(manifest *Manifest) {
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`).
 		WithRelease(opRethRelease).
-		WithWatchdog(func(out io.Writer, instance *instance, ctx context.Context) error {
-			rethURL := fmt.Sprintf("http://localhost:%d", instance.service.MustGetPort("http").HostPort)
+		WithWatchdog(func(out io.Writer, service *Service, ctx context.Context) error {
+			rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
 			return watchChainHead(out, rethURL, 2*time.Second)
 		}).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
