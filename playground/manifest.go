@@ -11,7 +11,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/flashbots/builder-playground/utils"
 	flag "github.com/spf13/pflag"
 )
 
@@ -74,7 +74,7 @@ func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
 func NewManifest(ctx *ExContext, out *output) *Manifest {
 	ctx.Output = out
 	return &Manifest{
-		ID:        uuid.New().String(),
+		ID:        utils.GeneratePetName(),
 		ctx:       ctx,
 		out:       out,
 		overrides: make(map[string]string),
