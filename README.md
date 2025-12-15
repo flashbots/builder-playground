@@ -105,9 +105,7 @@ To read about more contender flag options, see the [contender CLI docs](https://
 To see what contender is doing internally, check its docker logs:
 
 ```bash
-# get docker logs with contender's container ID
 docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
-# press CTRL+C to stop printing logs
 ```
 
 ## Common Options
