@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 )
 
 func TestRecipeOpstackSimple(t *testing.T) {
+	t.Parallel()
+
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -23,6 +26,8 @@ func TestRecipeOpstackSimple(t *testing.T) {
 }
 
 func TestRecipeOpstackExternalBuilder(t *testing.T) {
+	t.Parallel()
+
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -32,6 +37,8 @@ func TestRecipeOpstackExternalBuilder(t *testing.T) {
 }
 
 func TestRecipeOpstackEnableForkAfter(t *testing.T) {
+	t.Parallel()
+
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -46,6 +53,8 @@ func TestRecipeOpstackEnableForkAfter(t *testing.T) {
 }
 
 func TestRecipeL1Simple(t *testing.T) {
+	t.Parallel()
+
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -53,6 +62,8 @@ func TestRecipeL1Simple(t *testing.T) {
 }
 
 func TestRecipeL1UseNativeReth(t *testing.T) {
+	t.Parallel()
+
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -62,6 +73,8 @@ func TestRecipeL1UseNativeReth(t *testing.T) {
 }
 
 func TestComponentBuilderHub(t *testing.T) {
+	t.Parallel()
+
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -82,6 +95,8 @@ type testFramework struct {
 func newTestFramework(t *testing.T) *testFramework {
 	return &testFramework{t: t}
 }
+
+var artifactsLock sync.Mutex
 
 func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	t := tt.t
@@ -114,7 +129,10 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 		err := recipe.Flags().Parse(args)
 		require.NoError(t, err)
 
+		artifactsLock.Lock()
 		_, err = recipe.Artifacts().OutputDir(e2eTestDir).Build()
+		artifactsLock.Unlock()
+
 		require.NoError(t, err)
 	}
 
@@ -136,7 +154,6 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	dockerRunner, err := NewLocalRunner(cfg)
 	require.NoError(t, err)
 
-	dockerRunner.cleanupNetwork = true
 	tt.runner = dockerRunner
 
 	err = dockerRunner.Run(context.Background())
