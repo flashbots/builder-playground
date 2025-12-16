@@ -126,6 +126,17 @@ docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
 
 To stop the playground, press `Ctrl+C`.
 
+## Logs
+
+```bash
+$ builder-playground list
+mev-boost-relay
+beacon
+el
+validator
+$ builder-playground logs validator
+```
+
 ## Inspect
 
 Builder-playground supports inspecting the connection of a service to a specific port.
