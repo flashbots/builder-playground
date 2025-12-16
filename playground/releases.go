@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -67,6 +68,7 @@ func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 }
 
 func downloadArtifact(url, expectedFile, outPath string) error {
+	slog.Info("downloading artifact", "url", url, "expectedFile", expectedFile, "outPath", outPath)
 	// Download the file
 	resp, err := http.Get(url)
 	if err != nil {

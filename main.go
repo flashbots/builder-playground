@@ -47,9 +47,10 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-var cookCmd = &cobra.Command{
-	Use:   "cook",
-	Short: "Cook a recipe",
+var startCmd = &cobra.Command{
+	Use:     "start",
+	Short:   "Start a recipe",
+	Aliases: []string{"cook"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		recipeNames := []string{}
 		for _, recipe := range recipes {
@@ -59,12 +60,15 @@ var cookCmd = &cobra.Command{
 	},
 }
 
-var cleanCmd = &cobra.Command{
-	Use:   "clean",
-	Short: "Clean a playground session",
+var stopCmd = &cobra.Command{
+	Use:   "stop",
+	Short: "Stop a playground session",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessions := args
 		if len(sessions) == 0 {
+			return fmt.Errorf("please specify at least one session name or 'all' to stop all sessions")
+		}
+		if len(sessions) == 1 && sessions[0] == "all" {
 			var err error
 			sessions, err = playground.GetLocalSessions()
 			if err != nil {
@@ -75,7 +79,7 @@ var cleanCmd = &cobra.Command{
 			if err := playground.StopSession(session); err != nil {
 				return err
 			}
-			fmt.Println("Cleaning session:", session)
+			fmt.Println("Stopping session:", session)
 		}
 		return nil
 	},
@@ -149,15 +153,15 @@ func main() {
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
 		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
 
-		cookCmd.AddCommand(recipeCmd)
+		startCmd.AddCommand(recipeCmd)
 	}
 
-	rootCmd.AddCommand(cookCmd)
+	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(versionCmd)
 
-	rootCmd.AddCommand(cleanCmd)
-	cleanCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+	rootCmd.AddCommand(stopCmd)
+	stopCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
