@@ -198,9 +198,6 @@ func runIt(recipe playground.Recipe) error {
 	svcManager := playground.NewManifest(exCtx, artifacts.Out)
 
 	recipe.Apply(svcManager)
-	if err := svcManager.Validate(); err != nil {
-		return fmt.Errorf("failed to validate manifest: %w", err)
-	}
 
 	// generate the dot graph
 	dotGraph := svcManager.GenerateDotGraph()
