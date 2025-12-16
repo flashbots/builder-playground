@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"text/template"
@@ -228,11 +230,14 @@ func (d *LocalRunner) Stop() error {
 	for _, handle := range d.handles {
 		handle.Process.Kill()
 	}
+	return StopSession(d.manifest.ID)
+}
 
+func StopSession(id string) error {
 	// stop the docker-compose
 	cmd := exec.CommandContext(
 		context.Background(), "docker", "compose",
-		"-p", d.manifest.ID,
+		"-p", id,
 		"down",
 		"-v", // removes containers and volumes
 	)
@@ -245,6 +250,28 @@ func (d *LocalRunner) Stop() error {
 	}
 
 	return nil
+}
+
+func GetLocalSessions() ([]string, error) {
+	var sessions []string
+	client, err := newDockerClient()
+	if err != nil {
+		return nil, err
+	}
+	containers, err := client.ContainerList(context.Background(), container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, container := range containers {
+		if container.Labels["playground"] == "true" {
+			sessions = append(sessions, container.Labels["playground.session"])
+		}
+	}
+	// Return sorted unique occurences
+	slices.Sort(sessions)
+	return slices.Compact(sessions), nil
 }
 
 // reservePort finds the first available port from the startPort and reserves it
@@ -839,6 +866,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	// Image not found locally, pull it
 	d.config.Callback(imageName, TaskStatusPulling)
 
+	slog.Info("pulling image", "image", imageName)
 	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to pull image %s: %w", imageName, err)
@@ -921,43 +949,6 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 				return d.runOnHost(svc)
 			})
 		}
-	}
-
-	return g.Wait()
-}
-
-// StopContainersBySessionID removes all Docker containers associated with a specific playground session ID.
-// This is a standalone utility function used by the clean command to stop containers without requiring
-// a LocalRunner instance or manifest reference.
-//
-// TODO: Refactor to reduce code duplication with LocalRunner.Stop()
-// Consider creating a shared dockerClient wrapper with helper methods for container management
-// that both LocalRunner and this function can use.
-func StopContainersBySessionID(id string) error {
-	client, err := newDockerClient()
-	if err != nil {
-		return err
-	}
-
-	containers, err := client.ContainerList(context.Background(), container.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", fmt.Sprintf("playground.session=%s", id))),
-	})
-	if err != nil {
-		return fmt.Errorf("error getting container list: %w", err)
-	}
-
-	g := new(errgroup.Group)
-	for _, cont := range containers {
-		g.Go(func() error {
-			if err := client.ContainerRemove(context.Background(), cont.ID, container.RemoveOptions{
-				RemoveVolumes: true,
-				RemoveLinks:   false,
-				Force:         true,
-			}); err != nil {
-				return fmt.Errorf("error removing container: %w", err)
-			}
-			return nil
-		})
 	}
 
 	return g.Wait()
