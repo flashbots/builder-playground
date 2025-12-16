@@ -43,10 +43,6 @@ type LocalRunner struct {
 	manifest *Manifest
 	client   *client.Client
 
-	// reservedPorts is a map of port numbers reserved for each service to avoid conflicts
-	// since we reserve ports for all the services before they are used
-	reservedPorts map[int]bool
-
 	// handles stores the references to the processes that are running on host machine
 	// they are executed sequentially so we do not need to lock the handles
 	handles []*exec.Cmd
@@ -57,9 +53,6 @@ type LocalRunner struct {
 	// tasks tracks the status of each service
 	tasksMtx sync.Mutex
 	tasks    map[string]*task
-
-	// whether to remove the network name after execution (used in testing)
-	cleanupNetwork bool
 }
 
 type task struct {
@@ -147,14 +140,13 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	d := &LocalRunner{
-		config:        cfg,
-		out:           cfg.Out,
-		manifest:      cfg.Manifest,
-		client:        client,
-		reservedPorts: map[int]bool{},
-		handles:       []*exec.Cmd{},
-		tasks:         tasks,
-		exitErr:       make(chan error, 2),
+		config:   cfg,
+		out:      cfg.Out,
+		manifest: cfg.Manifest,
+		client:   client,
+		handles:  []*exec.Cmd{},
+		tasks:    tasks,
+		exitErr:  make(chan error, 2),
 	}
 
 	return d, nil
@@ -247,12 +239,16 @@ func (d *LocalRunner) Stop() error {
 	return nil
 }
 
+var (
+	reservedPorts sync.Map
+)
+
 // reservePort finds the first available port from the startPort and reserves it
 // Note that we have to keep track of the port in 'reservedPorts' because
 // the port allocation happens before the services uses it and binds to it.
 func (d *LocalRunner) reservePort(startPort int, protocol string) int {
 	for i := startPort; i < startPort+1000; i++ {
-		if _, ok := d.reservedPorts[i]; ok {
+		if _, ok := reservedPorts.Load(i); ok {
 			continue
 		}
 
@@ -280,7 +276,7 @@ func (d *LocalRunner) reservePort(startPort int, protocol string) int {
 			panic(fmt.Sprintf("invalid protocol: %s", protocol))
 		}
 
-		d.reservedPorts[i] = true
+		reservedPorts.Store(i, true)
 		return i
 	}
 	panic("BUG: could not reserve a port")
