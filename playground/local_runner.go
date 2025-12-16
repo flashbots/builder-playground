@@ -755,6 +755,9 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 			case events.ActionHealthStatusHealthy:
 				d.updateTaskStatus(name, TaskStatusHealthy)
 				log.Info("container is healthy", "name", name)
+
+			case events.ActionHealthStatusUnhealthy:
+				// TODO
 			}
 
 		case err := <-errCh:
@@ -961,4 +964,115 @@ func StopContainersBySessionID(id string) error {
 	}
 
 	return g.Wait()
+}
+
+type HealthCheckResponse struct {
+	Output   string
+	ExitCode int
+}
+
+func ExecuteHealthCheckManually(serviceName string) (*HealthCheckResponse, error) {
+	ctx := context.Background()
+
+	cli, err := newDockerClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
+	}
+	defer cli.Close()
+
+	containerID, err := findServiceByName(cli, ctx, serviceName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the container to find the health check command
+	containerJSON, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	if containerJSON.Config.Healthcheck == nil {
+		return nil, fmt.Errorf("container has no health check configured")
+	}
+
+	healthCheckCmd := containerJSON.Config.Healthcheck.Test
+
+	// Health check commands are usually in format: ["CMD-SHELL", "actual command"]
+	// or ["CMD", "arg1", "arg2", ...]
+	var execCmd []string
+
+	if len(healthCheckCmd) == 0 {
+		return nil, fmt.Errorf("health check command is empty")
+	}
+
+	if healthCheckCmd[0] == "CMD-SHELL" {
+		// Use sh -c to execute the shell command
+		if len(healthCheckCmd) > 1 {
+			execCmd = []string{"sh", "-c", healthCheckCmd[1]}
+		} else {
+			return nil, fmt.Errorf("CMD-SHELL specified but no command provided")
+		}
+	} else if healthCheckCmd[0] == "CMD" {
+		// Direct command execution
+		execCmd = healthCheckCmd[1:]
+	} else {
+		// Assume it's a direct command
+		execCmd = healthCheckCmd
+	}
+
+	// Create exec instance
+	execConfig := container.ExecOptions{
+		Cmd:          execCmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execID, err := cli.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	// Start the exec and get output
+	resp, err := cli.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach to exec: %w", err)
+	}
+	defer resp.Close()
+
+	// Read all output
+	var outBuf bytes.Buffer
+	_, err = io.Copy(&outBuf, resp.Reader)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("error reading output: %w", err)
+	}
+
+	// Get exit code
+	inspectResp, err := cli.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect exec: %w", err)
+	}
+
+	healthCheckResp := &HealthCheckResponse{
+		Output:   strings.TrimSpace(outBuf.String()),
+		ExitCode: inspectResp.ExitCode,
+	}
+	return healthCheckResp, nil
+}
+
+func findServiceByName(client *client.Client, ctx context.Context, serviceName string) (string, error) {
+	containers, err := client.ContainerList(ctx, container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("error getting container list: %w", err)
+	}
+
+	for _, container := range containers {
+		if container.Labels["playground"] == "true" &&
+			container.Labels["com.docker.compose.service"] == serviceName {
+			return container.ID, nil
+		}
+	}
+
+	return "", nil
 }

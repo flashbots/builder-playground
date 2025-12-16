@@ -61,6 +61,9 @@ var clConfigContent []byte
 //go:embed utils/query.sh
 var queryReadyCheck []byte
 
+//go:embed utils/el_watch.sh
+var elWatchScript []byte
+
 type ArtifactsBuilder struct {
 	outputDir            string
 	applyLatestL1Fork    bool
@@ -253,6 +256,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		"testnet/genesis_validators_root.txt": hex.EncodeToString(state.GenesisValidatorsRoot()),
 		"data_validator/":                     &lighthouseKeystore{privKeys: priv},
 		"scripts/query.sh":                    queryReadyCheck,
+		"scripts/el_watch.sh":                 elWatchScript,
 	})
 	if err != nil {
 		return nil, err

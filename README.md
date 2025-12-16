@@ -131,14 +131,14 @@ To stop the playground, press `Ctrl+C`.
 Builder-playground supports inspecting the connection of a service to a specific port.
 
 ```bash
-$ builder-playground inspect <service> <port>
+$ builder-playground debug inspect <service> <port>
 ```
 
 Example:
 
 ```bash
 $ builder-playground cook opstack
-$ builder-playground inspect op-geth authrpc
+$ builder-playground debug inspect op-geth authrpc
 ```
 
 This command starts a `tcpflow` container in the same network interface as the service and captures the traffic to the specified port.

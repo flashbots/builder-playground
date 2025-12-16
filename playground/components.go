@@ -28,7 +28,7 @@ func (r *RollupBoost) Apply(manifest *Manifest) {
 	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("v0.7.5").
-        DependsOnHealthy(r.ELNode).
+		DependsOnHealthy(r.ELNode).
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -229,9 +229,9 @@ type ChainMonitor struct {
 
 func (c *ChainMonitor) Apply(manifest *Manifest) {
 	manifest.NewService("chain-monitor").
-        WithPort("metrics", 8080).
-        WithImage("ghcr.io/flashbots/chain-monitor").
-        WithTag("v0.0.54").
+		WithPort("metrics", 8080).
+		WithImage("ghcr.io/flashbots/chain-monitor").
+		WithTag("v0.0.54").
 		DependsOnHealthy(c.L1RPC).
 		DependsOnHealthy(c.L2RPC).
 		WithArgs(
@@ -383,13 +383,11 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
 		).
 		WithVolume("data", "/data_opgeth").
-		WithWatchdog(opGethWatchdogFn).
-		WithReadyFn(opGethReadyFn).
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact).
 		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:8545",
+			Test:        ElWatch("http://localhost:8545", 2*time.Second),
 			Interval:    1 * time.Second,
 			Timeout:     10 * time.Second,
 			Retries:     20,
@@ -480,19 +478,11 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			logLevelToRethVerbosity(manifest.ctx.LogLevel),
 		).
 		WithRelease(rethELRelease).
-		WithWatchdog(func(out io.Writer, service *Service, ctx context.Context) error {
-			rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-			return watchChainHead(out, rethURL, 12*time.Second)
-		}).
-		WithReadyFn(func(ctx context.Context, service *Service) error {
-			elURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-			return waitForFirstBlock(ctx, elURL, 60*time.Second)
-		}).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth").
 		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:8545",
+			Test:        ElWatch("http://localhost:8545", 12*time.Second),
 			Interval:    1 * time.Second,
 			Timeout:     10 * time.Second,
 			Retries:     20,
@@ -615,7 +605,6 @@ func (m *MevBoostRelay) Apply(manifest *Manifest) {
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
 		WithEntrypoint("mev-boost-relay").
 		DependsOnHealthy(m.BeaconClient).
-		WithWatchdog(mevboostRelayWatchdogFn).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
 			"--api-listen-port", `{{Port "http" 5555}}`,
@@ -681,15 +670,11 @@ func (o *OpReth) Apply(manifest *Manifest) {
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`).
 		WithRelease(opRethRelease).
-		WithWatchdog(func(out io.Writer, service *Service, ctx context.Context) error {
-			rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-			return watchChainHead(out, rethURL, 2*time.Second)
-		}).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth").
 		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:8545",
+			Test:        ElWatch("http://localhost:8545", 2*time.Second),
 			Interval:    1 * time.Second,
 			Timeout:     10 * time.Second,
 			Retries:     20,
