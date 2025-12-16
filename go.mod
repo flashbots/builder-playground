@@ -8,10 +8,10 @@ require (
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/docker/docker v28.0.1+incompatible
+	github.com/dustinkirkland/golang-petname v0.0.0-20240428194347-eebcea082ee0
 	github.com/ethereum/go-ethereum v1.15.10
 	github.com/flashbots/go-boost-utils v1.9.1-0.20250819134059-e5294cb450c9
 	github.com/flashbots/mev-boost-relay v0.32.0-rc2
-	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/holiman/uint256 v1.3.2
 	github.com/sirupsen/logrus v1.9.3
@@ -75,6 +75,7 @@ require (
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1 // indirect

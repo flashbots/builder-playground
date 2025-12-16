@@ -298,6 +298,7 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("network not ready: %w", err)
 	}
 	fmt.Printf("Network is ready for transactions (took %.1fs)\n", time.Since(networkReadyStart).Seconds())
+	fmt.Println("Session ID:", svcManager.ID)
 
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
