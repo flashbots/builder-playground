@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/flashbots/builder-playground/utils"
 	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/spf13/cobra"
 )
@@ -203,6 +204,11 @@ func runIt(recipe playground.Recipe) error {
 	var logLevel playground.LogLevel
 	if err := logLevel.Unmarshal(logLevelFlag); err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
+	}
+
+	if logLevel == playground.LevelTrace {
+		// TODO: We can remove this once we have a logger with log.Trace support
+		utils.TraceMode = true
 	}
 
 	log.Printf("Log level: %s\n", logLevel)
