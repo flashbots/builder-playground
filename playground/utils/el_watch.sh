@@ -24,12 +24,10 @@ install_dependencies() {
 check_tools() {
     local missing=""
     
-    if ! command -v curl >/dev/null 2>&1; then
+    # Check for curl or wget
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        # Prefer curl as it's more common
         missing="curl"
-    fi
-    
-    if ! command -v jq >/dev/null 2>&1; then
-        missing="$missing jq"
     fi
     
     if [ -n "$missing" ]; then
@@ -40,10 +38,40 @@ check_tools() {
         fi
         
         # Verify installation
-        if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+        if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
             echo "ERROR: Dependencies still not available after installation" >&2
             exit 1
         fi
+    fi
+}
+
+# Extract JSON value without jq
+# Usage: extract_json_value '{"result":"0x123"}' "result"
+extract_json_value() {
+    local json="$1"
+    local key="$2"
+    
+    # Use sed to extract the value for the given key
+    # Matches: "key":"value" or "key":value
+    echo "$json" | sed -n 's/.*"'"$key"'"\s*:\s*"\?\([^,"}\]*\)"\?.*/\1/p' | head -1
+}
+
+# Make HTTP request (supports both curl and wget)
+http_post() {
+    local url="$1"
+    local data="$2"
+    
+    if command -v curl >/dev/null 2>&1; then
+        curl -s -m 2 -X POST "$url" \
+            -H "Content-Type: application/json" \
+            -d "$data" 2>/dev/null
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O - --timeout=2 --post-data="$data" \
+            --header="Content-Type: application/json" \
+            "$url" 2>/dev/null
+    else
+        echo "ERROR: Neither curl nor wget available" >&2
+        return 1
     fi
 }
 
@@ -57,26 +85,26 @@ check_chain_head() {
     check_tools
     
     # Add wiggle room
-    block_time=$((block_time + 1))
+    block_time=$(expr "$block_time" + 1)
     
     # Get current block number
-    response=$(curl -s -m 2 -X POST "$el_url" \
-        -H "Content-Type: application/json" \
-        -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' 2>/dev/null)
+    response=$(http_post "$el_url" '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}')
     
-    if [ $? -ne 0 ]; then
-        echo "ERROR: curl failed to connect to $el_url"
+    if [ $? -ne 0 ] || [ -z "$response" ]; then
+        echo "ERROR: Failed to connect to $el_url"
         exit 1
     fi
     
-    hex_block=$(echo "$response" | jq -r '.result' 2>/dev/null)
+    # Extract the hex block number from JSON response
+    hex_block=$(extract_json_value "$response" "result")
     
     if [ -z "$hex_block" ] || [ "$hex_block" = "null" ]; then
         echo "ERROR: Failed to get block number from response"
         exit 1
     fi
     
-    current_block=$((hex_block))
+    # Convert hex to decimal
+    current_block=$(printf "%d" "$hex_block")
     current_time=$(date +%s)
     
     # Read previous state
@@ -98,7 +126,7 @@ check_chain_head() {
     fi
     
     # Block hasn't advanced - check if we've exceeded timeout
-    elapsed=$((current_time - prev_time))
+    elapsed=$(expr "$current_time" - "$prev_time")
     
     if [ "$elapsed" -ge "$block_time" ]; then
         echo "ERROR: Chain head stuck at $current_block for ${elapsed}s (timeout: ${block_time}s)"

@@ -472,7 +472,7 @@ func (s *Service) WithReady(check ReadyCheck) *Service {
 }
 
 func ElWatch(endpoint string, blockTime time.Duration) []string {
-	return []string{"CMD-SHELL", fmt.Sprintf("chmod +x /artifacts/scripts/el_watch.sh && /artifacts/scripts/el_watch.sh %s %d", endpoint, blockTime.Seconds())}
+	return []string{"CMD-SHELL", fmt.Sprintf("chmod +x /artifacts/scripts/el_watch.sh && /artifacts/scripts/el_watch.sh %s %d", endpoint, int(blockTime.Seconds()))}
 }
 
 type ReadyCheck struct {

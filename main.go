@@ -305,14 +305,14 @@ func runIt(recipe playground.Recipe) error {
 
 	if interactive {
 		i := playground.NewInteractiveDisplay(svcManager)
-		cfg.Callback = i.HandleUpdate
+		cfg.AddCallback(i.HandleUpdate)
 	}
 
 	// Add callback to log service updates in debug mode
 	if logLevel == playground.LevelDebug {
-		cfg.Callback = func(serviceName string, update playground.TaskStatus) {
+		cfg.AddCallback(func(serviceName string, update playground.TaskStatus) {
 			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
-		}
+		})
 	}
 
 	dockerRunner, err := playground.NewLocalRunner(cfg)
@@ -369,13 +369,11 @@ func runIt(recipe playground.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			// TODO: Just wait for one of the services to fail health check and stop
-			panic("TODO")
-			/*
-				if err := playground.RunWatchdog(artifacts.Out, svcManager.Services); err != nil {
-					watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
+			cfg.AddCallback(func(name string, status playground.TaskStatus) {
+				if status == playground.TaskStatusUnhealty {
+					watchdogErr <- fmt.Errorf("watchdog failed: %w", fmt.Errorf("task '%s' is not healthy anymore", name))
 				}
-			*/
+			})
 		}()
 	}
 

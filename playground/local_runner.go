@@ -73,12 +73,13 @@ type task struct {
 type TaskStatus string
 
 var (
-	TaskStatusPulling TaskStatus = "pulling"
-	TaskStatusPulled  TaskStatus = "pulled"
-	TaskStatusPending TaskStatus = "pending"
-	TaskStatusStarted TaskStatus = "started"
-	TaskStatusDie     TaskStatus = "die"
-	TaskStatusHealthy TaskStatus = "healthy"
+	TaskStatusPulling  TaskStatus = "pulling"
+	TaskStatusPulled   TaskStatus = "pulled"
+	TaskStatusPending  TaskStatus = "pending"
+	TaskStatusStarted  TaskStatus = "started"
+	TaskStatusDie      TaskStatus = "die"
+	TaskStatusHealthy  TaskStatus = "healthy"
+	TaskStatusUnhealty TaskStatus = "unhealthy"
 )
 
 func newDockerClient() (*client.Client, error) {
@@ -97,8 +98,16 @@ type RunnerConfig struct {
 	Labels               map[string]string
 	LogInternally        bool
 	Platform             string
-	Callback             func(serviceName string, update TaskStatus)
+	Callbacks            []Callback
 }
+
+func (r *RunnerConfig) AddCallback(c Callback) {
+	if r.Callbacks == nil {
+		r.Callbacks = append(r.Callbacks, c)
+	}
+}
+
+type Callback func(serviceName string, update TaskStatus)
 
 func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	client, err := newDockerClient()
@@ -144,8 +153,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		cfg.NetworkName = defaultNetworkName
 	}
 
-	if cfg.Callback == nil {
-		cfg.Callback = func(serviceName string, update TaskStatus) {} // noop
+	if cfg.Callbacks == nil {
+		cfg.Callbacks = []Callback{func(serviceName string, update TaskStatus) {}} // noop
 	}
 
 	d := &LocalRunner{
@@ -205,11 +214,19 @@ func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) e
 	}
 }
 
+func (d *LocalRunner) emitCallback(name string, status TaskStatus) {
+	for _, callback := range d.config.Callbacks {
+		callback(name, status)
+	}
+}
+
 func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	d.tasksMtx.Lock()
 	defer d.tasksMtx.Unlock()
 	if status == TaskStatusHealthy {
 		d.tasks[name].ready = true
+	} else if status == TaskStatusUnhealty {
+		d.tasks[name].ready = false
 	} else {
 		d.tasks[name].status = status
 	}
@@ -218,7 +235,8 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 		d.exitErr <- fmt.Errorf("container %s failed", name)
 	}
 
-	d.config.Callback(name, status)
+	fmt.Println("=>", name, status)
+	d.emitCallback(name, status)
 }
 
 func (d *LocalRunner) ExitErr() <-chan error {
@@ -784,7 +802,7 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 				log.Info("container is healthy", "name", name)
 
 			case events.ActionHealthStatusUnhealthy:
-				// TODO
+				d.updateTaskStatus(name, TaskStatusUnhealty)
 			}
 
 		case err := <-errCh:
@@ -867,7 +885,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	}
 
 	// Image not found locally, pull it
-	d.config.Callback(imageName, TaskStatusPulling)
+	d.emitCallback(imageName, TaskStatusPulling)
 
 	slog.Info("pulling image", "image", imageName)
 	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
@@ -882,7 +900,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 		return fmt.Errorf("failed to read image pull output %s: %w", imageName, err)
 	}
 
-	d.config.Callback(imageName, TaskStatusPulled)
+	d.emitCallback(imageName, TaskStatusPulled)
 	return nil
 }
 
