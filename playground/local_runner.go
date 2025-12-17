@@ -235,7 +235,6 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 		d.exitErr <- fmt.Errorf("container %s failed", name)
 	}
 
-	fmt.Println("=>", name, status)
 	d.emitCallback(name, status)
 }
 

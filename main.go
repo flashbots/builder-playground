@@ -353,6 +353,8 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
+	fmt.Println("\nServices healthy... Ready to accept transactions")
+
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
 	if len(output) > 0 {

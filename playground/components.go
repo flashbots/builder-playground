@@ -1,9 +1,7 @@
 package playground
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -395,16 +393,6 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		})
 }
 
-func opGethReadyFn(ctx context.Context, service *Service) error {
-	opGethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-	return waitForFirstBlock(ctx, opGethURL, 60*time.Second)
-}
-
-func opGethWatchdogFn(out io.Writer, service *Service, ctx context.Context) error {
-	gethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-	return watchChainHead(out, gethURL, 2*time.Second)
-}
-
 type RethEL struct {
 	UseRethForValidation bool
 	UseNativeReth        bool
@@ -609,20 +597,6 @@ func (m *MevBoostRelay) Apply(manifest *Manifest) {
 	if m.ValidationServer != "" {
 		service.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
 	}
-}
-
-func mevboostRelayWatchdogFn(out io.Writer, service *Service, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-
-	watchGroup := newWatchGroup()
-	watchGroup.watch(func() error {
-		return watchProposerPayloads(beaconNodeURL)
-	})
-	watchGroup.watch(func() error {
-		return validateProposerPayloads(out, beaconNodeURL)
-	})
-
-	return watchGroup.wait()
 }
 
 type OpReth struct{}
@@ -915,12 +889,10 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 }
 
 func UseHealthmon(m *Manifest, s *Service) {
-	m.NewService("test-h").
-		WithImage("ghcr.io/alexallah/ethereum-healthmon").
-		WithTag("v1.3.1").
-		WithArgs("--chain", "execution", "--addr", "el").
-		WithLabel("sidecar", "true").
-		WithLabel("parent", s.Name).
+	m.NewService(s.Name+"_healthmon").
+		WithImage("ghcr.io/flashbots/ethereum-healthmon").
+		WithTag("v0.0.1").
+		WithArgs("--chain", "execution", "--url", Connect(s.Name, "http")).
 		WithReady(ReadyCheck{
 			Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
 			Interval:    1 * time.Second,
