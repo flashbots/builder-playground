@@ -16,18 +16,18 @@ Quick start:
 
 ```bash
 # L1 environment with mev-boost relay
-builder-playground cook l1
+builder-playground start l1
 
 # L2 OpStack with external builder support
-builder-playground cook opstack --external-builder http://localhost:4444
+builder-playground start opstack --external-builder http://localhost:4444
 ```
 
 ## Getting started
 
-Clone the repository and use the `cook` command to deploy a specific recipe:
+Clone the repository and use the `start` command to deploy a specific recipe:
 
 ```bash
-$ builder-playground cook <recipe>
+$ builder-playground start <recipe>
 ```
 
 Currently available recipes:
@@ -41,7 +41,7 @@ Deploys a complete L1 environment with:
 - An in-memory [mev-boost-relay](https://github.com/flashbots/mev-boost-relay).
 
 ```bash
-$ builder-playground cook l1 [flags]
+$ builder-playground start l1 [flags]
 ```
 
 Flags:
@@ -49,7 +49,7 @@ Flags:
 - `--latest-fork`: Enable the latest fork at startup
 - `--block-time`: Change the default block time (`12s`), to be provided in duration format (e.g. `--block-time=1s`)
 - `--use-reth-for-validation`: Use Reth EL for block validation in mev-boost.
-- `--secondary-el`: Port to use for a secondary el (enables the internal cl-proxy proxy)
+- `--secondary-el`: Host or port to use for a secondary el (enables the internal cl-proxy proxy). Can be a port number (e.g., '8551') in which case the full URL is derived as `http://localhost:<port>` or a complete URL (e.g., `http://remote-host:8551`), use `http://host.docker.internal:<port>` to reach a secondary execution client that runs on your host and not within Docker.
 - `--use-native-reth`: Run the Reth EL binary on the host instead of docker (recommended to bind to the Reth DB)
 - `--use-separate-mev-boost`: Spins a seperate service for mev-boost in addition with mev-boost-relay
 
@@ -61,7 +61,7 @@ Deploys an L2 environment with:
 - A complete sequencer with op-node, op-geth and op-batcher
 
 ```bash
-$ builder-playground cook opstack [flags]
+$ builder-playground start opstack [flags]
 ```
 
 Flags:
@@ -74,7 +74,7 @@ Flags:
 Here's a complete example showing how to run the L1 recipe with the latest fork enabled and custom output directory:
 
 ```bash
-$ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genesis-delay 15 --log-level debug
+$ builder-playground start l1 --latest-fork --output ~/my-builder-testnet --genesis-delay 15 --log-level debug
 ```
 
 ### Generate transaction flow with contender
@@ -82,7 +82,7 @@ $ builder-playground cook l1 --latest-fork --output ~/my-builder-testnet --genes
 builder-playground can generate transaction flow to its nodes with [contender](https://github.com/flashbots/contender). Just pass the `--contender` flag to send spam transactions that fill each block:
 
 ```bash
-go run main.go cook l1 --contender
+go run main.go start l1 --contender
 ```
 
 The default contender flags are as follows:
@@ -95,7 +95,7 @@ To add or modify contender flags, use `--contender.arg`:
 
 ```bash
 # run the builtin erc20 scenario instead of the default "fill block" scenario, at 100 TPS
-go run main.go cook l1 --contender \
+go run main.go start l1 --contender \
   --contender.arg "--tps 100" \
   --contender.arg "erc20"
 ```
@@ -126,6 +126,17 @@ docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
 
 To stop the playground, press `Ctrl+C`.
 
+## Logs
+
+```bash
+$ builder-playground list
+mev-boost-relay
+beacon
+el
+validator
+$ builder-playground logs validator
+```
+
 ## Inspect
 
 Builder-playground supports inspecting the connection of a service to a specific port.
@@ -137,18 +148,30 @@ $ builder-playground debug inspect <service> <port>
 Example:
 
 ```bash
-$ builder-playground cook opstack
-$ builder-playground debug inspect op-geth authrpc
+$ builder-playground start opstack
+$ builder-playground inspect op-geth authrpc
 ```
 
 This command starts a `tcpflow` container in the same network interface as the service and captures the traffic to the specified port.
 
 ## Clean
 
-Removes a recipe running in the background
+Remove local playground sessions:
 
 ```bash
-$ builder-playground clean [--output ./output]
+$ builder-playground stop all
+```
+
+You can also stop specific session:
+
+```bash
+$ builder-playground list
+honest-opossum
+major-hornet
+sacred-giraffe
+$ builder-playground stop honest-opossum sacred-giraffe
+Cleaning session: honest-opossum
+Cleaning session: sacred-giraffe
 ```
 
 ## Telemetry
@@ -167,8 +190,8 @@ By default, Prometheus scrapes the `/metrics` path, but services can override th
 Enable Prometheus for any recipe:
 
 ```bash
-$ builder-playground cook l1 --with-prometheus
-$ builder-playground cook opstack --with-prometheus
+$ builder-playground start l1 --with-prometheus
+$ builder-playground start opstack --with-prometheus
 ```
 
 ## Internals

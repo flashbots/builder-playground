@@ -47,9 +47,10 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-var cookCmd = &cobra.Command{
-	Use:   "cook",
-	Short: "Cook a recipe",
+var startCmd = &cobra.Command{
+	Use:     "start",
+	Short:   "Start a recipe",
+	Aliases: []string{"cook"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		recipeNames := []string{}
 		for _, recipe := range recipes {
@@ -59,18 +60,27 @@ var cookCmd = &cobra.Command{
 	},
 }
 
-var cleanCmd = &cobra.Command{
-	Use:   "clean",
-	Short: "Clean a recipe",
+var stopCmd = &cobra.Command{
+	Use:   "stop",
+	Short: "Stop a playground session",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manifest, err := playground.ReadManifest(outputFlag)
-		if err != nil {
-			return err
+		sessions := args
+		if len(sessions) == 0 {
+			return fmt.Errorf("please specify at least one session name or 'all' to stop all sessions")
 		}
-		if err := playground.StopContainersBySessionID(manifest.ID); err != nil {
-			return err
+		if len(sessions) == 1 && sessions[0] == "all" {
+			var err error
+			sessions, err = playground.GetLocalSessions()
+			if err != nil {
+				return err
+			}
 		}
-		fmt.Println("The recipe has been stopped and cleaned.")
+		for _, session := range sessions {
+			if err := playground.StopSession(session); err != nil {
+				return err
+			}
+			fmt.Println("Stopping session:", session)
+		}
 		return nil
 	},
 }
@@ -113,6 +123,34 @@ var probeCmd = &cobra.Command{
 		fmt.Printf("Output: %s\n", resp.Output)
 
 		return nil
+	},
+}
+
+var logsCmd = &cobra.Command{
+	Use:   "logs",
+	Short: "Show logs for a service",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// one argument, the name of the service
+		if len(args) != 1 {
+			return fmt.Errorf("please specify a service name")
+		}
+		serviceName := args[0]
+
+		ctx := mainctx.Get()
+		cmd.SilenceUsage = true
+		if err := playground.Logs(ctx, serviceName); err != nil && !strings.Contains(err.Error(), "signal") {
+			return fmt.Errorf("failed to show logs: %w", err)
+		}
+		return nil
+	},
+}
+
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all running services",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := mainctx.Get()
+		return playground.List(ctx)
 	},
 }
 
@@ -164,14 +202,17 @@ func main() {
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
 		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
 
-		cookCmd.AddCommand(recipeCmd)
+		startCmd.AddCommand(recipeCmd)
 	}
 
-	rootCmd.AddCommand(cookCmd)
+	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(logsCmd)
+	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(versionCmd)
 
-	rootCmd.AddCommand(cleanCmd)
-	cleanCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+	rootCmd.AddCommand(stopCmd)
+	stopCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
 
 	debugCmd.AddCommand(probeCmd)
 	debugCmd.AddCommand(inspectCmd)
@@ -222,9 +263,6 @@ func runIt(recipe playground.Recipe) error {
 	svcManager := playground.NewManifest(exCtx, artifacts.Out)
 
 	recipe.Apply(svcManager)
-	if err := svcManager.Validate(); err != nil {
-		return fmt.Errorf("failed to validate manifest: %w", err)
-	}
 
 	// generate the dot graph
 	dotGraph := svcManager.GenerateDotGraph()

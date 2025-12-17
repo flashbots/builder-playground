@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"text/template"
@@ -228,11 +230,14 @@ func (d *LocalRunner) Stop() error {
 	for _, handle := range d.handles {
 		handle.Process.Kill()
 	}
+	return StopSession(d.manifest.ID)
+}
 
+func StopSession(id string) error {
 	// stop the docker-compose
 	cmd := exec.CommandContext(
 		context.Background(), "docker", "compose",
-		"-p", d.manifest.ID,
+		"-p", id,
 		"down",
 		"-v", // removes containers and volumes
 	)
@@ -245,6 +250,28 @@ func (d *LocalRunner) Stop() error {
 	}
 
 	return nil
+}
+
+func GetLocalSessions() ([]string, error) {
+	var sessions []string
+	client, err := newDockerClient()
+	if err != nil {
+		return nil, err
+	}
+	containers, err := client.ContainerList(context.Background(), container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, container := range containers {
+		if container.Labels["playground"] == "true" {
+			sessions = append(sessions, container.Labels["playground.session"])
+		}
+	}
+	// Return sorted unique occurences
+	slices.Sort(sessions)
+	return slices.Compact(sessions), nil
 }
 
 // reservePort finds the first available port from the startPort and reserves it
@@ -842,6 +869,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	// Image not found locally, pull it
 	d.config.Callback(imageName, TaskStatusPulling)
 
+	slog.Info("pulling image", "image", imageName)
 	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to pull image %s: %w", imageName, err)
