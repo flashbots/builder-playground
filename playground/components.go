@@ -26,7 +26,6 @@ func (r *RollupBoost) Apply(manifest *Manifest) {
 	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("v0.7.5").
-		DependsOnHealthy(r.ELNode).
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -230,8 +229,6 @@ func (c *ChainMonitor) Apply(manifest *Manifest) {
 		WithPort("metrics", 8080).
 		WithImage("ghcr.io/flashbots/chain-monitor").
 		WithTag("v0.0.54").
-		DependsOnHealthy(c.L1RPC).
-		DependsOnHealthy(c.L2RPC).
 		WithArgs(
 			"serve",
 			"--l1-rpc", Connect(c.L1RPC, "http"),
