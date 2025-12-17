@@ -341,7 +341,7 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		trustedPeers = fmt.Sprintf("--bootnodes %s ", manifest.ctx.Bootnode.Connect())
 	}
 
-	manifest.NewService("op-geth").
+	svc := manifest.NewService("op-geth").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101503.2-rc.5").
 		WithEntrypoint("/bin/sh").
@@ -383,14 +383,9 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithVolume("data", "/data_opgeth").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact).
-		WithReady(ReadyCheck{
-			Test:        ElWatch("http://localhost:8545", 2*time.Second),
-			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
-			Retries:     20,
-			StartPeriod: 1 * time.Second,
-		})
+		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
+
+	UseHealthmon(manifest, svc)
 }
 
 type RethEL struct {
@@ -619,7 +614,7 @@ var opRethRelease = &release{
 }
 
 func (o *OpReth) Apply(manifest *Manifest) {
-	manifest.NewService("op-reth").
+	svc := manifest.NewService("op-reth").
 		WithImage("ghcr.io/paradigmxyz/op-reth").
 		WithTag("nightly").
 		WithEntrypoint("op-reth").
@@ -641,14 +636,9 @@ func (o *OpReth) Apply(manifest *Manifest) {
 		WithRelease(opRethRelease).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth").
-		WithReady(ReadyCheck{
-			Test:        ElWatch("http://localhost:8545", 2*time.Second),
-			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
-			Retries:     20,
-			StartPeriod: 1 * time.Second,
-		})
+		WithVolume("data", "/data_op_reth")
+
+	UseHealthmon(manifest, svc)
 }
 
 type MevBoost struct {
@@ -892,6 +882,7 @@ func UseHealthmon(m *Manifest, s *Service) {
 	m.NewService(s.Name+"_healthmon").
 		WithImage("ghcr.io/flashbots/ethereum-healthmon").
 		WithTag("v0.0.1").
+		// TODO: Use this also for beacon node
 		WithArgs("--chain", "execution", "--url", Connect(s.Name, "http")).
 		WithReady(ReadyCheck{
 			Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
