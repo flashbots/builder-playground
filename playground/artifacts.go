@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/flashbots/builder-playground/utils"
 	"github.com/hashicorp/go-uuid"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
@@ -115,6 +116,8 @@ type Artifacts struct {
 }
 
 func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
+	defer utils.StartTimer("artifacts.builder")()
+
 	homeDir, err := GetHomeDir()
 	if err != nil {
 		return nil, err

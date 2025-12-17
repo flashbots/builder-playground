@@ -24,6 +24,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/flashbots/builder-playground/utils"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -856,6 +857,8 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 }
 
 func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
+	defer utils.StartTimer("docker.pull-available-images")()
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, svc := range d.manifest.Services {
@@ -892,6 +895,8 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	if err := d.pullNotAvailableImages(ctx); err != nil {
 		return err
 	}
+
+	defer utils.StartTimer("docker.up")()
 
 	// First start the services that are running in docker-compose
 	cmd := exec.CommandContext(
