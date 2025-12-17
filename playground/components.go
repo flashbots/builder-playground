@@ -480,14 +480,9 @@ func (r *RethEL) Apply(manifest *Manifest) {
 		WithRelease(rethELRelease).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth").
-		WithReady(ReadyCheck{
-			Test:        ElWatch("http://localhost:8545", 12*time.Second),
-			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
-			Retries:     20,
-			StartPeriod: 1 * time.Second,
-		})
+		WithVolume("data", "/data_reth")
+
+	UseHealthmon(manifest, svc)
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -917,4 +912,20 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		WithPort("http", 8888).
 		WithEnv("TARGET", Connect("web", "http")).
 		DependsOnHealthy("web")
+}
+
+func UseHealthmon(m *Manifest, s *Service) {
+	m.NewService("test-h").
+		WithImage("ghcr.io/alexallah/ethereum-healthmon").
+		WithTag("v1.3.1").
+		WithArgs("--chain", "execution", "--addr", "el").
+		WithLabel("sidecar", "true").
+		WithLabel("parent", s.Name).
+		WithReady(ReadyCheck{
+			Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 }
