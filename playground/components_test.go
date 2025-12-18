@@ -150,7 +150,7 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 
 func (tt *testFramework) Close() {
 	if tt.runner != nil {
-		if err := tt.runner.Stop(); err != nil {
+		if err := tt.runner.Stop(false); err != nil {
 			tt.t.Log(err)
 		}
 	}

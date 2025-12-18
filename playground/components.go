@@ -28,7 +28,7 @@ func (r *RollupBoost) Apply(manifest *Manifest) {
 	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("v0.7.5").
-        DependsOnHealthy(r.ELNode).
+		DependsOnHealthy(r.ELNode).
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -229,9 +229,9 @@ type ChainMonitor struct {
 
 func (c *ChainMonitor) Apply(manifest *Manifest) {
 	manifest.NewService("chain-monitor").
-        WithPort("metrics", 8080).
-        WithImage("ghcr.io/flashbots/chain-monitor").
-        WithTag("v0.0.54").
+		WithPort("metrics", 8080).
+		WithImage("ghcr.io/flashbots/chain-monitor").
+		WithTag("v0.0.54").
 		DependsOnHealthy(c.L1RPC).
 		DependsOnHealthy(c.L2RPC).
 		WithArgs(

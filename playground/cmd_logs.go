@@ -9,13 +9,12 @@ import (
 	"github.com/docker/docker/api/types/container"
 )
 
-func Logs(ctx context.Context, serviceName string) error {
+func Logs(ctx context.Context, sessionName string, serviceName string) error {
 	client, err := newDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	// TODO: Filter by session ID when we introduce multiple sessions soon.
 	containers, err := client.ContainerList(ctx, container.ListOptions{
 		All: true,
 	})
@@ -24,6 +23,9 @@ func Logs(ctx context.Context, serviceName string) error {
 	}
 
 	for _, container := range containers {
+		if sessionName != "" && container.Labels["playground.session"] != sessionName {
+			continue
+		}
 		if container.Labels["playground"] == "true" &&
 			container.Labels["com.docker.compose.service"] == serviceName {
 			cmd := exec.CommandContext(ctx, "docker", "logs", "-f", "--tail", "50", container.ID)
