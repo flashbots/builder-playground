@@ -196,52 +196,17 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	gen.Config.DepositContractAddress = gethcommon.HexToAddress(config.DepositContractAddress)
 
 	// add pre-funded accounts
-	prefundedBalance, _ := new(big.Int).SetString("10000000000000000000000", 16)
-
-	for _, privStr := range b.getPrefundedAccounts() {
-		priv, err := getPrivKey(privStr)
-		if err != nil {
-			return nil, err
-		}
-		addr := ecrypto.PubkeyToAddress(priv.PublicKey)
-		gen.Alloc[addr] = types.Account{
-			Balance: prefundedBalance,
-			Nonce:   1,
-		}
+	if err := appendPrefundedAccountsToAlloc(&gen.Alloc, b.getPrefundedAccounts()); err != nil {
+		return nil, err
 	}
 
 	// Apply Optimism pre-state
 	{
-		var state struct {
-			L1StateDump string `json:"l1StateDump"`
-		}
-		if err := json.Unmarshal(opState, &state); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
-		}
-
-		decoded, err := base64.StdEncoding.DecodeString(state.L1StateDump)
+		opAllocs, err := readOptimismL1Allocs()
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode opState: %w", err)
+			return nil, err
 		}
-
-		// Create gzip reader from the base64 decoded data
-		gr, err := gzip.NewReader(bytes.NewReader(decoded))
-		if err != nil {
-			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
-		}
-		defer gr.Close()
-
-		// Read and decode the contents
-		contents, err := io.ReadAll(gr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read opState: %w", err)
-		}
-
-		var alloc types.GenesisAlloc
-		if err := json.Unmarshal(contents, &alloc); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
-		}
-		maps.Copy(gen.Alloc, alloc)
+		maps.Copy(gen.Alloc, opAllocs)
 	}
 
 	block := gen.ToBlock()
@@ -306,30 +271,22 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			}
 		}
 
+		// Update the allocs to include the same prefunded accounts as the L1 genesis.
+		allocs := types.GenesisAlloc{}
+		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
+			return nil, err
+		}
+
 		// override l2 genesis, make the timestamp start 2 seconds after the L1 genesis
 		input := map[string]interface{}{
 			"timestamp": hexutil.Uint64(opTimestamp).String(),
+			"allocs":    allocs,
 		}
 		if forkTime != nil {
 			// We need to enable prague on the EL to enable the engine v4 calls
 			input["config"] = map[string]interface{}{
 				"pragueTime":  *forkTime,
 				"isthmusTime": *forkTime,
-			}
-		}
-
-		// Update the allocs to include the same prefunded accounts as the L1 genesis.
-		allocs := make(map[string]interface{})
-		input["alloc"] = allocs
-		for _, privStr := range b.getPrefundedAccounts() {
-			priv, err := getPrivKey(privStr)
-			if err != nil {
-				return nil, err
-			}
-			addr := ecrypto.PubkeyToAddress(priv.PublicKey)
-			allocs[addr.String()] = map[string]interface{}{
-				"balance": "0x10000000000000000000000",
-				"nonce":   "0x1",
 			}
 		}
 
@@ -768,4 +725,57 @@ func (o *output) GetEnodeAddr() *EnodeAddr {
 	}
 
 	return &EnodeAddr{PrivKey: privKey, Artifact: fileName}
+}
+
+func readOptimismL1Allocs() (types.GenesisAlloc, error) {
+	var state struct {
+		L1StateDump string `json:"l1StateDump"`
+	}
+	if err := json.Unmarshal(opState, &state); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(state.L1StateDump)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode opState: %w", err)
+	}
+
+	// Create gzip reader from the base64 decoded data
+	gr, err := gzip.NewReader(bytes.NewReader(decoded))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gr.Close()
+
+	// Read and decode the contents
+	contents, err := io.ReadAll(gr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read opState: %w", err)
+	}
+
+	var alloc types.GenesisAlloc
+	if err := json.Unmarshal(contents, &alloc); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
+	}
+
+	return alloc, nil
+}
+
+var (
+	prefundedBalance, _ = new(big.Int).SetString("10000000000000000000000", 16)
+)
+
+func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []string) error {
+	for _, privStr := range privKeys {
+		priv, err := getPrivKey(privStr)
+		if err != nil {
+			return err
+		}
+		addr := ecrypto.PubkeyToAddress(priv.PublicKey)
+		(*allocs)[addr] = types.Account{
+			Balance: prefundedBalance,
+			Nonce:   1,
+		}
+	}
+	return nil
 }
