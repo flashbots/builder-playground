@@ -225,12 +225,15 @@ func runIt(recipe playground.Recipe) error {
 		overrides[parts[0]] = parts[1]
 	}
 
+	out, err := playground.NewOutput(outputFlag)
+	if err != nil {
+		return err
+	}
+
 	builder := recipe.Artifacts()
-	builder.OutputDir(outputFlag)
 	builder.GenesisDelay(genesisDelayFlag)
 	builder.PrefundedAccounts(prefundedAccounts)
-	artifacts, err := builder.Build()
-	if err != nil {
+	if err := builder.Build(out); err != nil {
 		return err
 	}
 
@@ -244,13 +247,13 @@ func runIt(recipe playground.Recipe) error {
 		},
 	}
 
-	svcManager := playground.NewManifest(exCtx, artifacts.Out)
+	svcManager := playground.NewManifest(exCtx, out)
 
 	recipe.Apply(svcManager)
 
 	// generate the dot graph
 	dotGraph := svcManager.GenerateDotGraph()
-	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
+	if err := out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
 	}
 
@@ -264,7 +267,7 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	if withPrometheus {
-		if err := playground.CreatePrometheusServices(svcManager, artifacts.Out); err != nil {
+		if err := playground.CreatePrometheusServices(svcManager, out); err != nil {
 			return fmt.Errorf("failed to create prometheus services: %w", err)
 		}
 	}
@@ -278,7 +281,7 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	cfg := &playground.RunnerConfig{
-		Out:                  artifacts.Out,
+		Out:                  out,
 		Manifest:             svcManager,
 		BindHostPortsLocally: !bindExternal,
 		NetworkName:          networkName,
@@ -362,7 +365,7 @@ func runIt(recipe playground.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			if err := playground.RunWatchdog(artifacts.Out, svcManager.Services); err != nil {
+			if err := playground.RunWatchdog(out, svcManager.Services); err != nil {
 				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
 			}
 		}()

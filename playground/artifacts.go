@@ -63,7 +63,6 @@ var clConfigContent []byte
 var queryReadyCheck []byte
 
 type ArtifactsBuilder struct {
-	outputDir            string
 	applyLatestL1Fork    bool
 	genesisDelay         uint64
 	applyLatestL2Fork    *uint64
@@ -74,17 +73,11 @@ type ArtifactsBuilder struct {
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
 	return &ArtifactsBuilder{
-		outputDir:            "",
 		applyLatestL1Fork:    false,
 		genesisDelay:         MinimumGenesisDelay,
 		l1BlockTimeInSeconds: defaultL1BlockTimeSeconds,
 		opBlockTimeInSeconds: defaultOpBlockTimeSeconds,
 	}
-}
-
-func (b *ArtifactsBuilder) OutputDir(outputDir string) *ArtifactsBuilder {
-	b.outputDir = outputDir
-	return b
 }
 
 func (b *ArtifactsBuilder) ApplyLatestL1Fork(applyLatestL1Fork bool) *ArtifactsBuilder {
@@ -138,31 +131,8 @@ func (b *ArtifactsBuilder) getPrefundedAccounts() []string {
 	return staticPrefundedAccounts
 }
 
-type Artifacts struct {
-	Out *output
-}
-
-func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
+func (b *ArtifactsBuilder) Build(out *output) error {
 	defer utils.StartTimer("artifacts.builder")()
-
-	homeDir, err := GetHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	if b.outputDir == "" {
-		// Use the $HOMEDIR/devnet as the default output
-		b.outputDir = filepath.Join(homeDir, "devnet")
-	}
-
-	out := &output{dst: b.outputDir, homeDir: homeDir}
-
-	// check if the output directory exists
-	if out.Exists("") {
-		log.Printf("deleting existing output directory %s", b.outputDir)
-		if err := out.Remove(""); err != nil {
-			return nil, err
-		}
-	}
 
 	if b.genesisDelay < MinimumGenesisDelay {
 		log.Printf("genesis delay must be at least %d seconds, using %d", MinimumGenesisDelay, MinimumGenesisDelay)
@@ -182,10 +152,10 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	// load the config.yaml file
 	clConfig, err := params.UnmarshalConfig([]byte(clConfigContentStr), nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := params.SetActive(clConfig); err != nil {
-		return nil, err
+		return err
 	}
 
 	genesisTime := uint64(time.Now().Add(time.Duration(b.genesisDelay) * time.Second).Unix())
@@ -197,14 +167,14 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 
 	// add pre-funded accounts
 	if err := appendPrefundedAccountsToAlloc(&gen.Alloc, b.getPrefundedAccounts()); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Apply Optimism pre-state
 	{
 		opAllocs, err := readOptimismL1Allocs()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		maps.Copy(gen.Alloc, opAllocs)
 	}
@@ -221,12 +191,12 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 
 	priv, pub, err := interop.DeterministicallyGenerateKeys(0, 100)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	depositData, roots, err := interop.DepositDataFromKeysWithExecCreds(priv, pub, 100)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	opts := make([]interop.PremineGenesisOpt, 0)
@@ -234,7 +204,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 
 	state, err := interop.NewPreminedGenesis(context.Background(), genesisTime, 0, 100, v, block, opts...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	err = out.WriteBatch(map[string]interface{}{
@@ -250,7 +220,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		"scripts/query.sh":                    queryReadyCheck,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	{
@@ -274,7 +244,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		// Update the allocs to include the same prefunded accounts as the L1 genesis.
 		allocs := types.GenesisAlloc{}
 		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
-			return nil, err
+			return err
 		}
 
 		// override l2 genesis, make the timestamp start 2 seconds after the L1 genesis
@@ -292,13 +262,13 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 
 		newOpGenesis, err := overrideJSON(opGenesis, input)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// the hash of the genesis has changed beause of the timestamp so we need to account for that
 		opGenesisBlock, err := toOpBlock(newOpGenesis)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert opGenesis to block: %w", err)
+			return fmt.Errorf("failed to convert opGenesis to block: %w", err)
 		}
 
 		opGenesisHash := opGenesisBlock.Hash()
@@ -329,18 +299,18 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 
 		newOpRollup, err := overrideJSON(opRollupConfig, rollupInput)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if err := out.WriteFile("l2-genesis.json", newOpGenesis); err != nil {
-			return nil, err
+			return err
 		}
 		if err := out.WriteFile("rollup.json", newOpRollup); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return &Artifacts{Out: out}, nil
+	return nil
 }
 
 type OpGenesisTmplInput struct {
@@ -421,6 +391,28 @@ type output struct {
 	lock    sync.Mutex
 
 	enodeAddrSeq *big.Int
+}
+
+func NewOutput(dst string) (*output, error) {
+	homeDir, err := GetHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	if dst == "" {
+		// Use the $HOMEDIR/devnet as the default output
+		dst = filepath.Join(homeDir, "devnet")
+	}
+
+	out := &output{dst: dst, homeDir: homeDir}
+
+	// check if the output directory exists
+	if out.Exists("") {
+		if err := out.Remove(""); err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
 }
 
 func (o *output) AbsoluteDstPath() (string, error) {
