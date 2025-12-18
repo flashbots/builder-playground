@@ -315,6 +315,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			input["config"] = map[string]interface{}{
 				"pragueTime":  *forkTime,
 				"isthmusTime": *forkTime,
+				"jovianTime":  *forkTime,
 			}
 		}
 
@@ -368,6 +369,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		}
 		if forkTime != nil {
 			rollupInput["isthmus_time"] = *forkTime
+			rollupInput["jovian_time"] = *forkTime
 		}
 
 		newOpRollup, err := overrideJSON(opRollupConfig, rollupInput)

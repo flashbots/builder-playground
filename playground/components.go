@@ -27,7 +27,7 @@ type RollupBoost struct {
 func (r *RollupBoost) Apply(manifest *Manifest) {
 	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("v0.7.5").
+		WithTag("v0.7.12-rc1").
         DependsOnHealthy(r.ELNode).
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
@@ -59,7 +59,7 @@ type OpRbuilder struct {
 func (o *OpRbuilder) Apply(manifest *Manifest) {
 	service := manifest.NewService("op-rbuilder").
 		WithImage("ghcr.io/flashbots/op-rbuilder").
-		WithTag("v0.2.8").
+		WithTag("v0.2.13").
 		WithArgs(
 			"node",
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
@@ -256,7 +256,7 @@ func (o *OpBatcher) Apply(manifest *Manifest) {
 	}
 	manifest.NewService("op-batcher").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
-		WithTag("v1.12.0-rc.1").
+		WithTag("v1.16.2").
 		WithEntrypoint("op-batcher").
 		WithArgs(
 			"--l1-eth-rpc", Connect(o.L1Node, "http"),
@@ -279,7 +279,7 @@ type OpNode struct {
 func (o *OpNode) Apply(manifest *Manifest) {
 	manifest.NewService("op-node").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
-		WithTag("v1.13.0-rc.1").
+		WithTag("v1.16.3").
 		WithEntrypoint("op-node").
 		WithEnv("A", "B"). // this is just a placeholder to make sure env works since we e2e test with the recipes
 		WithArgs(
@@ -292,6 +292,7 @@ func (o *OpNode) Apply(manifest *Manifest) {
 			"--metrics.enabled",
 			"--metrics.addr", "0.0.0.0",
 			"--metrics.port", `{{Port "metrics" 7300}}`,
+			"--rollup.l1-chain-config", "/data/genesis.json",
 			"--sequencer.enabled",
 			"--sequencer.l1-confs", "0",
 			"--verifier.l1-confs", "0",
@@ -308,6 +309,7 @@ func (o *OpNode) Apply(manifest *Manifest) {
 			"--rpc.enable-admin",
 			"--safedb.path", "/data_db",
 		).
+		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/rollup.json", "rollup.json").
 		WithVolume("data", "/data_db")
@@ -345,7 +347,7 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 
 	manifest.NewService("op-geth").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
-		WithTag("v1.101503.2-rc.5").
+		WithTag("v1.101603.5").
 		WithEntrypoint("/bin/sh").
 		WithLabel("metrics_path", "/debug/metrics/prometheus").
 		WithArgs(
@@ -415,7 +417,7 @@ type RethEL struct {
 var rethELRelease = &release{
 	Name:    "reth",
 	Org:     "paradigmxyz",
-	Version: "v1.4.8",
+	Version: "v1.9.3",
 	Arch: func(goos, goarch string) string {
 		if goos == "linux" {
 			return "x86_64-unknown-linux-gnu"
@@ -449,7 +451,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 	// start the reth el client
 	svc := manifest.NewService("el").
 		WithImage("ghcr.io/paradigmxyz/reth").
-		WithTag("v1.8.2").
+		WithTag("v1.9.3").
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",
@@ -647,7 +649,7 @@ var opRethRelease = &release{
 	Name:    "op-reth",
 	Repo:    "reth",
 	Org:     "paradigmxyz",
-	Version: "v1.3.12",
+	Version: "v1.9.3",
 	Arch: func(goos, goarch string) string {
 		if goos == "linux" {
 			return "x86_64-unknown-linux-gnu"
@@ -663,7 +665,7 @@ var opRethRelease = &release{
 func (o *OpReth) Apply(manifest *Manifest) {
 	manifest.NewService("op-reth").
 		WithImage("ghcr.io/paradigmxyz/op-reth").
-		WithTag("nightly").
+		WithTag("v1.9.3").
 		WithEntrypoint("op-reth").
 		WithArgs(
 			"node",
