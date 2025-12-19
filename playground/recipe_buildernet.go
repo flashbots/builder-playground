@@ -47,14 +47,14 @@ func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {
 	output := b.l1Recipe.Output(manifest)
 
 	// Add builder-hub service info
-	builderHubService := manifest.MustGetService("builder-hub")
+	builderHubService := manifest.MustGetService("web")
 	builderHubProxy := manifest.MustGetService("builder-hub-proxy")
 
 	http := builderHubProxy.MustGetPort("http")
 	admin := builderHubService.MustGetPort("admin")
 	internal := builderHubService.MustGetPort("internal")
 
-	output["builder-hub-http"] = fmt.Sprintf("http://localhost:%d", http.HostPort)
+	output["builder-hub-http (proxy)"] = fmt.Sprintf("http://localhost:%d", http.HostPort)
 	output["builder-hub-admin"] = fmt.Sprintf("http://localhost:%d", admin.HostPort)
 	output["builder-hub-internal"] = fmt.Sprintf("http://localhost:%d", internal.HostPort)
 
