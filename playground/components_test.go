@@ -74,6 +74,13 @@ func TestComponentBuilderHub(t *testing.T) {
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 }
 
+func TestRecipeBuilderNet(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&BuilderNetRecipe{}, []string{})
+}
+
 type testFramework struct {
 	t      *testing.T
 	runner *LocalRunner
