@@ -44,9 +44,6 @@ var rootCmd = &cobra.Command{
 	Short:   "",
 	Long:    ``,
 	Version: version,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return nil
-	},
 }
 
 var startCmd = &cobra.Command{
