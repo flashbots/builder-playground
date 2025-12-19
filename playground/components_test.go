@@ -81,8 +81,8 @@ func TestRecipeBuilderHub(t *testing.T) {
 		}
 	`))
 	resp, err := http.Post("http://localhost:8081/api/admin/v1/measurements", "application/json", buf)
-	defer resp.Body.Close()
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	buf = bytes.NewBuffer([]byte(`
 		{
@@ -90,8 +90,8 @@ func TestRecipeBuilderHub(t *testing.T) {
 		}
 	`))
 	resp, err = http.Post("http://localhost:8081/api/admin/v1/measurements/activation/test1", "application/json", buf)
-	defer resp.Body.Close()
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	type measurementList []struct {
 		MeasurementID string `json:"measurement_id"`
