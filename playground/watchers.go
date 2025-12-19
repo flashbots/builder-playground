@@ -53,55 +53,6 @@ func waitForFirstBlock(ctx context.Context, elURL string, timeout time.Duration)
 	}
 }
 
-func waitForChainAlive(ctx context.Context, logOutput io.Writer, beaconNodeURL string, timeout time.Duration) error {
-	// Test that blocks are being produced
-	log := mevRCommon.LogSetup(false, "info").WithField("context", "waitForChainAlive")
-	log.Logger.Out = logOutput
-
-	clt := beaconclient.NewProdBeaconInstance(log, beaconNodeURL, beaconNodeURL)
-
-	// Subscribe to head events right away even if the connection has not been established yet
-	// That is handled internally in the function already.
-	// Otherwise, if we connect only when the first head slot happens we might miss some initial slots.
-	ch := make(chan beaconclient.PayloadAttributesEvent)
-	go clt.SubscribeToPayloadAttributesEvents(ch)
-
-	{
-		// If the chain has not started yet, wait for it to start.
-		// Otherwise, the subscription will not return any data.
-		bClient := beaconclient.NewMultiBeaconClient(log, []beaconclient.IBeaconInstance{
-			clt,
-		})
-
-		isReady := func() bool {
-			sync, err := bClient.BestSyncStatus()
-			if err != nil {
-				return false
-			}
-			return sync.HeadSlot >= 1
-		}
-
-		if !isReady() {
-			syncTimeoutCh := time.After(timeout)
-			for {
-				if isReady() {
-					break
-				}
-				select {
-				case <-syncTimeoutCh:
-					return fmt.Errorf("beacon client failed to start")
-				case <-ctx.Done():
-					return fmt.Errorf("timeout waiting for chain to start")
-				default:
-					time.Sleep(1 * time.Second)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // validateProposerPayloads validates that payload attribute events are being broadcasted by the beacon node
 // in the correct order without any missing slots.
 func validateProposerPayloads(logOutput io.Writer, beaconNodeURL string) error {
@@ -169,7 +120,7 @@ LOOP:
 	for {
 		select {
 		case <-timerC:
-			break
+			break LOOP
 		case <-time.After(2 * time.Second):
 			if _, err := getProposerPayloadDelivered(); err == nil {
 				break LOOP
