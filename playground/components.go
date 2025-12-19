@@ -884,7 +884,7 @@ type BuilderHub struct{}
 
 func (b *BuilderHub) Apply(manifest *Manifest) {
 	// Database service
-	manifest.NewService("db").
+	manifest.NewService("builder-hub-db").
 		WithImage("docker.io/flashbots/builder-hub-db").
 		WithTag("latest").
 		WithPort("postgres", 5432).
@@ -901,7 +901,7 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 
 	// Web service
-	manifest.NewService("web").
+	manifest.NewService("builder-hub").
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("latest").
 		DependsOnHealthy("db").
@@ -926,7 +926,7 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 
 	// Proxy service
-	manifest.NewService("proxy").
+	manifest.NewService("builder-hub-proxy").
 		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
 		WithTag("latest").
 		WithPort("http", 8888).
