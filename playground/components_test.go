@@ -61,7 +61,7 @@ func TestRecipeL1UseNativeReth(t *testing.T) {
 	})
 }
 
-func TestComponentBuilderHub(t *testing.T) {
+func TestRecipeBuilderHub(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -80,6 +80,9 @@ type testFramework struct {
 }
 
 func newTestFramework(t *testing.T) *testFramework {
+	if strings.ToLower(os.Getenv("INTEGRATION_TESTS")) != "true" {
+		t.Skip("integration tests not enabled")
+	}
 	return &testFramework{t: t}
 }
 
