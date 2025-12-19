@@ -12,9 +12,6 @@ var _ Recipe = &BuilderNetRecipe{}
 type BuilderNetRecipe struct {
 	// Embed the L1Recipe to reuse its functionality
 	l1Recipe L1Recipe
-
-	// Add mock proxy for testing
-	includeMockProxy bool
 }
 
 func (b *BuilderNetRecipe) Name() string {
@@ -28,10 +25,6 @@ func (b *BuilderNetRecipe) Description() string {
 func (b *BuilderNetRecipe) Flags() *flag.FlagSet {
 	// Reuse the L1Recipe flags
 	flags := b.l1Recipe.Flags()
-
-	// Add a flag to enable/disable the mock proxy
-	flags.BoolVar(&b.includeMockProxy, "mock-proxy", false, "include a mock proxy for builder-hub with attestation headers")
-
 	return flags
 }
 
@@ -54,24 +47,18 @@ func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {
 	output := b.l1Recipe.Output(manifest)
 
 	// Add builder-hub service info
-	builderHubService, ok := manifest.GetService("builder-hub")
-	if ok {
-		http := builderHubService.MustGetPort("http")
-		admin := builderHubService.MustGetPort("admin")
-		internal := builderHubService.MustGetPort("internal")
+	builderHubService := manifest.MustGetService("builder-hub")
+	http := builderHubService.MustGetPort("http")
+	admin := builderHubService.MustGetPort("admin")
+	internal := builderHubService.MustGetPort("internal")
 
-		output["builder-hub-http"] = fmt.Sprintf("http://localhost:%d", http.HostPort)
-		output["builder-hub-admin"] = fmt.Sprintf("http://localhost:%d", admin.HostPort)
-		output["builder-hub-internal"] = fmt.Sprintf("http://localhost:%d", internal.HostPort)
-	}
+	output["builder-hub-http"] = fmt.Sprintf("http://localhost:%d", http.HostPort)
+	output["builder-hub-admin"] = fmt.Sprintf("http://localhost:%d", admin.HostPort)
+	output["builder-hub-internal"] = fmt.Sprintf("http://localhost:%d", internal.HostPort)
 
-	if b.includeMockProxy {
-		proxyService, ok := manifest.GetService("builder-hub-proxy")
-		if ok {
-			http := proxyService.MustGetPort("http")
-			output["builder-hub-proxy"] = fmt.Sprintf("http://localhost:%d", http.HostPort)
-		}
-	}
+	proxyService := manifest.MustGetService("builder-hub-proxy")
+	proxyHTTP := proxyService.MustGetPort("http")
+	output["builder-hub-proxy"] = fmt.Sprintf("http://localhost:%d", proxyHTTP.HostPort)
 
 	return output
 }

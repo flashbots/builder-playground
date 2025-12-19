@@ -761,9 +761,7 @@ func readOptimismL1Allocs() (types.GenesisAlloc, error) {
 	return alloc, nil
 }
 
-var (
-	prefundedBalance, _ = new(big.Int).SetString("10000000000000000000000", 16)
-)
+var prefundedBalance, _ = new(big.Int).SetString("10000000000000000000000", 16)
 
 func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []string) error {
 	for _, privStr := range privKeys {
