@@ -884,7 +884,7 @@ type BuilderHub struct{}
 
 func (b *BuilderHub) Apply(manifest *Manifest) {
 	// Database service
-	manifest.NewService("db").
+	manifest.NewService("builder-hub-db").
 		WithImage("docker.io/flashbots/builder-hub-db").
 		WithTag("latest").
 		WithPort("postgres", 5432).
@@ -901,16 +901,17 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 
 	// Web service
+	// cannot change this service name because 'builder-hub-mock-proxy' hardcodes the 'web' hostname
 	manifest.NewService("web").
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("latest").
-		DependsOnHealthy("db").
+		DependsOnHealthy("builder-hub-db").
 		WithPort("http", 8080).
 		WithPort("admin", 8081).
 		WithPort("internal", 8082).
 		WithPort("metrics", 8090).
 		WithEnv("MOCK_SECRETS", "true").
-		WithEnv("POSTGRES_DSN", ConnectRaw("db", "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
+		WithEnv("POSTGRES_DSN", ConnectRaw("builder-hub-db", "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
 		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
 		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
 		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
@@ -926,7 +927,7 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 
 	// Proxy service
-	manifest.NewService("proxy").
+	manifest.NewService("builder-hub-proxy").
 		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
 		WithTag("latest").
 		WithPort("http", 8888).
