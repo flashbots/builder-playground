@@ -29,14 +29,14 @@ test: ## Run tests
 
 .PHONY: integration-test
 integration-test: ## Run integration tests
-	INTEGRATION_TESTS=true go test -v -count=1 ./playground/... -run TestRecipe 
+	INTEGRATION_TESTS=true go test -v -count=1 ./playground/... -run TestRecipe
 
 .PHONY: lint
 lint: ## Run linters
 	output=$$(gofmt -d -s .) && [ -z "$$output" ] || { echo "$$output"; exit 1; }
 	output=$$(gofumpt -d -extra .) && [ -z "$$output" ] || { echo "$$output"; exit 1; }
 	go vet ./...
-	staticcheck ./... || true
+	staticcheck ./...
 	# golangci-lint run || true
 
 .PHONY: fmt
