@@ -27,6 +27,9 @@ build: ## Build the CLI
 test: ## Run tests
 	go test -v -count=1 ./...
 
+.PHONY: integration-test
+integration-test: ## Run integration tests
+	INTEGRATION_TESTS=true go test -v -count=1 ./playground/... -run TestRecipe 
 
 .PHONY: lint
 lint: ## Run linters
