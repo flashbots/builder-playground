@@ -9,7 +9,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 )
 
-func Logs(ctx context.Context, sessionName string, serviceName string) error {
+func Logs(ctx context.Context, sessionName, serviceName string) error {
 	client, err := newDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create docker client: %w", err)
