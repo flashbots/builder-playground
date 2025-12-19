@@ -2,7 +2,6 @@ package playground
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -159,7 +158,7 @@ func (g1 *OpGenesis) toBlockWithRoot(g *core.Genesis, stateRoot, storageRootMess
 		header := block.Header()
 		if opConfig.HasOptimismWithdrawalsRoot(header.Time) {
 			if withdrawals == nil || len(withdrawals) > 0 {
-				panic(fmt.Sprintf("expected non-nil empty withdrawals operation list in Isthmus"))
+				panic("expected non-nil empty withdrawals operation list in Isthmus")
 			}
 			header.WithdrawalsHash = &withdrawalsHash
 		} else if withdrawals == nil {

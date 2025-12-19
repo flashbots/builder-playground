@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/OffchainLabs/prysm/v6/config/params"
@@ -671,20 +670,6 @@ func isByteArray(t reflect.Type) bool {
 
 func isByteSlice(t reflect.Type) bool {
 	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
-}
-
-func applyTemplate2(templateStr []byte, input interface{}) ([]byte, error) {
-	tpl, err := template.New("").Parse(string(templateStr))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var out strings.Builder
-	if err := tpl.Execute(&out, input); err != nil {
-		return nil, fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	return []byte(out.String()), nil
 }
 
 type EnodeAddr struct {
