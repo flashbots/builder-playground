@@ -931,5 +931,5 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		WithTag("latest").
 		WithPort("http", 8888).
 		WithEnv("TARGET", Connect("web", "http")).
-		DependsOnHealthy("web")
+		DependsOnHealthy("builder-hub")
 }
