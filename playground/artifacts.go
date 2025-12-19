@@ -592,7 +592,7 @@ func (l *lighthouseKeystore) Encode(o *output) error {
 		return o.WriteDir(l.cacheDir)
 	}
 
-	// If the cache dir doesn't exist, replace the dst for a moment and copy from there.
+	// If the cache dir doesn't exist, set dst as the cache dir to write the keys there first.
 	oldDst := o.dst
 	o.dst = l.cacheDir
 
