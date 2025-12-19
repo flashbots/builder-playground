@@ -312,6 +312,7 @@ func runIt(recipe playground.Recipe) error {
 		overrides[parts[0]] = parts[1]
 	}
 
+	log.Println("Building artifacts...")
 	builder := recipe.Artifacts()
 	builder.OutputDir(outputFlag)
 	builder.GenesisDelay(genesisDelayFlag)
@@ -336,6 +337,7 @@ func runIt(recipe playground.Recipe) error {
 	recipe.Apply(svcManager)
 
 	// generate the dot graph
+	log.Println("Generating dot graph...")
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
@@ -393,6 +395,7 @@ func runIt(recipe playground.Recipe) error {
 
 	ctx := mainctx.Get()
 
+	log.Println("Starting services...")
 	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to run docker: %w", err)

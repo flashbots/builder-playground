@@ -218,6 +218,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		v = version.Deneb
 	}
 
+	log.Println("Generating keys...")
 	priv, pub, err := interop.DeterministicallyGenerateKeys(0, 100)
 	if err != nil {
 		return nil, err
@@ -236,6 +237,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		return nil, err
 	}
 
+	log.Println("Writing artifacts...")
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
@@ -251,6 +253,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Println("Done writing artifacts...")
 
 	{
 		// We have to start slightly ahead of L1 genesis time
