@@ -15,6 +15,7 @@ import (
 	"maps"
 	"math/big"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -32,6 +33,7 @@ import (
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/flashbots/builder-playground/utils"
 	"github.com/hashicorp/go-uuid"
+	"github.com/otiai10/copy"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
 )
@@ -245,8 +247,11 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		"testnet/deploy_block.txt":            "0",
 		"testnet/deposit_contract_block.txt":  "0",
 		"testnet/genesis_validators_root.txt": hex.EncodeToString(state.GenesisValidatorsRoot()),
-		"data_validator/":                     &lighthouseKeystore{privKeys: priv},
-		"scripts/query.sh":                    queryReadyCheck,
+		"data_validator/": &lighthouseKeystore{
+			privKeys: priv,
+			cacheDir: path.Join(homeDir, "cache", "data_validator"),
+		},
+		"scripts/query.sh": queryReadyCheck,
 	})
 	if err != nil {
 		return nil, err
@@ -496,6 +501,10 @@ func (o *output) WriteBatch(data map[string]interface{}) error {
 	return nil
 }
 
+func (o *output) WriteDir(src string) error {
+	return copy.Copy(src, o.dst)
+}
+
 func (o *output) LogOutput(name string) (*os.File, error) {
 	// lock this because some services might be trying to access this in parallel
 	o.lock.Lock()
@@ -566,9 +575,27 @@ var secret = "secret"
 
 type lighthouseKeystore struct {
 	privKeys []common.SecretKey
+	cacheDir string
+}
+
+func isExistingDir(path string) bool {
+	info, err := os.Stat(path)
+	if err == nil {
+		return info.IsDir()
+	}
+	return false
 }
 
 func (l *lighthouseKeystore) Encode(o *output) error {
+	// If the cache dir exists, just copy to destination.
+	if isExistingDir(l.cacheDir) {
+		return o.WriteDir(l.cacheDir)
+	}
+
+	// If the cache dir doesn't exist, replace the dst for a moment and copy from there.
+	oldDst := o.dst
+	o.dst = l.cacheDir
+
 	for _, key := range l.privKeys {
 		encryptor := keystorev4.New()
 		cryptoFields, err := encryptor.Encrypt(key.Marshal(), secret)
@@ -599,7 +626,9 @@ func (l *lighthouseKeystore) Encode(o *output) error {
 		}
 	}
 
-	return nil
+	// Restore the dst and write from the cache.
+	o.dst = oldDst
+	return o.WriteDir(l.cacheDir)
 }
 
 type encObject interface {
@@ -617,7 +646,7 @@ func GetHomeDir() (string, error) {
 	}
 
 	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(homeDir, ".playground")
+	customHomeDir := filepath.Join(homeDir, ".builder-playground")
 
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
