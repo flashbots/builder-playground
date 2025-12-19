@@ -30,8 +30,8 @@ test: ## Run tests
 
 .PHONY: lint
 lint: ## Run linters
-	gofmt -d -s .
-	gofumpt -d -extra .
+	output=$$(gofmt -d -s .) && [ -z "$$output" ] || { echo "$$output"; exit 1; }
+	output=$$(gofumpt -d -extra .) && [ -z "$$output" ] || { echo "$$output"; exit 1; }
 	go vet ./...
 	staticcheck ./... || true
 	# golangci-lint run || true
