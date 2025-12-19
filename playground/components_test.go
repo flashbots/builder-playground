@@ -61,7 +61,7 @@ func TestRecipeL1UseNativeReth(t *testing.T) {
 	})
 }
 
-func TestComponentBuilderHub(t *testing.T) {
+func TestRecipeBuilderHub(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -74,12 +74,22 @@ func TestComponentBuilderHub(t *testing.T) {
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 }
 
+func TestRecipeBuilderNet(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&BuilderNetRecipe{}, []string{})
+}
+
 type testFramework struct {
 	t      *testing.T
 	runner *LocalRunner
 }
 
 func newTestFramework(t *testing.T) *testFramework {
+	if strings.ToLower(os.Getenv("INTEGRATION_TESTS")) != "true" {
+		t.Skip("integration tests not enabled")
+	}
 	return &testFramework{t: t}
 }
 
