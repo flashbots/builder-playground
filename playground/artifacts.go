@@ -253,7 +253,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println("Done writing artifacts...")
+	log.Println("Done writing artifacts.")
 
 	{
 		// We have to start slightly ahead of L1 genesis time
