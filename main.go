@@ -125,6 +125,27 @@ var inspectCmd = &cobra.Command{
 	},
 }
 
+var debugCmd = &cobra.Command{
+	Use: "debug",
+}
+
+var probeCmd = &cobra.Command{
+	Use: "probe",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		serviceName := args[0]
+
+		resp, err := playground.ExecuteHealthCheckManually(serviceName)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Exit code: %d\n", resp.ExitCode)
+		fmt.Printf("Output: %s\n", resp.Output)
+
+		return nil
+	},
+}
+
 var logsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Show logs for a service",
@@ -277,11 +298,14 @@ func main() {
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(cleanCmd)
 
 	rootCmd.AddCommand(stopCmd)
 	stopCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
 
-	rootCmd.AddCommand(cleanCmd)
+	debugCmd.AddCommand(probeCmd)
+	debugCmd.AddCommand(inspectCmd)
+	rootCmd.AddCommand(debugCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -378,14 +402,14 @@ func runIt(recipe playground.Recipe) error {
 
 	if interactive {
 		i := playground.NewInteractiveDisplay(svcManager)
-		cfg.Callback = i.HandleUpdate
+		cfg.AddCallback(i.HandleUpdate)
 	}
 
 	// Add callback to log service updates in debug mode
 	if logLevel == playground.LevelDebug {
-		cfg.Callback = func(serviceName string, update playground.TaskStatus) {
+		cfg.AddCallback(func(serviceName string, update playground.TaskStatus) {
 			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
-		}
+		})
 	}
 
 	dockerRunner, err := playground.NewLocalRunner(cfg)
@@ -427,13 +451,7 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
-	fmt.Printf("\nWaiting for network to be ready for transactions...\n")
-	networkReadyStart := time.Now()
-	if err := playground.CompleteReady(ctx, svcManager.Services); err != nil {
-		dockerRunner.Stop(keepFlag)
-		return fmt.Errorf("network not ready: %w", err)
-	}
-	fmt.Printf("Network is ready for transactions (took %.1fs)\n", time.Since(networkReadyStart).Seconds())
+	fmt.Println("\nServices healthy... Ready to accept transactions")
 	fmt.Println("Session ID:", svcManager.ID)
 
 	// get the output from the recipe
@@ -452,9 +470,11 @@ func runIt(recipe playground.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			if err := playground.RunWatchdog(artifacts.Out, svcManager.Services); err != nil {
-				watchdogErr <- fmt.Errorf("watchdog failed: %w", err)
-			}
+			cfg.AddCallback(func(name string, status playground.TaskStatus) {
+				if status == playground.TaskStatusUnhealty {
+					watchdogErr <- fmt.Errorf("watchdog failed: %w", fmt.Errorf("task '%s' is not healthy anymore", name))
+				}
+			})
 		}()
 	}
 

@@ -1,9 +1,7 @@
 package playground
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +26,6 @@ func (r *RollupBoost) Apply(manifest *Manifest) {
 	service := manifest.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
 		WithTag("v0.7.5").
-		DependsOnHealthy(r.ELNode).
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -232,8 +229,6 @@ func (c *ChainMonitor) Apply(manifest *Manifest) {
 		WithPort("metrics", 8080).
 		WithImage("ghcr.io/flashbots/chain-monitor").
 		WithTag("v0.0.54").
-		DependsOnHealthy(c.L1RPC).
-		DependsOnHealthy(c.L2RPC).
 		WithArgs(
 			"serve",
 			"--l1-rpc", Connect(c.L1RPC, "http"),
@@ -343,7 +338,7 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		trustedPeers = fmt.Sprintf("--bootnodes %s ", manifest.ctx.Bootnode.Connect())
 	}
 
-	manifest.NewService("op-geth").
+	svc := manifest.NewService("op-geth").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
 		WithTag("v1.101503.2-rc.5").
 		WithEntrypoint("/bin/sh").
@@ -383,28 +378,11 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
 		).
 		WithVolume("data", "/data_opgeth").
-		WithWatchdog(opGethWatchdogFn).
-		WithReadyFn(opGethReadyFn).
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact).
-		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:8545",
-			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
-			Retries:     20,
-			StartPeriod: 1 * time.Second,
-		})
-}
+		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 
-func opGethReadyFn(ctx context.Context, service *Service) error {
-	opGethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-	return waitForFirstBlock(ctx, opGethURL, 60*time.Second)
-}
-
-func opGethWatchdogFn(out io.Writer, service *Service, ctx context.Context) error {
-	gethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-	return watchChainHead(out, gethURL, 2*time.Second)
+	UseHealthmon(manifest, svc)
 }
 
 type RethEL struct {
@@ -480,24 +458,11 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			logLevelToRethVerbosity(manifest.ctx.LogLevel),
 		).
 		WithRelease(rethELRelease).
-		WithWatchdog(func(out io.Writer, service *Service, ctx context.Context) error {
-			rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-			return watchChainHead(out, rethURL, 12*time.Second)
-		}).
-		WithReadyFn(func(ctx context.Context, service *Service) error {
-			elURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-			return waitForFirstBlock(ctx, elURL, 60*time.Second)
-		}).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth").
-		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:8545",
-			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
-			Retries:     20,
-			StartPeriod: 1 * time.Second,
-		})
+		WithVolume("data", "/data_reth")
+
+	UseHealthmon(manifest, svc)
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -615,7 +580,6 @@ func (m *MevBoostRelay) Apply(manifest *Manifest) {
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
 		WithEntrypoint("mev-boost-relay").
 		DependsOnHealthy(m.BeaconClient).
-		WithWatchdog(mevboostRelayWatchdogFn).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
 			"--api-listen-port", `{{Port "http" 5555}}`,
@@ -625,20 +589,6 @@ func (m *MevBoostRelay) Apply(manifest *Manifest) {
 	if m.ValidationServer != "" {
 		service.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
 	}
-}
-
-func mevboostRelayWatchdogFn(out io.Writer, service *Service, ctx context.Context) error {
-	beaconNodeURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-
-	watchGroup := newWatchGroup()
-	watchGroup.watch(func() error {
-		return watchProposerPayloads(beaconNodeURL)
-	})
-	watchGroup.watch(func() error {
-		return validateProposerPayloads(out, beaconNodeURL)
-	})
-
-	return watchGroup.wait()
 }
 
 type OpReth struct{}
@@ -661,7 +611,7 @@ var opRethRelease = &release{
 }
 
 func (o *OpReth) Apply(manifest *Manifest) {
-	manifest.NewService("op-reth").
+	svc := manifest.NewService("op-reth").
 		WithImage("ghcr.io/paradigmxyz/op-reth").
 		WithTag("nightly").
 		WithEntrypoint("op-reth").
@@ -681,20 +631,11 @@ func (o *OpReth) Apply(manifest *Manifest) {
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`).
 		WithRelease(opRethRelease).
-		WithWatchdog(func(out io.Writer, service *Service, ctx context.Context) error {
-			rethURL := fmt.Sprintf("http://localhost:%d", service.MustGetPort("http").HostPort)
-			return watchChainHead(out, rethURL, 2*time.Second)
-		}).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
-		WithVolume("data", "/data_op_reth").
-		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:8545",
-			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
-			Retries:     20,
-			StartPeriod: 1 * time.Second,
-		})
+		WithVolume("data", "/data_op_reth")
+
+	UseHealthmon(manifest, svc)
 }
 
 type MevBoost struct {
@@ -933,4 +874,19 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		WithPort("http", 8888).
 		WithEnv("TARGET", Connect("builder-hub-api", "http")).
 		DependsOnHealthy("builder-hub-api")
+}
+
+func UseHealthmon(m *Manifest, s *Service) {
+	m.NewService(s.Name+"_healthmon").
+		WithImage("ghcr.io/flashbots/ethereum-healthmon").
+		WithTag("v0.0.1").
+		// TODO: Use this also for beacon node
+		WithArgs("--chain", "execution", "--url", Connect(s.Name, "http")).
+		WithReady(ReadyCheck{
+			Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
+			Interval:    1 * time.Second,
+			Timeout:     10 * time.Second,
+			Retries:     20,
+			StartPeriod: 1 * time.Second,
+		})
 }

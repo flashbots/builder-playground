@@ -166,7 +166,7 @@ With multiple sessions running, it's easy to navigate:
 Builder-playground supports inspecting the connection of a service to a specific port.
 
 ```bash
-$ builder-playground inspect <service> <port>
+$ builder-playground debug inspect <service> <port>
 ```
 
 Example:

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -191,8 +193,6 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	require.NoError(t, err)
 
 	require.NoError(t, dockerRunner.WaitForReady(context.Background(), 20*time.Second))
-	require.NoError(t, CompleteReady(context.Background(), svcManager.Services))
-
 	return svcManager
 }
 
@@ -211,4 +211,30 @@ func toSnakeCase(s string) string {
 
 	// Convert to lowercase
 	return strings.ToLower(snake)
+}
+
+func waitForBlock(elURL string, targetBlock uint64, timeout time.Duration) error {
+	rpcClient, err := rpc.Dial(elURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", elURL, err)
+	}
+	defer rpcClient.Close()
+
+	clt := ethclient.NewClient(rpcClient)
+	timeoutCh := time.After(timeout)
+
+	for {
+		select {
+		case <-timeoutCh:
+			return fmt.Errorf("timeout waiting for block %d on %s", targetBlock, elURL)
+		case <-time.After(500 * time.Millisecond):
+			num, err := clt.BlockNumber(context.Background())
+			if err != nil {
+				continue
+			}
+			if num >= targetBlock {
+				return nil
+			}
+		}
+	}
 }

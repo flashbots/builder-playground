@@ -1,10 +1,8 @@
 package playground
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -292,15 +290,8 @@ type Service struct {
 	Entrypoint string `json:"entrypoint,omitempty"`
 	HostPath   string `json:"host_path,omitempty"`
 
-	release    *release
-	watchdogFn watchdogFn
-	readyFn    readyFn
+	release *release
 }
-
-type (
-	watchdogFn func(out io.Writer, service *Service, ctx context.Context) error
-	readyFn    func(ctx context.Context, service *Service) error
-)
 
 type DependsOnCondition string
 
@@ -407,16 +398,6 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 
 func (s *Service) WithRelease(rel *release) *Service {
 	s.release = rel
-	return s
-}
-
-func (s *Service) WithWatchdog(watchdogFn watchdogFn) *Service {
-	s.watchdogFn = watchdogFn
-	return s
-}
-
-func (s *Service) WithReadyFn(readyFn readyFn) *Service {
-	s.readyFn = readyFn
 	return s
 }
 
