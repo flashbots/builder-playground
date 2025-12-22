@@ -60,9 +60,6 @@ var opState []byte
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
 
-//go:embed utils/query.sh
-var queryReadyCheck []byte
-
 type ArtifactsBuilder struct {
 	applyLatestL1Fork    bool
 	genesisDelay         uint64
@@ -223,7 +220,6 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 			privKeys: priv,
 			cacheDir: path.Join(out.homeDir, "cache", "data_validator"),
 		},
-		"scripts/query.sh": queryReadyCheck,
 	})
 	if err != nil {
 		return err
