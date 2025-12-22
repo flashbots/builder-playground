@@ -198,6 +198,8 @@ func (d *LocalRunner) AreReady() bool {
 }
 
 func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) error {
+	defer utils.StartTimer("docker.wait-for-ready")()
+
 	for {
 		select {
 		case <-ctx.Done():
