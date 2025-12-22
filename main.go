@@ -449,12 +449,13 @@ func runIt(recipe playground.Recipe) error {
 		}
 	}
 
+	fmt.Println("\nWaiting for services to get healthy...")
 	if err := dockerRunner.WaitForReady(ctx, 20*time.Second); err != nil {
 		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
-	fmt.Println("\nServices healthy... Ready to accept transactions")
+	fmt.Println("\nAll services are healthy! Ready to accept transactions.")
 	fmt.Println("Session ID:", svcManager.ID)
 
 	// get the output from the recipe
