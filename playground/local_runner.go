@@ -74,12 +74,13 @@ type task struct {
 type TaskStatus string
 
 var (
-	TaskStatusPulling TaskStatus = "pulling"
-	TaskStatusPulled  TaskStatus = "pulled"
-	TaskStatusPending TaskStatus = "pending"
-	TaskStatusStarted TaskStatus = "started"
-	TaskStatusDie     TaskStatus = "die"
-	TaskStatusHealthy TaskStatus = "healthy"
+	TaskStatusPulling  TaskStatus = "pulling"
+	TaskStatusPulled   TaskStatus = "pulled"
+	TaskStatusPending  TaskStatus = "pending"
+	TaskStatusStarted  TaskStatus = "started"
+	TaskStatusDie      TaskStatus = "die"
+	TaskStatusHealthy  TaskStatus = "healthy"
+	TaskStatusUnhealty TaskStatus = "unhealthy"
 )
 
 func newDockerClient() (*client.Client, error) {
@@ -98,8 +99,16 @@ type RunnerConfig struct {
 	Labels               map[string]string
 	LogInternally        bool
 	Platform             string
-	Callback             func(serviceName string, update TaskStatus)
+	Callbacks            []Callback
 }
+
+func (r *RunnerConfig) AddCallback(c Callback) {
+	if r.Callbacks == nil {
+		r.Callbacks = append(r.Callbacks, c)
+	}
+}
+
+type Callback func(serviceName string, update TaskStatus)
 
 func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	client, err := newDockerClient()
@@ -145,8 +154,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		cfg.NetworkName = defaultNetworkName
 	}
 
-	if cfg.Callback == nil {
-		cfg.Callback = func(serviceName string, update TaskStatus) {} // noop
+	if cfg.Callbacks == nil {
+		cfg.Callbacks = []Callback{func(serviceName string, update TaskStatus) {}} // noop
 	}
 
 	d := &LocalRunner{
@@ -206,11 +215,19 @@ func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) e
 	}
 }
 
+func (d *LocalRunner) emitCallback(name string, status TaskStatus) {
+	for _, callback := range d.config.Callbacks {
+		callback(name, status)
+	}
+}
+
 func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	d.tasksMtx.Lock()
 	defer d.tasksMtx.Unlock()
 	if status == TaskStatusHealthy {
 		d.tasks[name].ready = true
+	} else if status == TaskStatusUnhealty {
+		d.tasks[name].ready = false
 	} else {
 		d.tasks[name].status = status
 	}
@@ -219,29 +236,30 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 		d.exitErr <- fmt.Errorf("container %s failed", name)
 	}
 
-	d.config.Callback(name, status)
+	d.emitCallback(name, status)
 }
 
 func (d *LocalRunner) ExitErr() <-chan error {
 	return d.exitErr
 }
 
-func (d *LocalRunner) Stop() error {
+func (d *LocalRunner) Stop(keepResources bool) error {
 	// stop all the handles
 	for _, handle := range d.handles {
 		handle.Process.Kill()
 	}
-	return StopSession(d.manifest.ID)
+	return StopSession(d.manifest.ID, keepResources)
 }
 
-func StopSession(id string) error {
+func StopSession(id string, keepResources bool) error {
 	// stop the docker-compose
-	cmd := exec.CommandContext(
-		context.Background(), "docker", "compose",
-		"-p", id,
-		"down",
-		"-v", // removes containers and volumes
-	)
+	args := []string{"compose", "-p", id}
+	if keepResources {
+		args = append(args, "stop")
+	} else {
+		args = append(args, "down", "-v") // removes containers and volumes
+	}
+	cmd := exec.CommandContext(context.Background(), "docker", args...)
 	var outBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &outBuf
@@ -273,6 +291,26 @@ func GetLocalSessions() ([]string, error) {
 	// Return sorted unique occurences
 	slices.Sort(sessions)
 	return slices.Compact(sessions), nil
+}
+
+func GetSessionServices(session string) ([]string, error) {
+	client, err := newDockerClient()
+	if err != nil {
+		return nil, err
+	}
+	containers, err := client.ContainerList(context.Background(), container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var serviceNames []string
+	for _, container := range containers {
+		if container.Labels["playground"] == "true" && container.Labels["playground.session"] == session {
+			serviceNames = append(serviceNames, container.Labels["com.docker.compose.service"])
+		}
+	}
+	return serviceNames, nil
 }
 
 // reservePort finds the first available port from the startPort and reserves it
@@ -783,6 +821,9 @@ func (d *LocalRunner) trackContainerStatusAndLogs() {
 			case events.ActionHealthStatusHealthy:
 				d.updateTaskStatus(name, TaskStatusHealthy)
 				log.Info("container is healthy", "name", name)
+
+			case events.ActionHealthStatusUnhealthy:
+				d.updateTaskStatus(name, TaskStatusUnhealty)
 			}
 
 		case err := <-errCh:
@@ -865,7 +906,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	}
 
 	// Image not found locally, pull it
-	d.config.Callback(imageName, TaskStatusPulling)
+	d.emitCallback(imageName, TaskStatusPulling)
 
 	slog.Info("pulling image", "image", imageName)
 	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
@@ -880,7 +921,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 		return fmt.Errorf("failed to read image pull output %s: %w", imageName, err)
 	}
 
-	d.config.Callback(imageName, TaskStatusPulled)
+	d.emitCallback(imageName, TaskStatusPulled)
 	return nil
 }
 
@@ -957,4 +998,115 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	}
 
 	return g.Wait()
+}
+
+type HealthCheckResponse struct {
+	Output   string
+	ExitCode int
+}
+
+func ExecuteHealthCheckManually(serviceName string) (*HealthCheckResponse, error) {
+	ctx := context.Background()
+
+	cli, err := newDockerClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
+	}
+	defer cli.Close()
+
+	containerID, err := findServiceByName(cli, ctx, serviceName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the container to find the health check command
+	containerJSON, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	if containerJSON.Config.Healthcheck == nil {
+		return nil, fmt.Errorf("container has no health check configured")
+	}
+
+	healthCheckCmd := containerJSON.Config.Healthcheck.Test
+
+	// Health check commands are usually in format: ["CMD-SHELL", "actual command"]
+	// or ["CMD", "arg1", "arg2", ...]
+	var execCmd []string
+
+	if len(healthCheckCmd) == 0 {
+		return nil, fmt.Errorf("health check command is empty")
+	}
+
+	if healthCheckCmd[0] == "CMD-SHELL" {
+		// Use sh -c to execute the shell command
+		if len(healthCheckCmd) > 1 {
+			execCmd = []string{"sh", "-c", healthCheckCmd[1]}
+		} else {
+			return nil, fmt.Errorf("CMD-SHELL specified but no command provided")
+		}
+	} else if healthCheckCmd[0] == "CMD" {
+		// Direct command execution
+		execCmd = healthCheckCmd[1:]
+	} else {
+		// Assume it's a direct command
+		execCmd = healthCheckCmd
+	}
+
+	// Create exec instance
+	execConfig := container.ExecOptions{
+		Cmd:          execCmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execID, err := cli.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	// Start the exec and get output
+	resp, err := cli.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach to exec: %w", err)
+	}
+	defer resp.Close()
+
+	// Read all output
+	var outBuf bytes.Buffer
+	_, err = io.Copy(&outBuf, resp.Reader)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("error reading output: %w", err)
+	}
+
+	// Get exit code
+	inspectResp, err := cli.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect exec: %w", err)
+	}
+
+	healthCheckResp := &HealthCheckResponse{
+		Output:   strings.TrimSpace(outBuf.String()),
+		ExitCode: inspectResp.ExitCode,
+	}
+	return healthCheckResp, nil
+}
+
+func findServiceByName(client *client.Client, ctx context.Context, serviceName string) (string, error) {
+	containers, err := client.ContainerList(ctx, container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("error getting container list: %w", err)
+	}
+
+	for _, container := range containers {
+		if container.Labels["playground"] == "true" &&
+			container.Labels["com.docker.compose.service"] == serviceName {
+			return container.ID, nil
+		}
+	}
+
+	return "", nil
 }

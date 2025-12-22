@@ -37,8 +37,8 @@ func TestRunnerPullImages(t *testing.T) {
 	}
 
 	cfg := &RunnerConfig{
-		Manifest: manifest,
-		Callback: callback,
+		Manifest:  manifest,
+		Callbacks: []Callback{callback},
 	}
 	runner, err := NewLocalRunner(cfg)
 	require.NoError(t, err)

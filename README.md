@@ -146,6 +146,8 @@ The following addresses are pre-funded on L1 and to L2 (if present), all with a 
 
 ```bash
 $ builder-playground list
+session: major-hornet
+--------
 mev-boost-relay
 beacon
 el
@@ -153,12 +155,18 @@ validator
 $ builder-playground logs validator
 ```
 
+With single session running, the commands are straightforward.
+
+With multiple sessions running, it's easy to navigate:
+- listing: `list` -> pick session `major-hornet` -> `list major-hornet` -> see service list
+- viewing logs: see service `validator` with `logs major-hornet validator`
+
 ## Inspect
 
 Builder-playground supports inspecting the connection of a service to a specific port.
 
 ```bash
-$ builder-playground inspect <service> <port>
+$ builder-playground debug inspect <service> <port>
 ```
 
 Example:
@@ -170,12 +178,24 @@ $ builder-playground inspect op-geth authrpc
 
 This command starts a `tcpflow` container in the same network interface as the service and captures the traffic to the specified port.
 
-## Clean
+## Stop
 
-Remove local playground sessions:
+Stop local playground sessions and keep all Docker resources (containers/volumes/networks):
 
 ```bash
-$ builder-playground stop all
+$ builder-playground stop major-hornet # stop with session name
+stop: major-hornet
+$ builder-playground stop all # or stop all
+stop: honest-opossum
+stop: sacred-giraffe
+```
+
+## Clean
+
+Stop (if not stopped) and clean a session:
+
+```bash
+$ builder-playground stop all # or stop all
 ```
 
 You can also stop specific session:
@@ -186,8 +206,8 @@ honest-opossum
 major-hornet
 sacred-giraffe
 $ builder-playground stop honest-opossum sacred-giraffe
-Cleaning session: honest-opossum
-Cleaning session: sacred-giraffe
+clean: honest-opossum
+clean: sacred-giraffe
 ```
 
 ## Telemetry

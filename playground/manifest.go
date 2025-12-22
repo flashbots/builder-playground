@@ -1,10 +1,8 @@
 package playground
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -268,35 +266,6 @@ type NodeRef struct {
 	User      string `json:"user"`
 }
 
-// serviceLogs is a service to access the logs of the running service
-type serviceLogs struct {
-	logRef *os.File
-	path   string
-}
-
-func (s *serviceLogs) readLogs() (string, error) {
-	content, err := os.ReadFile(s.path)
-	if err != nil {
-		return "", fmt.Errorf("failed to read logs: %w", err)
-	}
-	return string(content), nil
-}
-
-func (s *serviceLogs) FindLog(pattern string) (string, error) {
-	logs, err := s.readLogs()
-	if err != nil {
-		return "", fmt.Errorf("failed to read logs: %w", err)
-	}
-
-	lines := strings.Split(logs, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, pattern) {
-			return line, nil
-		}
-	}
-	return "", fmt.Errorf("log pattern %s not found", pattern)
-}
-
 type Service struct {
 	Name string   `json:"name"`
 	Args []string `json:"args"`
@@ -321,15 +290,8 @@ type Service struct {
 	Entrypoint string `json:"entrypoint,omitempty"`
 	HostPath   string `json:"host_path,omitempty"`
 
-	release    *release
-	watchdogFn watchdogFn
-	readyFn    readyFn
+	release *release
 }
-
-type (
-	watchdogFn func(out io.Writer, service *Service, ctx context.Context) error
-	readyFn    func(ctx context.Context, service *Service) error
-)
 
 type DependsOnCondition string
 
@@ -436,16 +398,6 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 
 func (s *Service) WithRelease(rel *release) *Service {
 	s.release = rel
-	return s
-}
-
-func (s *Service) WithWatchdog(watchdogFn watchdogFn) *Service {
-	s.watchdogFn = watchdogFn
-	return s
-}
-
-func (s *Service) WithReadyFn(readyFn readyFn) *Service {
-	s.readyFn = readyFn
 	return s
 }
 
@@ -620,11 +572,6 @@ func (s *Manifest) GenerateDotGraph() string {
 
 	b.WriteString("}\n")
 	return b.String()
-}
-
-func saveDotGraph(svcManager *Manifest, out *output) error {
-	dotGraph := svcManager.GenerateDotGraph()
-	return out.WriteFile("services.dot", dotGraph)
 }
 
 func (m *Manifest) SaveJson() error {

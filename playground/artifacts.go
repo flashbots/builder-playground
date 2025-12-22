@@ -15,12 +15,12 @@ import (
 	"maps"
 	"math/big"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/OffchainLabs/prysm/v6/config/params"
@@ -33,6 +33,7 @@ import (
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/flashbots/builder-playground/utils"
 	"github.com/hashicorp/go-uuid"
+	"github.com/otiai10/copy"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
 )
@@ -189,6 +190,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		v = version.Deneb
 	}
 
+	log.Println("Generating keys...")
 	priv, pub, err := interop.DeterministicallyGenerateKeys(0, 100)
 	if err != nil {
 		return err
@@ -207,6 +209,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		return err
 	}
 
+	log.Println("Writing artifacts...")
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
@@ -216,12 +219,16 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		"testnet/deploy_block.txt":            "0",
 		"testnet/deposit_contract_block.txt":  "0",
 		"testnet/genesis_validators_root.txt": hex.EncodeToString(state.GenesisValidatorsRoot()),
-		"data_validator/":                     &lighthouseKeystore{privKeys: priv},
-		"scripts/query.sh":                    queryReadyCheck,
+		"data_validator/": &lighthouseKeystore{
+			privKeys: priv,
+			cacheDir: path.Join(out.homeDir, "cache", "data_validator"),
+		},
+		"scripts/query.sh": queryReadyCheck,
 	})
 	if err != nil {
 		return err
 	}
+	log.Println("Done writing artifacts.")
 
 	{
 		// We have to start slightly ahead of L1 genesis time
@@ -489,6 +496,10 @@ func (o *output) WriteBatch(data map[string]interface{}) error {
 	return nil
 }
 
+func (o *output) WriteDir(src string) error {
+	return copy.Copy(src, o.dst)
+}
+
 func (o *output) LogOutput(name string) (*os.File, error) {
 	// lock this because some services might be trying to access this in parallel
 	o.lock.Lock()
@@ -559,9 +570,27 @@ var secret = "secret"
 
 type lighthouseKeystore struct {
 	privKeys []common.SecretKey
+	cacheDir string
+}
+
+func isExistingDir(path string) bool {
+	info, err := os.Stat(path)
+	if err == nil {
+		return info.IsDir()
+	}
+	return false
 }
 
 func (l *lighthouseKeystore) Encode(o *output) error {
+	// If the cache dir exists, just copy to destination.
+	if isExistingDir(l.cacheDir) {
+		return o.WriteDir(l.cacheDir)
+	}
+
+	// If the cache dir doesn't exist, set dst as the cache dir to write the keys there first.
+	oldDst := o.dst
+	o.dst = l.cacheDir
+
 	for _, key := range l.privKeys {
 		encryptor := keystorev4.New()
 		cryptoFields, err := encryptor.Encrypt(key.Marshal(), secret)
@@ -592,7 +621,9 @@ func (l *lighthouseKeystore) Encode(o *output) error {
 		}
 	}
 
-	return nil
+	// Restore the dst and write from the cache.
+	o.dst = oldDst
+	return o.WriteDir(l.cacheDir)
 }
 
 type encObject interface {
@@ -663,20 +694,6 @@ func isByteArray(t reflect.Type) bool {
 
 func isByteSlice(t reflect.Type) bool {
 	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
-}
-
-func applyTemplate2(templateStr []byte, input interface{}) ([]byte, error) {
-	tpl, err := template.New("").Parse(string(templateStr))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var out strings.Builder
-	if err := tpl.Execute(&out, input); err != nil {
-		return nil, fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	return []byte(out.String()), nil
 }
 
 type EnodeAddr struct {
@@ -753,9 +770,7 @@ func readOptimismL1Allocs() (types.GenesisAlloc, error) {
 	return alloc, nil
 }
 
-var (
-	prefundedBalance, _ = new(big.Int).SetString("10000000000000000000000", 16)
-)
+var prefundedBalance, _ = new(big.Int).SetString("10000000000000000000000", 16)
 
 func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []string) error {
 	for _, privStr := range privKeys {
