@@ -825,9 +825,9 @@ type BuilderHub struct{}
 
 func (b *BuilderHub) Apply(manifest *Manifest) {
 	// Database service
-	manifest.NewService("db").
+	manifest.NewService("builder-hub-db").
 		WithImage("docker.io/flashbots/builder-hub-db").
-		WithTag("latest").
+		WithTag("0.3.1-alpha1").
 		WithPort("postgres", 5432).
 		WithEnv("PGUSER", "postgres").
 		WithEnv("POSTGRES_DB", "postgres").
@@ -841,22 +841,23 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			StartPeriod: 2 * time.Second,
 		})
 
-	// Web service
-	manifest.NewService("web").
+	// API service
+	manifest.NewService("builder-hub-api").
 		WithImage("docker.io/flashbots/builder-hub").
-		WithTag("latest").
-		DependsOnHealthy("db").
+		WithTag("0.3.1-alpha1").
+		DependsOnHealthy("builder-hub-db").
 		WithPort("http", 8080).
 		WithPort("admin", 8081).
 		WithPort("internal", 8082).
 		WithPort("metrics", 8090).
 		WithEnv("MOCK_SECRETS", "true").
-		WithEnv("POSTGRES_DSN", ConnectRaw("db", "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
+		WithEnv("POSTGRES_DSN", ConnectRaw("builder-hub-db", "postgres", "postgres", "postgres:postgres")+"/postgres?sslmode=disable").
 		WithEnv("LISTEN_ADDR", "0.0.0.0:"+`{{Port "http" 8080}}`).
 		WithEnv("ADMIN_ADDR", "0.0.0.0:"+`{{Port "admin" 8081}}`).
 		WithEnv("INTERNAL_ADDR", "0.0.0.0:"+`{{Port "internal" 8082}}`).
 		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
 		WithEnv("DISABLE_ADMIN_AUTH", "1").
+		WithEnv("ALLOW_EMPTY_MEASUREMENTS", "1").
 		WithReady(ReadyCheck{
 			QueryURL:    "http://localhost:8080",
 			Interval:    1 * time.Second,
@@ -867,12 +868,12 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 
 	// Proxy service
-	manifest.NewService("proxy").
+	manifest.NewService("builder-hub-proxy").
 		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
-		WithTag("latest").
+		WithTag("0.3.1-alpha1").
 		WithPort("http", 8888).
-		WithEnv("TARGET", Connect("web", "http")).
-		DependsOnHealthy("web")
+		WithEnv("TARGET", Connect("builder-hub-api", "http")).
+		DependsOnHealthy("builder-hub-api")
 }
 
 func UseHealthmon(m *Manifest, s *Service) {

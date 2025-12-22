@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/OffchainLabs/prysm/v6/config/params"
@@ -31,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/flashbots/builder-playground/utils"
 	"github.com/hashicorp/go-uuid"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
@@ -68,6 +68,7 @@ type ArtifactsBuilder struct {
 	applyLatestL2Fork    *uint64
 	l1BlockTimeInSeconds uint64
 	opBlockTimeInSeconds uint64
+	prefundedAccounts    []string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -110,11 +111,39 @@ func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 	return b
 }
 
+func (b *ArtifactsBuilder) PrefundedAccounts(accounts []string) *ArtifactsBuilder {
+	b.prefundedAccounts = accounts
+	return b
+}
+
+var staticPrefundedAccounts = []string{
+	"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+	"0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+	"0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+	"0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
+	"0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+	"0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+	"0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
+	"0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
+	"0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
+	"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+}
+
+func (b *ArtifactsBuilder) getPrefundedAccounts() []string {
+	if len(b.prefundedAccounts) > 0 {
+		return append(append([]string{}, staticPrefundedAccounts...), b.prefundedAccounts...)
+	}
+
+	return staticPrefundedAccounts
+}
+
 type Artifacts struct {
 	Out *output
 }
 
 func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
+	defer utils.StartTimer("artifacts.builder")()
+
 	homeDir, err := GetHomeDir()
 	if err != nil {
 		return nil, err
@@ -166,52 +195,17 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	gen.Config.DepositContractAddress = gethcommon.HexToAddress(config.DepositContractAddress)
 
 	// add pre-funded accounts
-	prefundedBalance, _ := new(big.Int).SetString("10000000000000000000000", 16)
-
-	for _, privStr := range prefundedAccounts {
-		priv, err := getPrivKey(privStr)
-		if err != nil {
-			return nil, err
-		}
-		addr := ecrypto.PubkeyToAddress(priv.PublicKey)
-		gen.Alloc[addr] = types.Account{
-			Balance: prefundedBalance,
-			Nonce:   1,
-		}
+	if err := appendPrefundedAccountsToAlloc(&gen.Alloc, b.getPrefundedAccounts()); err != nil {
+		return nil, err
 	}
 
 	// Apply Optimism pre-state
 	{
-		var state struct {
-			L1StateDump string `json:"l1StateDump"`
-		}
-		if err := json.Unmarshal(opState, &state); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
-		}
-
-		decoded, err := base64.StdEncoding.DecodeString(state.L1StateDump)
+		opAllocs, err := readOptimismL1Allocs()
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode opState: %w", err)
+			return nil, err
 		}
-
-		// Create gzip reader from the base64 decoded data
-		gr, err := gzip.NewReader(bytes.NewReader(decoded))
-		if err != nil {
-			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
-		}
-		defer gr.Close()
-
-		// Read and decode the contents
-		contents, err := io.ReadAll(gr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read opState: %w", err)
-		}
-
-		var alloc types.GenesisAlloc
-		if err := json.Unmarshal(contents, &alloc); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
-		}
-		maps.Copy(gen.Alloc, alloc)
+		maps.Copy(gen.Alloc, opAllocs)
 	}
 
 	block := gen.ToBlock()
@@ -224,6 +218,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		v = version.Deneb
 	}
 
+	log.Println("Generating keys...")
 	priv, pub, err := interop.DeterministicallyGenerateKeys(0, 100)
 	if err != nil {
 		return nil, err
@@ -242,6 +237,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 		return nil, err
 	}
 
+	log.Println("Writing artifacts...")
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
@@ -257,6 +253,7 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Println("Done writing artifacts.")
 
 	{
 		// We have to start slightly ahead of L1 genesis time
@@ -276,30 +273,22 @@ func (b *ArtifactsBuilder) Build() (*Artifacts, error) {
 			}
 		}
 
+		// Update the allocs to include the same prefunded accounts as the L1 genesis.
+		allocs := types.GenesisAlloc{}
+		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
+			return nil, err
+		}
+
 		// override l2 genesis, make the timestamp start 2 seconds after the L1 genesis
 		input := map[string]interface{}{
 			"timestamp": hexutil.Uint64(opTimestamp).String(),
+			"allocs":    allocs,
 		}
 		if forkTime != nil {
 			// We need to enable prague on the EL to enable the engine v4 calls
 			input["config"] = map[string]interface{}{
 				"pragueTime":  *forkTime,
 				"isthmusTime": *forkTime,
-			}
-		}
-
-		// Update the allocs to include the same prefunded accounts as the L1 genesis.
-		allocs := make(map[string]interface{})
-		input["alloc"] = allocs
-		for _, privStr := range prefundedAccounts {
-			priv, err := getPrivKey(privStr)
-			if err != nil {
-				return nil, err
-			}
-			addr := ecrypto.PubkeyToAddress(priv.PublicKey)
-			allocs[addr.String()] = map[string]interface{}{
-				"balance": "0x10000000000000000000000",
-				"nonce":   "0x1",
 			}
 		}
 
@@ -686,33 +675,6 @@ func isByteSlice(t reflect.Type) bool {
 	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
 }
 
-var prefundedAccounts = []string{
-	"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-	"0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-	"0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
-	"0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
-	"0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
-	"0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
-	"0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
-	"0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
-	"0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
-	"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
-}
-
-func applyTemplate2(templateStr []byte, input interface{}) ([]byte, error) {
-	tpl, err := template.New("").Parse(string(templateStr))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var out strings.Builder
-	if err := tpl.Execute(&out, input); err != nil {
-		return nil, fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	return []byte(out.String()), nil
-}
-
 type EnodeAddr struct {
 	PrivKey  *ecdsa.PrivateKey
 	Artifact string
@@ -751,4 +713,55 @@ func (o *output) GetEnodeAddr() *EnodeAddr {
 	}
 
 	return &EnodeAddr{PrivKey: privKey, Artifact: fileName}
+}
+
+func readOptimismL1Allocs() (types.GenesisAlloc, error) {
+	var state struct {
+		L1StateDump string `json:"l1StateDump"`
+	}
+	if err := json.Unmarshal(opState, &state); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(state.L1StateDump)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode opState: %w", err)
+	}
+
+	// Create gzip reader from the base64 decoded data
+	gr, err := gzip.NewReader(bytes.NewReader(decoded))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gr.Close()
+
+	// Read and decode the contents
+	contents, err := io.ReadAll(gr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read opState: %w", err)
+	}
+
+	var alloc types.GenesisAlloc
+	if err := json.Unmarshal(contents, &alloc); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
+	}
+
+	return alloc, nil
+}
+
+var prefundedBalance, _ = new(big.Int).SetString("10000000000000000000000", 16)
+
+func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []string) error {
+	for _, privStr := range privKeys {
+		priv, err := getPrivKey(privStr)
+		if err != nil {
+			return err
+		}
+		addr := ecrypto.PubkeyToAddress(priv.PublicKey)
+		(*allocs)[addr] = types.Account{
+			Balance: prefundedBalance,
+			Nonce:   1,
+		}
+	}
+	return nil
 }

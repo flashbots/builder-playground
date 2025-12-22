@@ -26,6 +26,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/flashbots/builder-playground/utils"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -242,22 +243,23 @@ func (d *LocalRunner) ExitErr() <-chan error {
 	return d.exitErr
 }
 
-func (d *LocalRunner) Stop() error {
+func (d *LocalRunner) Stop(keepResources bool) error {
 	// stop all the handles
 	for _, handle := range d.handles {
 		handle.Process.Kill()
 	}
-	return StopSession(d.manifest.ID)
+	return StopSession(d.manifest.ID, keepResources)
 }
 
-func StopSession(id string) error {
+func StopSession(id string, keepResources bool) error {
 	// stop the docker-compose
-	cmd := exec.CommandContext(
-		context.Background(), "docker", "compose",
-		"-p", id,
-		"down",
-		"-v", // removes containers and volumes
-	)
+	args := []string{"compose", "-p", id}
+	if keepResources {
+		args = append(args, "stop")
+	} else {
+		args = append(args, "down", "-v") // removes containers and volumes
+	}
+	cmd := exec.CommandContext(context.Background(), "docker", args...)
 	var outBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &outBuf
@@ -289,6 +291,26 @@ func GetLocalSessions() ([]string, error) {
 	// Return sorted unique occurences
 	slices.Sort(sessions)
 	return slices.Compact(sessions), nil
+}
+
+func GetSessionServices(session string) ([]string, error) {
+	client, err := newDockerClient()
+	if err != nil {
+		return nil, err
+	}
+	containers, err := client.ContainerList(context.Background(), container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var serviceNames []string
+	for _, container := range containers {
+		if container.Labels["playground"] == "true" && container.Labels["playground.session"] == session {
+			serviceNames = append(serviceNames, container.Labels["com.docker.compose.service"])
+		}
+	}
+	return serviceNames, nil
 }
 
 // reservePort finds the first available port from the startPort and reserves it
@@ -904,6 +926,8 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 }
 
 func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
+	defer utils.StartTimer("docker.pull-available-images")()
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, svc := range d.manifest.Services {
@@ -940,6 +964,8 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	if err := d.pullNotAvailableImages(ctx); err != nil {
 		return err
 	}
+
+	defer utils.StartTimer("docker.up")()
 
 	// First start the services that are running in docker-compose
 	cmd := exec.CommandContext(

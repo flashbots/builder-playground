@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/flashbots/builder-playground/utils"
 	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/spf13/cobra"
 )
@@ -17,24 +18,26 @@ import (
 var version = "dev"
 
 var (
-	outputFlag       string
-	genesisDelayFlag uint64
-	withOverrides    []string
-	watchdog         bool
-	dryRun           bool
-	interactive      bool
-	timeout          time.Duration
-	logLevelFlag     string
-	bindExternal     bool
-	withPrometheus   bool
-	networkName      string
-	labels           playground.MapStringFlag
-	disableLogs      bool
-	platform         string
-	contenderEnabled bool
-	contenderArgs    []string
-	contenderTarget  string
-	detached         bool
+	keepFlag          bool
+	outputFlag        string
+	genesisDelayFlag  uint64
+	withOverrides     []string
+	watchdog          bool
+	dryRun            bool
+	interactive       bool
+	timeout           time.Duration
+	logLevelFlag      string
+	bindExternal      bool
+	withPrometheus    bool
+	networkName       string
+	labels            playground.MapStringFlag
+	disableLogs       bool
+	platform          string
+	contenderEnabled  bool
+	contenderArgs     []string
+	contenderTarget   string
+	detached          bool
+	prefundedAccounts []string
 )
 
 var rootCmd = &cobra.Command{
@@ -42,9 +45,6 @@ var rootCmd = &cobra.Command{
 	Short:   "",
 	Long:    ``,
 	Version: version,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return nil
-	},
 }
 
 var startCmd = &cobra.Command{
@@ -62,11 +62,31 @@ var startCmd = &cobra.Command{
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop a playground session",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Short: "Stop a playground session or all sessions",
+	RunE:  shutDownCmdFunc("stop"),
+}
+
+var cleanCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "Clean up a playground session or all sessions",
+	RunE:  shutDownCmdFunc("clean"),
+}
+
+func shutDownCmdFunc(cmdName string) func(cmd *cobra.Command, args []string) error {
+	var keepResources bool
+	switch cmdName {
+	case "stop":
+		keepResources = true
+
+	case "clean":
+
+	default:
+		panic("setting up shut down func for unknown cmd: " + cmdName)
+	}
+	return func(cmd *cobra.Command, args []string) error {
 		sessions := args
 		if len(sessions) == 0 {
-			return fmt.Errorf("please specify at least one session name or 'all' to stop all sessions")
+			return fmt.Errorf("please specify at least one session name or 'all' to %s all sessions", cmdName)
 		}
 		if len(sessions) == 1 && sessions[0] == "all" {
 			var err error
@@ -76,13 +96,13 @@ var stopCmd = &cobra.Command{
 			}
 		}
 		for _, session := range sessions {
-			if err := playground.StopSession(session); err != nil {
+			fmt.Printf("%s: %s\n", cmdName, session)
+			if err := playground.StopSession(session, keepResources); err != nil {
 				return err
 			}
-			fmt.Println("Stopping session:", session)
 		}
 		return nil
-	},
+	}
 }
 
 var inspectCmd = &cobra.Command{
@@ -130,27 +150,93 @@ var logsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Show logs for a service",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// one argument, the name of the service
-		if len(args) != 1 {
-			return fmt.Errorf("please specify a service name")
-		}
-		serviceName := args[0]
-
 		ctx := mainctx.Get()
-		cmd.SilenceUsage = true
-		if err := playground.Logs(ctx, serviceName); err != nil && !strings.Contains(err.Error(), "signal") {
-			return fmt.Errorf("failed to show logs: %w", err)
+
+		switch len(args) {
+		case 1:
+			sessions, err := playground.GetLocalSessions()
+			if err != nil {
+				return err
+			}
+			if len(sessions) > 1 {
+				cmd.SilenceUsage = true
+				fmt.Println("multiple sessions found: please use 'list' to see all and provide like 'logs <session-name> <service-name>'")
+				return fmt.Errorf("invalid amount of args")
+			}
+			if len(sessions) == 1 {
+				if err := playground.Logs(ctx, "", args[0]); err != nil && !strings.Contains(err.Error(), "signal") {
+					return fmt.Errorf("failed to show logs: %w", err)
+				}
+			}
+			if err := playground.Logs(ctx, "", args[0]); err != nil && !strings.Contains(err.Error(), "signal") {
+				return fmt.Errorf("failed to show logs: %w", err)
+			}
+
+		case 2:
+			if err := playground.Logs(ctx, args[0], args[1]); err != nil && !strings.Contains(err.Error(), "signal") {
+				return fmt.Errorf("failed to show logs: %w", err)
+			}
+
+		default:
+			cmd.SilenceUsage = true
+			fmt.Println("either specify '<service-name>' or '<session-name> <service-name>'")
+			fmt.Println("if single session is running: 'builder-playground logs beacon'")
+			fmt.Println("with multiple sessions: 'builder-playground logs major-hornet beacon'")
+			return fmt.Errorf("invalid amount of args")
 		}
+
 		return nil
 	},
 }
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all running services",
+	Short: "List all sessions and running services",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := mainctx.Get()
-		return playground.List(ctx)
+		sessions, err := playground.GetLocalSessions()
+		if err != nil {
+			return err
+		}
+
+		// If running single session, just list the services of that without expecting a session name.
+		if len(sessions) == 1 {
+			services, err := playground.GetSessionServices(sessions[0])
+			if err != nil {
+				return err
+			}
+			fmt.Println("session: " + sessions[0])
+			fmt.Println("--------")
+			for _, service := range services {
+				fmt.Println(service)
+			}
+			return nil
+		}
+
+		switch len(args) {
+		case 0:
+			fmt.Println("sessions:")
+			fmt.Println("---------")
+			for _, session := range sessions {
+				fmt.Println(session)
+			}
+
+		case 1:
+			services, err := playground.GetSessionServices(args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Println("session: " + args[0])
+			fmt.Println("--------")
+			for _, service := range services {
+				fmt.Println(service)
+			}
+
+		default:
+			cmd.SilenceUsage = true // silence usage this time so that the below message is visible
+			fmt.Println("please use 'list' to see sessions and 'list <session>' to see containers")
+			return fmt.Errorf("invalid amount of args")
+		}
+		return nil
 	},
 }
 
@@ -182,6 +268,7 @@ func main() {
 		// add the flags from the recipe
 		recipeCmd.Flags().AddFlagSet(recipe.Flags())
 		// add the common flags
+		recipeCmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
 		recipeCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
 		recipeCmd.Flags().BoolVar(&watchdog, "watchdog", false, "enable watchdog")
 		recipeCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
@@ -201,6 +288,7 @@ func main() {
 		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
 		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present)")
 
 		startCmd.AddCommand(recipeCmd)
 	}
@@ -230,6 +318,11 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
 
+	if logLevel == playground.LevelTrace {
+		// TODO: We can remove this once we have a logger with log.Trace support
+		utils.TraceMode = true
+	}
+
 	log.Printf("Log level: %s\n", logLevel)
 
 	// parse the overrides
@@ -242,9 +335,11 @@ func runIt(recipe playground.Recipe) error {
 		overrides[parts[0]] = parts[1]
 	}
 
+	log.Println("Building artifacts...")
 	builder := recipe.Artifacts()
 	builder.OutputDir(outputFlag)
 	builder.GenesisDelay(genesisDelayFlag)
+	builder.PrefundedAccounts(prefundedAccounts)
 	artifacts, err := builder.Build()
 	if err != nil {
 		return err
@@ -265,6 +360,7 @@ func runIt(recipe playground.Recipe) error {
 	recipe.Apply(svcManager)
 
 	// generate the dot graph
+	log.Println("Generating dot graph...")
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := artifacts.Out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
@@ -322,8 +418,9 @@ func runIt(recipe playground.Recipe) error {
 
 	ctx := mainctx.Get()
 
+	log.Println("Starting services...")
 	if err := dockerRunner.Run(ctx); err != nil {
-		dockerRunner.Stop()
+		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to run docker: %w", err)
 	}
 
@@ -349,11 +446,12 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	if err := dockerRunner.WaitForReady(ctx, 20*time.Second); err != nil {
-		dockerRunner.Stop()
+		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
 	fmt.Println("\nServices healthy... Ready to accept transactions")
+	fmt.Println("Session ID:", svcManager.ID)
 
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
@@ -395,7 +493,7 @@ func runIt(recipe playground.Recipe) error {
 		fmt.Println("Timeout reached")
 	}
 
-	if err := dockerRunner.Stop(); err != nil {
+	if err := dockerRunner.Stop(keepFlag); err != nil {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
 	return nil

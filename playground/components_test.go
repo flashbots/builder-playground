@@ -1,7 +1,9 @@
 package playground
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -63,7 +65,7 @@ func TestRecipeL1UseNativeReth(t *testing.T) {
 	})
 }
 
-func TestComponentBuilderHub(t *testing.T) {
+func TestRecipeBuilderHub(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
@@ -71,9 +73,52 @@ func TestComponentBuilderHub(t *testing.T) {
 
 	// TODO: Calling the port directly on the host machine will not work once we have multiple
 	// tests running in parallel
-	resp, err := http.Get("http://localhost:8080/api/l1-builder/v1/measurements")
+
+	// Set measurements from the admin API.
+	buf := bytes.NewBuffer([]byte(`
+		{
+			"measurement_id": "test1",
+			"attestation_type": "test",
+			"measurements": {}
+		}
+	`))
+	resp, err := http.Post("http://localhost:8081/api/admin/v1/measurements", "application/json", buf)
 	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	buf = bytes.NewBuffer([]byte(`
+		{
+			"enabled": true
+		}
+	`))
+	resp, err = http.Post("http://localhost:8081/api/admin/v1/measurements/activation/test1", "application/json", buf)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	type measurementList []struct {
+		MeasurementID string `json:"measurement_id"`
+	}
+
+	// Verify from all APIs that measurements are in place.
+	ports := []string{"8080", "8082", "8888"}
+	for _, port := range ports {
+		var m measurementList
+		resp, err = http.Get("http://localhost:" + port + "/api/l1-builder/v1/measurements")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&m))
+		require.Equal(t, 1, len(m))
+		require.Equal(t, "test1", m[0].MeasurementID)
+	}
+
 	require.Equal(t, resp.StatusCode, http.StatusOK)
+}
+
+func TestRecipeBuilderNet(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&BuilderNetRecipe{}, []string{})
 }
 
 type testFramework struct {
@@ -82,6 +127,9 @@ type testFramework struct {
 }
 
 func newTestFramework(t *testing.T) *testFramework {
+	if strings.ToLower(os.Getenv("INTEGRATION_TESTS")) != "true" {
+		t.Skip("integration tests not enabled")
+	}
 	return &testFramework{t: t}
 }
 
@@ -150,7 +198,7 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 
 func (tt *testFramework) Close() {
 	if tt.runner != nil {
-		if err := tt.runner.Stop(); err != nil {
+		if err := tt.runner.Stop(false); err != nil {
 			tt.t.Log(err)
 		}
 	}

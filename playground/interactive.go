@@ -70,43 +70,40 @@ func (i *InteractiveDisplay) printStatus() {
 		return sp
 	}
 
-	for {
-		select {
-		case <-i.taskUpdateCh:
-			// Clear the previous lines and move cursor up
-			if lineOffset > 0 {
-				fmt.Printf("\033[%dA", lineOffset)
-				fmt.Print("\033[J")
+	for range i.taskUpdateCh {
+		// Clear the previous lines and move cursor up
+		if lineOffset > 0 {
+			fmt.Printf("\033[%dA", lineOffset)
+			fmt.Print("\033[J")
+		}
+
+		lineOffset = 0
+		// Use ordered services instead of ranging over map
+		for _, name := range orderedServices {
+			status, ok := i.status.Load(name)
+			if !ok {
+				status = TaskStatusPending
 			}
 
-			lineOffset = 0
-			// Use ordered services instead of ranging over map
-			for _, name := range orderedServices {
-				status, ok := i.status.Load(name)
-				if !ok {
-					status = TaskStatusPending
-				}
-
-				var statusLine string
-				switch status {
-				case TaskStatusStarted, TaskStatusHealthy:
-					sp := tickSpinner(name)
-					statusLine = ui.style.Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("%s [%s] Running", sp.View(), name))
-				case TaskStatusDie:
-					statusLine = ui.style.Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("✗ [%s] Failed", name))
-				case TaskStatusPulled, TaskStatusPending:
-					sp := tickSpinner(name)
-					statusLine = ui.style.Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pending", sp.View(), name))
-				case TaskStatusPulling:
-					sp := tickSpinner(name)
-					statusLine = ui.style.Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pulling", sp.View(), name))
-				default:
-					panic(fmt.Sprintf("BUG: status '%s' not handled", name))
-				}
-
-				fmt.Println(statusLine)
-				lineOffset++
+			var statusLine string
+			switch status {
+			case TaskStatusStarted, TaskStatusHealthy:
+				sp := tickSpinner(name)
+				statusLine = ui.style.Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("%s [%s] Running", sp.View(), name))
+			case TaskStatusDie:
+				statusLine = ui.style.Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("✗ [%s] Failed", name))
+			case TaskStatusPulled, TaskStatusPending:
+				sp := tickSpinner(name)
+				statusLine = ui.style.Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pending", sp.View(), name))
+			case TaskStatusPulling:
+				sp := tickSpinner(name)
+				statusLine = ui.style.Foreground(lipgloss.Color("3")).Render(fmt.Sprintf("%s [%s] Pulling", sp.View(), name))
+			default:
+				panic(fmt.Sprintf("BUG: status '%s' not handled", name))
 			}
+
+			fmt.Println(statusLine)
+			lineOffset++
 		}
 	}
 }
