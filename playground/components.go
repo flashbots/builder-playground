@@ -864,7 +864,6 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			Timeout:     30 * time.Second,
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
-			UseNC:       true, // because the endpoint returns 404
 		})
 
 	// Proxy service
