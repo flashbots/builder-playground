@@ -164,7 +164,7 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 		err := recipe.Flags().Parse(args)
 		require.NoError(t, err)
 
-		_, err = recipe.Artifacts().OutputDir(e2eTestDir).Build()
+		err = recipe.Artifacts().Build(o)
 		require.NoError(t, err)
 	}
 
