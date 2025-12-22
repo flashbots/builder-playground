@@ -66,3 +66,8 @@ ci-release:
 		-w /go/src/$(PACKAGE_NAME) \
 		ghcr.io/goreleaser/goreleaser-cross:v1.21.12 \
 		release --clean --auto-snapshot
+
+.PHONY: pregenerate-bls-keys
+pregenerate-bls-keys: ## Pregenerate BLS keys for testing
+	go run ./tools/pregenerate_bls_keys/main.go > utils/keys/fixtures/bls_keys.json
+	@echo "BLS keys pregenerated in ./test_data/bls_keys.json"
