@@ -64,12 +64,11 @@ var clConfigContent []byte
 var queryReadyCheck []byte
 
 type ArtifactsBuilder struct {
-	applyLatestL1Fork    bool
-	genesisDelay         uint64
-	applyLatestL2Fork    *uint64
-	l1BlockTimeInSeconds uint64
-	opBlockTimeInSeconds uint64
-	prefundedAccounts    []string
+	outputDir         string
+	applyLatestL1Fork bool
+	genesisDelay      uint64
+	applyLatestL2Fork *uint64
+	OpblockTime       uint64
 
 	// JSON files describing additional L2 predeploy accounts to inject into
 	// the L2 genesis alloc (e.g. EntryPoint, paymasters, or other system contracts).
@@ -108,6 +107,16 @@ func (b *ArtifactsBuilder) L1BlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
 	b.opBlockTimeInSeconds = blockTimeSeconds
 	return b
+// PredeployJSONFiles configures the builder with one or more JSON files
+// that each describe a single L2 predeploy account to inject into the
+// L2 genesis alloc.
+func (b *ArtifactsBuilder) PredeployJSONFiles(files []string) *ArtifactsBuilder {
+	b.predeployJSONFiles = files
+	return b
+}
+
+type Artifacts struct {
+	Out *output
 }
 
 // PredeployJSONFiles configures the builder with one or more JSON files
@@ -303,6 +312,28 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 				allocs[addr.String()] = account
 			}
 		}
+
+		// Inject any additional L2 predeploy accounts provided via JSON files.
+		for _, path := range b.predeployJSONFiles {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read L2 predeploy JSON %q: %w", path, err)
+			}
+
+			genesisAllocMap, err := loadPredeployAlloc(data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load L2 predeploy from %q: %w", path, err)
+			}
+
+			for addr, account := range genesisAllocMap {
+				if _, exists := allocs[addr.String()]; exists {
+					return nil, fmt.Errorf("L2 predeploy address %s already exists in allocs, cannot inject duplicate address", addr.String())
+				}
+
+				allocs[addr.String()] = account
+			}
+		}
+
 		newOpGenesis, err := overrideJSON(opGenesis, input)
 		if err != nil {
 			return err
@@ -354,6 +385,27 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	return nil
+}
+
+// PredeployAlloc is a generic JSON schema for describing a single L2
+// predeploy account to be injected into the L2 genesis alloc.
+
+// loadPredeployAlloc parses a JSON blob describing a single L2 predeploy
+// account and returns the address plus a genesis alloc entry.
+func loadPredeployAlloc(raw []byte) (types.GenesisAlloc, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("predeploy JSON is empty")
+	}
+
+	var genesisAllocMap types.GenesisAlloc
+	err := genesisAllocMap.UnmarshalJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal predeploy JSON: %w", err)
+	}
+
+	// Validation helpers (kept local; could also live in utils.go)
+
+	return genesisAllocMap, nil
 }
 
 // PredeployAlloc is a generic JSON schema for describing a single L2

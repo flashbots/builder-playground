@@ -39,6 +39,11 @@ type OpRecipe struct {
 	// whether to enable websocket proxy
 	enableWebsocketProxy bool
 
+	// JSON files describing L2 predeploy accounts to inject into L2 genesis
+	// (e.g. ERC-4337 EntryPoint, paymasters, or other system contracts).
+	// Each file should define a single account in a simple JSON format.
+	l2PredeployJSON []string
+  
 	// whether to enable chain-monitor
 	enableChainMonitor bool
 
@@ -66,6 +71,12 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.baseOverlay, "base-overlay", false, "Whether to use base implementation for flashblocks-rpc")
 	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
+	flags.StringArrayVar(
+		&o.l2PredeployJSON,
+		"predeploy-json",
+		nil,
+		"Path(s) to JSON file(s) describing L2 predeploy accounts injected into L2 genesis (e.g. EntryPoint)",
+	)
 	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
 
 	// L2 predeploys are configured via JSON files, which are injected into the L2
