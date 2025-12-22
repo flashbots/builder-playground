@@ -298,6 +298,7 @@ func main() {
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(cleanCmd)
 
 	rootCmd.AddCommand(stopCmd)
 	stopCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
