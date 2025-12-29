@@ -16,29 +16,17 @@ func main() {
 }
 
 func generateKeys() error {
-	priv, pub, err := interop.DeterministicallyGenerateKeys(0, 100)
+	priv, _, err := interop.DeterministicallyGenerateKeys(0, 100)
 	if err != nil {
 		return err
 	}
 
 	keysResult := []*keys.Key{}
 	for i := 0; i < len(priv); i++ {
-		store, err := keys.GenerateKeystore(priv[i], keys.DefaultSecret)
+		key, err := keys.NewKey(priv[i], keys.DefaultSecret)
 		if err != nil {
 			return err
 		}
-
-		valJSON, err := json.Marshal(store)
-		if err != nil {
-			return err
-		}
-
-		key := &keys.Key{
-			Priv:     priv[i],
-			Pub:      pub[i],
-			Keystore: []byte(valJSON),
-		}
-
 		keysResult = append(keysResult, key)
 	}
 

@@ -23,6 +23,25 @@ type Key struct {
 	Keystore []byte
 }
 
+func NewKey(priv bls.SecretKey, secret string) (*Key, error) {
+	store, err := GenerateKeystore(priv, secret)
+	if err != nil {
+		return nil, err
+	}
+
+	valJSON, err := json.Marshal(store)
+	if err != nil {
+		return nil, err
+	}
+
+	key := &Key{
+		Priv:     priv,
+		Pub:      priv.PublicKey(),
+		Keystore: []byte(valJSON),
+	}
+	return key, nil
+}
+
 func (k *Key) MarshalJSON() ([]byte, error) {
 	type keyJSON struct {
 		Priv     string `json:"priv"`
