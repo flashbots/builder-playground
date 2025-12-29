@@ -34,6 +34,7 @@ func TestKeystoreEncoding(t *testing.T) {
 func TestKeystoreBuiltin(t *testing.T) {
 	keys, err := GetPregeneratedBLSKeys()
 	require.NoError(t, err)
+	require.Len(t, keys, 100)
 
 	for _, key := range keys {
 		res, err := decodeKeystore(key, DefaultSecret)
