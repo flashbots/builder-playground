@@ -1,0 +1,204 @@
+package healthmon
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"os"
+	"sync/atomic"
+	"time"
+
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/flashbots/go-template/common"
+	"github.com/flashbots/mev-boost-relay/beaconclient"
+	mevRCommon "github.com/flashbots/mev-boost-relay/common"
+	"github.com/go-chi/httplog/v2"
+)
+
+var isHealthy atomic.Bool
+
+type Config struct {
+	Chain            string
+	URL              string
+	Addr             string
+	BlockTimeSeconds int
+}
+
+func Start(config *Config) {
+	log := common.SetupLogger(&common.LoggingOpts{
+		Version: common.Version,
+	})
+
+	updates := make(chan blockUpdate, 10)
+	log.Info("Started", "chain", config.Chain, "url", config.URL)
+
+	switch config.Chain {
+	case "beacon":
+		go monitorBeacon(log, context.Background(), config.URL, updates)
+	case "execution":
+		go monitorExecution(log, context.Background(), config.URL, updates)
+	default:
+		log.Error("Unknown chain", "chain", config.Chain)
+		os.Exit(1)
+	}
+
+	go monitor(log, config.BlockTimeSeconds, context.Background(), updates)
+
+	log.Info("Starting service server", "addr", config.Addr)
+
+	http.HandleFunc("/ready", statusHandler)
+	http.ListenAndServe(config.Addr, nil)
+}
+
+func statusHandler(w http.ResponseWriter, req *http.Request) {
+	if isHealthy.Load() {
+		io.WriteString(w, "OK")
+	} else {
+		w.WriteHeader(503)
+		io.WriteString(w, "NOT READY")
+	}
+}
+
+func setHealthy(healthy bool) {
+	isHealthy.Store(healthy)
+}
+
+type monitorState struct {
+	log              *httplog.Logger
+	firstBlockUpdate *blockUpdate
+	blockTimeSeconds int
+	blockTimer       *time.Timer
+}
+
+func newMonitorState(log *httplog.Logger, blockTimeSeconds int) *monitorState {
+	// this timer will start after the blocks are received and we can figure out the block time
+	blockTimer := time.NewTimer(0)
+	blockTimer.Stop()
+
+	return &monitorState{
+		log:              log,
+		firstBlockUpdate: nil,
+		blockTimeSeconds: blockTimeSeconds,
+		blockTimer:       blockTimer,
+	}
+}
+
+func (m *monitorState) handleUpdate(update blockUpdate) {
+	m.log.Info("Processing block update", "number", update.Number, "timestamp", update.Timestamp)
+
+	if m.firstBlockUpdate == nil {
+		m.firstBlockUpdate = &update
+	}
+
+	if m.blockTimeSeconds == 0 {
+		// if block time is not known, use the difference between the first and current block (execution)
+		if m.firstBlockUpdate != nil && update.Number > m.firstBlockUpdate.Number {
+			blocktimeSeconds := update.Timestamp.Sub(m.firstBlockUpdate.Timestamp)
+			log.Info("Calculated block time from timestamps", "block time seconds", blocktimeSeconds)
+			m.blockTimeSeconds = int(blocktimeSeconds.Seconds())
+		}
+	}
+
+	if m.blockTimeSeconds != 0 {
+		log.Info("Resetting block timer", "blockTimeSeconds", m.blockTimeSeconds)
+		m.blockTimer.Reset(time.Duration(m.blockTimeSeconds) * time.Second)
+	}
+}
+
+func monitor(log *httplog.Logger, blockTimeSeconds int, ctx context.Context, updates <-chan blockUpdate) {
+	state := newMonitorState(log, blockTimeSeconds)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case update := <-updates:
+			// receiving a block always means healthy since the node is producing blocks
+			// and the unhealthy state is set during the block timer timeout
+			setHealthy(true)
+
+			state.handleUpdate(update)
+
+		case <-state.blockTimer.C:
+			log.Warn("Block timer expired, setting unhealthy")
+			setHealthy(false)
+		}
+	}
+}
+
+type blockUpdate struct {
+	Number    uint64
+	Timestamp time.Time
+}
+
+func monitorBeacon(log *httplog.Logger, ctx context.Context, url string, updates chan<- blockUpdate) {
+	bLog := mevRCommon.LogSetup(false, "info")
+	beaconClient := beaconclient.NewProdBeaconInstance(bLog, url, url)
+
+	var lastSlot *uint64
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(500 * time.Millisecond):
+			sync, err := beaconClient.SyncStatus()
+			if err != nil {
+				log.Error("Failed to get beacon sync status", "err", err)
+				continue
+			}
+
+			if sync.IsSyncing {
+				log.Debug("Beacon node is syncing", "headSlot", sync.HeadSlot)
+				continue
+			}
+
+			if lastSlot == nil || *lastSlot < sync.HeadSlot {
+				lastSlot = &sync.HeadSlot
+				log.Info("New beacon block received", "slot", sync.HeadSlot)
+				updates <- blockUpdate{Number: sync.HeadSlot}
+			}
+		}
+	}
+}
+
+func monitorExecution(log *httplog.Logger, ctx context.Context, url string, updates chan<- blockUpdate) {
+	client, err := ethclient.Dial(url)
+	if err != nil {
+		log.Error("Failed to connect to execution client", "err", err)
+		os.Exit(1)
+	}
+
+	var lastBlock *uint64
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(500 * time.Millisecond):
+			sync, err := client.SyncProgress(ctx)
+			if err != nil {
+				log.Error("Failed to get execution sync progress", "err", err)
+				continue
+			}
+
+			if sync != nil && !sync.Done() {
+				log.Debug("Execution node is syncing", "currentBlock", sync.CurrentBlock, "highestBlock", sync.HighestBlock)
+				continue
+			}
+			block, err := client.BlockByNumber(ctx, nil)
+			if err != nil {
+				log.Error("Failed to get execution block number", "err", err)
+				continue
+			}
+			num := block.NumberU64()
+			if lastBlock == nil || num > *lastBlock {
+				lastBlock = &num
+				timestamp := time.Unix(int64(block.Time()), 0)
+
+				log.Info("New execution block received", "number", num)
+				updates <- blockUpdate{Number: num, Timestamp: timestamp}
+			}
+		}
+	}
+}

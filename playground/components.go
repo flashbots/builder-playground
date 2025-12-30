@@ -516,6 +516,8 @@ func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
 			StartPeriod: 1 * time.Second,
 		})
 
+	UseHealthmon(manifest, svc)
+
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
 			"--builder", Connect(l.MevBoostNode, "http"),
@@ -876,15 +878,26 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 }
 
 func UseHealthmon(m *Manifest, s *Service) {
+	var chain string
+
+	switch s.MustGetPort("http").Port {
+	case 8545:
+		chain = "execution"
+	case 3500:
+		chain = "beacon"
+	default:
+		panic("xx")
+	}
+
 	m.NewService(s.Name+"_healthmon").
-		WithImage("ghcr.io/flashbots/ethereum-healthmon").
-		WithTag("v0.0.1").
-		// TODO: Use this also for beacon node
-		WithArgs("--chain", "execution", "--url", Connect(s.Name, "http")).
+		WithImage("llocal").
+		WithTag("local").
+		WithEntrypoint("healthmon").
+		WithArgs("--chain", chain, "--url", Connect(s.Name, "http")).
 		WithReady(ReadyCheck{
 			Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
 			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
+			Timeout:     10 * time.Minute,
 			Retries:     20,
 			StartPeriod: 1 * time.Second,
 		})
