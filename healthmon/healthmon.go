@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/log"
+	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-template/common"
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	mevRCommon "github.com/flashbots/mev-boost-relay/common"
@@ -84,6 +84,8 @@ func newMonitorState(log *httplog.Logger, blockTimeSeconds int) *monitorState {
 	}
 }
 
+var wiggleRoomSeconds = 1
+
 func (m *monitorState) handleUpdate(update blockUpdate) {
 	m.log.Info("Processing block update", "number", update.Number, "timestamp", update.Timestamp)
 
@@ -92,17 +94,22 @@ func (m *monitorState) handleUpdate(update blockUpdate) {
 	}
 
 	if m.blockTimeSeconds == 0 {
-		// if block time is not known, use the difference between the first and current block (execution)
-		if m.firstBlockUpdate != nil && update.Number > m.firstBlockUpdate.Number {
+		// if block time is not known, either:
+		// - use the block time provided in the update (beacon)
+		// - use the difference between the first and current block (execution)
+		if update.BlockTime != 0 {
+			m.log.Info("Using block time from update", "block time seconds", update.BlockTime)
+			m.blockTimeSeconds = update.BlockTime
+		} else if m.firstBlockUpdate != nil && update.Number > m.firstBlockUpdate.Number {
 			blocktimeSeconds := update.Timestamp.Sub(m.firstBlockUpdate.Timestamp)
-			log.Info("Calculated block time from timestamps", "block time seconds", blocktimeSeconds)
+			m.log.Info("Calculated block time from timestamps", "block time seconds", blocktimeSeconds)
 			m.blockTimeSeconds = int(blocktimeSeconds.Seconds())
 		}
 	}
 
 	if m.blockTimeSeconds != 0 {
-		log.Info("Resetting block timer", "blockTimeSeconds", m.blockTimeSeconds)
-		m.blockTimer.Reset(time.Duration(m.blockTimeSeconds) * time.Second)
+		m.log.Info("Resetting block timer", "blockTimeSeconds", m.blockTimeSeconds)
+		m.blockTimer.Reset(time.Duration(m.blockTimeSeconds+wiggleRoomSeconds) * time.Second)
 	}
 }
 
@@ -130,6 +137,7 @@ func monitor(log *httplog.Logger, blockTimeSeconds int, ctx context.Context, upd
 type blockUpdate struct {
 	Number    uint64
 	Timestamp time.Time
+	BlockTime int
 }
 
 func monitorBeacon(log *httplog.Logger, ctx context.Context, url string, updates chan<- blockUpdate) {
@@ -137,6 +145,7 @@ func monitorBeacon(log *httplog.Logger, ctx context.Context, url string, updates
 	beaconClient := beaconclient.NewProdBeaconInstance(bLog, url, url)
 
 	var lastSlot *uint64
+	var blockTime int
 
 	for {
 		select {
@@ -154,10 +163,20 @@ func monitorBeacon(log *httplog.Logger, ctx context.Context, url string, updates
 				continue
 			}
 
+			if blockTime == 0 {
+				spec, err := mevboostrelay.GetSpec(url)
+				if err != nil {
+					log.Error("Failed to get beacon spec", "err", err)
+				} else {
+					blockTime = int(spec.SecondsPerSlot)
+					log.Info("Fetched beacon spec", "blockTime", blockTime)
+				}
+			}
+
 			if lastSlot == nil || *lastSlot < sync.HeadSlot {
 				lastSlot = &sync.HeadSlot
 				log.Info("New beacon block received", "slot", sync.HeadSlot)
-				updates <- blockUpdate{Number: sync.HeadSlot}
+				updates <- blockUpdate{Number: sync.HeadSlot, BlockTime: blockTime}
 			}
 		}
 	}

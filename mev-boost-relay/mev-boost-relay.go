@@ -89,7 +89,7 @@ func New(config *Config) (*MevBoostRelay, error) {
 	log.Info("Beacon client synced")
 
 	// get the spec and genesis info to compute the eth network details
-	spec, err := getSpec(config.BeaconClientAddr)
+	spec, err := GetSpec(config.BeaconClientAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get spec: %w", err)
 	}
@@ -443,7 +443,7 @@ type Spec struct {
 	FuluForkVersion                 string `json:"FULU_FORK_VERSION"`                  //nolint:tagliatelle
 }
 
-func getSpec(beaconURL string) (*Spec, error) {
+func GetSpec(beaconURL string) (*Spec, error) {
 	uri := fmt.Sprintf("%s/eth/v1/config/spec", beaconURL)
 
 	resp, err := http.Get(uri)

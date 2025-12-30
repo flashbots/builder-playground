@@ -9,6 +9,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestHealthmonMonitor_BlockTimeInUpdate(t *testing.T) {
+	// health monitor detects block time from difference between first and current block
+	m := newMonitorState(testLogger(), 0)
+
+	m.handleUpdate(blockUpdate{
+		Number:    1,
+		BlockTime: 2,
+	})
+
+	assert.Equal(t, m.blockTimeSeconds, 2)
+	waitToTrigger(t, m)
+}
+
 func TestHealthmonMonitor_BlockTimeDiff(t *testing.T) {
 	// health monitor detects block time from difference between first and current block
 	m := newMonitorState(testLogger(), 0)
