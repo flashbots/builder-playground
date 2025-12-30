@@ -13,7 +13,10 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-const useHostExecutionLabel = "use-host-execution"
+const (
+	useHostExecutionLabel   = "use-host-execution"
+	healthCheckSidecarLabel = "health-check-sidecar"
+)
 
 type Recipe interface {
 	Name() string
@@ -177,6 +180,30 @@ func (s *Manifest) GetService(name string) (*Service, bool) {
 // - downloads any local release artifacts for the services that require host execution
 func (s *Manifest) Validate() error {
 	for _, ss := range s.Services {
+		// override ready checks that use the QueryURL feature
+		if ss.ReadyCheck != nil && ss.ReadyCheck.QueryURL != "" {
+			// this is a sugar coat syntax for the components, if a component wants to perform
+			// a raw ready check on a url (this is, only validate it exists) we convert that into
+			// a sidecar container with curl installed that performs the check.
+			// Note that we have to remove the ready check from the main service.
+			sidecarName := ss.Name + "_readycheck"
+
+			readyCheck := *ss.ReadyCheck
+			ss.ReadyCheck = nil
+			ss.WithLabel(healthCheckSidecarLabel, sidecarName)
+
+			// the url supplied by the service will bind to localhost, we have to change it
+			// to point to the main service name so that the sidecar can reach it
+			readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", ss.Name)
+			readyCheck.Test = []string{"CMD", "curl", readyCheck.QueryURL}
+
+			s.NewService(sidecarName).
+				WithImage("alpine/curl").
+				WithTag("latest").
+				WithArgs("sleep", "infinity").
+				WithReady(readyCheck)
+		}
+
 		// validate node port references
 		for _, nodeRef := range ss.NodeRefs {
 			targetService, ok := s.GetService(nodeRef.Service)
@@ -197,8 +224,21 @@ func (s *Manifest) Validate() error {
 			}
 
 			if dep.Condition == DependsOnConditionHealthy {
-				// if we depedn on the service to be healthy, it must have a ready check
-				if service.ReadyCheck == nil {
+				// check if the service delegates its health check to a sidecar
+				if sidecarName, ok := service.Labels[healthCheckSidecarLabel]; ok {
+					sidecarService, ok := s.GetService(sidecarName)
+					if !ok {
+						return fmt.Errorf("service %s depends on service %s, but its health check sidecar %s is not defined", ss.Name, dep.Name, sidecarName)
+					}
+					if sidecarService.ReadyCheck == nil {
+						return fmt.Errorf("service %s depends on service %s, but its health check sidecar %s does not have a ready check", ss.Name, dep.Name, sidecarName)
+					}
+
+					// override the service to check the sidecar instead
+					dep.Name = sidecarName
+					continue
+				} else if service.ReadyCheck == nil {
+					// if we depends on the service to be healthy, it must have a ready check
 					return fmt.Errorf("service %s depends on service %s, but it does not have a ready check", ss.Name, dep.Name)
 				}
 			}
@@ -277,7 +317,7 @@ type Service struct {
 
 	ReadyCheck *ReadyCheck `json:"ready_check,omitempty"`
 
-	DependsOn []DependsOn `json:"depends_on,omitempty"`
+	DependsOn []*DependsOn `json:"depends_on,omitempty"`
 
 	Ports    []*Port    `json:"ports,omitempty"`
 	NodeRefs []*NodeRef `json:"node_refs,omitempty"`
@@ -449,16 +489,15 @@ type ReadyCheck struct {
 	StartPeriod time.Duration `json:"start_period"`
 	Timeout     time.Duration `json:"timeout"`
 	Retries     int           `json:"retries"`
-	UseNC       bool          `json:"use_nc"`
 }
 
 func (s *Service) DependsOnHealthy(name string) *Service {
-	s.DependsOn = append(s.DependsOn, DependsOn{Name: name, Condition: DependsOnConditionHealthy})
+	s.DependsOn = append(s.DependsOn, &DependsOn{Name: name, Condition: DependsOnConditionHealthy})
 	return s
 }
 
 func (s *Service) DependsOnRunning(name string) *Service {
-	s.DependsOn = append(s.DependsOn, DependsOn{Name: name, Condition: DependsOnConditionRunning})
+	s.DependsOn = append(s.DependsOn, &DependsOn{Name: name, Condition: DependsOnConditionRunning})
 	return s
 }
 

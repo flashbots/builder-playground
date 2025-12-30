@@ -58,9 +58,6 @@ var opState []byte
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
 
-//go:embed utils/query.sh
-var queryReadyCheck []byte
-
 type ArtifactsBuilder struct {
 	applyLatestL1Fork    bool
 	genesisDelay         uint64
@@ -227,7 +224,6 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		"testnet/deposit_contract_block.txt":  "0",
 		"testnet/genesis_validators_root.txt": hex.EncodeToString(state.GenesisValidatorsRoot()),
 		"data_validator/":                     &lighthouseKeystore{privKeys: keys},
-		"scripts/query.sh":                    queryReadyCheck,
 	})
 	if err != nil {
 		return err

@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"maps"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -199,6 +198,8 @@ func (d *LocalRunner) AreReady() bool {
 }
 
 func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) error {
+	defer utils.StartTimer("docker.wait-for-ready")()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -562,24 +563,12 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 	}
 
 	if s.ReadyCheck != nil {
-		var test []string
-		if s.ReadyCheck.QueryURL != "" {
-			// This is pretty much hardcoded for now.
-			if s.ReadyCheck.UseNC {
-				u, err := url.Parse(s.ReadyCheck.QueryURL)
-				if err != nil {
-					return nil, nil, fmt.Errorf("failed to parse ready check url '%s': %v", s.ReadyCheck.QueryURL, err)
-				}
-				test = []string{"CMD-SHELL", "nc -z localhost " + u.Port()}
-			} else {
-				test = []string{"CMD-SHELL", "chmod +x /artifacts/scripts/query.sh && /artifacts/scripts/query.sh " + s.ReadyCheck.QueryURL}
-			}
-		} else {
-			test = s.ReadyCheck.Test
+		if s.ReadyCheck.Test == nil {
+			return nil, nil, fmt.Errorf("ready check for service %s must define either Test or QueryURL", s.Name)
 		}
 
 		service["healthcheck"] = map[string]interface{}{
-			"test":         test,
+			"test":         s.ReadyCheck.Test,
 			"interval":     s.ReadyCheck.Interval.String(),
 			"timeout":      s.ReadyCheck.Timeout.String(),
 			"retries":      s.ReadyCheck.Retries,
