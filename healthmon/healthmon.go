@@ -101,9 +101,9 @@ func (m *monitorState) handleUpdate(update blockUpdate) {
 			m.log.Info("Using block time from update", "block time seconds", update.BlockTime)
 			m.blockTimeSeconds = update.BlockTime
 		} else if m.firstBlockUpdate != nil && update.Number > m.firstBlockUpdate.Number {
-			blocktimeSeconds := update.Timestamp.Sub(m.firstBlockUpdate.Timestamp)
-			m.log.Info("Calculated block time from timestamps", "block time seconds", blocktimeSeconds)
-			m.blockTimeSeconds = int(blocktimeSeconds.Seconds())
+			blocktime := update.Timestamp.Sub(m.firstBlockUpdate.Timestamp)
+			m.log.Info("Calculated block time from timestamps", "block time seconds", blocktime)
+			m.blockTimeSeconds = int(blocktime.Seconds())
 		}
 	}
 
