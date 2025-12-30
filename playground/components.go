@@ -382,7 +382,7 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 }
 
 type RethEL struct {
@@ -462,7 +462,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -507,16 +507,9 @@ func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
 		).
 		WithArtifact("/data/testnet-dir", "testnet").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_beacon").
-		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
-			Interval:    1 * time.Second,
-			Timeout:     30 * time.Second,
-			Retries:     3,
-			StartPeriod: 1 * time.Second,
-		})
+		WithVolume("data", "/data_beacon")
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonBeacon)
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -637,7 +630,7 @@ func (o *OpReth) Apply(manifest *Manifest) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 }
 
 type MevBoost struct {
@@ -877,19 +870,16 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		DependsOnHealthy("builder-hub-api")
 }
 
-func UseHealthmon(m *Manifest, s *Service) {
-	var chain string
+const (
+	healthmonBeacon    = "beacon"
+	healthmonExecution = "execution"
+)
 
-	switch s.MustGetPort("http").Port {
-	case 8545:
-		chain = "execution"
-	case 3500:
-		chain = "beacon"
-	default:
-		panic("xx")
-	}
+func UseHealthmon(m *Manifest, s *Service, chain string) {
+	healthmonName := s.Name + "_healthmon"
 
-	m.NewService(s.Name+"_healthmon").
+	s.WithLabel(healthCheckSidecarLabel, healthmonName)
+	m.NewService(healthmonName).
 		WithImage("llocal").
 		WithTag("local").
 		WithEntrypoint("healthmon").
