@@ -11,7 +11,7 @@ import (
 
 func main() {
 	if err := generateKeys(); err != nil {
-		log.Fatalf(err.Error())
+		log.Fatal(err.Error())
 	}
 }
 
