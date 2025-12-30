@@ -880,8 +880,8 @@ func UseHealthmon(m *Manifest, s *Service, chain string) {
 
 	s.WithLabel(healthCheckSidecarLabel, healthmonName)
 	m.NewService(healthmonName).
-		WithImage("llocal").
-		WithTag("local").
+		WithImage("docker.io/flashbots/playground-utils").
+		WithTag("latest").
 		WithEntrypoint("healthmon").
 		WithArgs("--chain", chain, "--url", Connect(s.Name, "http")).
 		WithReady(ReadyCheck{
