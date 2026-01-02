@@ -79,7 +79,7 @@ func TestWaitForReady_Success(t *testing.T) {
 	// Create a runner with a service that becomes ready
 	manifest := &Manifest{
 		Services: []*Service{
-			{Name: "ready-service"},
+			{Name: "always-ready", ReadyCheck: &ReadyCheck{}},
 		},
 	}
 
@@ -89,7 +89,8 @@ func TestWaitForReady_Success(t *testing.T) {
 	runner, err := NewLocalRunner(cfg)
 	require.NoError(t, err)
 
-	runner.updateTaskStatus("ready-service", TaskStatusStarted)
+	runner.updateTaskStatus("always-ready", TaskStatusStarted)
+	runner.updateTaskStatus("always-ready", TaskStatusHealthy)
 
 	waitCtx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
