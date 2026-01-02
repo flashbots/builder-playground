@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"text/template"
-	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
@@ -57,8 +56,9 @@ type LocalRunner struct {
 	exitErr chan error
 
 	// tasks tracks the status of each service
-	tasksMtx sync.Mutex
-	tasks    map[string]*task
+	tasksMtx        sync.Mutex
+	tasks           map[string]*task
+	allTasksReadyCh chan struct{}
 
 	// whether to remove the network name after execution (used in testing)
 	cleanupNetwork bool
@@ -158,23 +158,21 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	d := &LocalRunner{
-		config:        cfg,
-		out:           cfg.Out,
-		manifest:      cfg.Manifest,
-		client:        client,
-		reservedPorts: map[int]bool{},
-		handles:       []*exec.Cmd{},
-		tasks:         tasks,
-		exitErr:       make(chan error, 2),
+		config:          cfg,
+		out:             cfg.Out,
+		manifest:        cfg.Manifest,
+		client:          client,
+		reservedPorts:   map[int]bool{},
+		handles:         []*exec.Cmd{},
+		tasks:           tasks,
+		allTasksReadyCh: make(chan struct{}),
+		exitErr:         make(chan error, 2),
 	}
 
 	return d, nil
 }
 
-func (d *LocalRunner) AreReady() bool {
-	d.tasksMtx.Lock()
-	defer d.tasksMtx.Unlock()
-
+func (d *LocalRunner) checkAndUpdateReadiness() {
 	for name, task := range d.tasks {
 		// ensure the task is not a host service
 		if d.isHostService(name) {
@@ -183,21 +181,21 @@ func (d *LocalRunner) AreReady() bool {
 
 		// first ensure the task has started
 		if task.status != TaskStatusStarted {
-			return false
+			return
 		}
 
 		// then ensure it is ready if it has a ready function
 		svc := d.getService(name)
 		if svc.ReadyCheck != nil {
 			if !task.ready {
-				return false
+				return
 			}
 		}
 	}
-	return true
+	close(d.allTasksReadyCh)
 }
 
-func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) error {
+func (d *LocalRunner) WaitForReady(ctx context.Context) error {
 	defer utils.StartTimer("docker.wait-for-ready")()
 
 	for {
@@ -205,13 +203,8 @@ func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) e
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case <-time.After(timeout):
-			return fmt.Errorf("timeout")
-
-		case <-time.After(1 * time.Second):
-			if d.AreReady() {
-				return nil
-			}
+		case <-d.allTasksReadyCh:
+			return nil
 
 		case err := <-d.exitErr:
 			return err
@@ -241,6 +234,7 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	}
 
 	d.emitCallback(name, status)
+	d.checkAndUpdateReadiness()
 }
 
 func (d *LocalRunner) ExitErr() <-chan error {

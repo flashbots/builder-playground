@@ -192,7 +192,9 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	err = dockerRunner.Run(context.Background())
 	require.NoError(t, err)
 
-	require.NoError(t, dockerRunner.WaitForReady(context.Background(), 20*time.Second))
+	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	require.NoError(t, dockerRunner.WaitForReady(waitCtx))
 	return svcManager
 }
 
