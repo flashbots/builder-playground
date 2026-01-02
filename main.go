@@ -451,7 +451,7 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	fmt.Println("\nWaiting for services to get healthy...")
-	waitCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	if err := dockerRunner.WaitForReady(waitCtx); err != nil {
 		dockerRunner.Stop(keepFlag)

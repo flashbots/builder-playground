@@ -195,17 +195,15 @@ func (d *LocalRunner) checkAndUpdateReadiness() {
 func (d *LocalRunner) WaitForReady(ctx context.Context) error {
 	defer utils.StartTimer("docker.wait-for-ready")()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
 
-		case <-d.allTasksReadyCh:
-			return nil
+	case <-d.allTasksReadyCh:
+		return nil
 
-		case err := <-d.exitErr:
-			return err
-		}
+	case err := <-d.exitErr:
+		return err
 	}
 }
 
