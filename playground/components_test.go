@@ -186,7 +186,10 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	dockerRunner, err := NewLocalRunner(cfg)
 	require.NoError(t, err)
 
-	dockerRunner.cleanupNetwork = true
+	t.Cleanup(func() {
+		require.NoError(t, dockerRunner.Stop(false))
+	})
+
 	tt.runner = dockerRunner
 
 	err = dockerRunner.Run(context.Background())

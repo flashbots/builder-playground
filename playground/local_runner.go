@@ -59,9 +59,6 @@ type LocalRunner struct {
 	// tasks tracks the status of each service
 	tasksMtx sync.Mutex
 	tasks    map[string]*task
-
-	// whether to remove the network name after execution (used in testing)
-	cleanupNetwork bool
 }
 
 type task struct {
