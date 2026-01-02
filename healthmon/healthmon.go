@@ -2,12 +2,15 @@ package healthmon
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-template/common"
@@ -189,6 +192,29 @@ func monitorExecution(log *httplog.Logger, ctx context.Context, url string, upda
 		os.Exit(1)
 	}
 
+	getLatestBlock := func() (*types.Header, error) {
+		// We use a manual RPC call instead of the Geth SDK's HeaderByNumber because
+		// we query both OP and normal L1 clients which have different transaction types
+		// that cannot be decoded with a single Geth SDK. The Geth SDK only returns blocks
+		// with transactions fully decoded (not just hashes), so we call the RPC directly
+		// to avoid transaction decoding issues.
+		var raw json.RawMessage
+		if err := client.Client().CallContext(ctx, &raw, "eth_getBlockByNumber", "latest", false); err != nil {
+			return nil, err
+		}
+
+		// Decode header and transactions.
+		var head *types.Header
+		if err := json.Unmarshal(raw, &head); err != nil {
+			return nil, err
+		}
+		// When the block is not found, the API returns JSON null.
+		if head == nil {
+			return nil, ethereum.NotFound
+		}
+		return head, nil
+	}
+
 	var lastBlock *uint64
 	for {
 		select {
@@ -205,15 +231,15 @@ func monitorExecution(log *httplog.Logger, ctx context.Context, url string, upda
 				log.Debug("Execution node is syncing", "currentBlock", sync.CurrentBlock, "highestBlock", sync.HighestBlock)
 				continue
 			}
-			block, err := client.BlockByNumber(ctx, nil)
+			header, err := getLatestBlock()
 			if err != nil {
 				log.Error("Failed to get execution block number", "err", err)
 				continue
 			}
-			num := block.NumberU64()
+			num := header.Number.Uint64()
 			if lastBlock == nil || num > *lastBlock {
 				lastBlock = &num
-				timestamp := time.Unix(int64(block.Time()), 0)
+				timestamp := time.Unix(int64(header.Time), 0)
 
 				log.Info("New execution block received", "number", num)
 				updates <- blockUpdate{Number: num, Timestamp: timestamp}
