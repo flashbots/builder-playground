@@ -568,6 +568,10 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		}
 	}
 
+	if s.UngracefulShutdown {
+		service["stop_grace_period"] = "0s"
+	}
+
 	if s.DependsOn != nil {
 		depends := map[string]interface{}{}
 
