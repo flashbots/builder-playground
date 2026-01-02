@@ -880,7 +880,14 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		WithTag("0.3.1-alpha1").
 		WithPort("http", 8888).
 		WithEnv("TARGET", Connect("builder-hub-api", "http")).
-		DependsOnHealthy("builder-hub-api")
+		DependsOnHealthy("builder-hub-api").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8888",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 }
 
 func UseHealthmon(m *Manifest, s *Service) {
