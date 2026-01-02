@@ -202,6 +202,9 @@ func (d *LocalRunner) WaitForReady(ctx context.Context, timeout time.Duration) e
 		case <-ctx.Done():
 			return ctx.Err()
 
+		case <-time.After(timeout):
+			return fmt.Errorf("timeout")
+
 		case <-time.After(1 * time.Second):
 			if d.AreReady() {
 				return nil
