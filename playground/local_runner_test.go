@@ -55,7 +55,7 @@ func TestWaitForReady_Timeout(t *testing.T) {
 	// Create a runner with a service that never becomes ready
 	manifest := &Manifest{
 		Services: []*Service{
-			{Name: "never-ready"},
+			{Name: "never-ready", ReadyCheck: &ReadyCheck{}},
 		},
 	}
 
@@ -68,17 +68,18 @@ func TestWaitForReady_Timeout(t *testing.T) {
 	// Mark service as started but not ready
 	runner.updateTaskStatus("never-ready", TaskStatusStarted)
 
-	ctx := context.Background()
-	err = runner.WaitForReady(ctx, 500*time.Millisecond)
+	waitCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	err = runner.WaitForReady(waitCtx)
 	require.Error(t, err)
-	require.Equal(t, "timeout", err.Error())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 func TestWaitForReady_Success(t *testing.T) {
 	// Create a runner with a service that becomes ready
 	manifest := &Manifest{
 		Services: []*Service{
-			{Name: "ready-service"},
+			{Name: "always-ready", ReadyCheck: &ReadyCheck{}},
 		},
 	}
 
@@ -88,13 +89,11 @@ func TestWaitForReady_Success(t *testing.T) {
 	runner, err := NewLocalRunner(cfg)
 	require.NoError(t, err)
 
-	// Service becomes ready after a delay
-	go func() {
-		time.Sleep(200 * time.Millisecond)
-		runner.updateTaskStatus("ready-service", TaskStatusStarted)
-	}()
+	runner.updateTaskStatus("always-ready", TaskStatusStarted)
+	runner.updateTaskStatus("always-ready", TaskStatusHealthy)
 
-	ctx := context.Background()
-	err = runner.WaitForReady(ctx, 2*time.Second)
+	waitCtx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	err = runner.WaitForReady(waitCtx)
 	require.NoError(t, err)
 }

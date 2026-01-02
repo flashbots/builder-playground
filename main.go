@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"log"
@@ -450,7 +451,9 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	fmt.Println("\nWaiting for services to get healthy...")
-	if err := dockerRunner.WaitForReady(ctx, 20*time.Second); err != nil {
+	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if err := dockerRunner.WaitForReady(waitCtx); err != nil {
 		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
