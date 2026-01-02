@@ -65,9 +65,6 @@ jobs:
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
 
-      - name: Build playground utils
-        run: ./scripts/ci-build-playground-utils.sh
-        
       - name: Run unit tests
         run: go test -v ./playground/...
 
@@ -86,6 +83,9 @@ jobs:
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
 
+      - name: Build playground utils
+        run: ./scripts/ci-build-playground-utils.sh
+        
       - name: Run unit tests
         run: make integration-test
 
