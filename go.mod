@@ -13,6 +13,7 @@ require (
 	github.com/flashbots/go-boost-utils v1.9.1-0.20250819134059-e5294cb450c9
 	github.com/flashbots/go-template v1.0.0
 	github.com/flashbots/mev-boost-relay v0.32.0-rc2
+	github.com/go-chi/httplog/v2 v2.1.1
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/holiman/uint256 v1.3.2
 	github.com/otiai10/copy v1.14.1
@@ -67,7 +68,6 @@ require (
 	github.com/flashbots/go-utils v0.11.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-chi/chi/v5 v5.2.1 // indirect
-	github.com/go-chi/httplog/v2 v2.1.1 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
