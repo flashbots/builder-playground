@@ -201,7 +201,8 @@ func (s *Manifest) Validate() error {
 				WithImage("alpine/curl").
 				WithTag("latest").
 				WithArgs("sleep", "infinity").
-				WithReady(readyCheck)
+				WithReady(readyCheck).
+				WithUngracefulShutdown()
 		}
 
 		// validate node port references
@@ -329,6 +330,8 @@ type Service struct {
 	Image      string `json:"image,omitempty"`
 	Entrypoint string `json:"entrypoint,omitempty"`
 	HostPath   string `json:"host_path,omitempty"`
+
+	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
 	release *release
 }
@@ -489,6 +492,11 @@ type ReadyCheck struct {
 	StartPeriod time.Duration `json:"start_period"`
 	Timeout     time.Duration `json:"timeout"`
 	Retries     int           `json:"retries"`
+}
+
+func (s *Service) WithUngracefulShutdown() *Service {
+	s.UngracefulShutdown = true
+	return s
 }
 
 func (s *Service) DependsOnHealthy(name string) *Service {
