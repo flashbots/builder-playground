@@ -21,6 +21,8 @@ import (
 
 var version = "dev"
 
+var greenColor = color.New(color.FgGreen)
+
 var (
 	keepFlag          bool
 	outputFlag        string
@@ -327,7 +329,7 @@ func runIt(recipe playground.Recipe) error {
 	logging.ConfigureSlog(logLevelFlag)
 	sessionID := utils.GeneratePetName()
 	slog.Info("Welcome to Builder Playground! ⚡️🤖")
-	slog.Info("Session ID: "+color.New(color.FgGreen).Sprintf(sessionID), "log-level", logLevel)
+	slog.Info("Session ID: "+greenColor.Sprint(sessionID), "log-level", logLevel)
 	slog.Info("")
 
 	// parse the overrides
@@ -469,7 +471,8 @@ func runIt(recipe playground.Recipe) error {
 		slog.Info("")
 		slog.Info("Recipe outputs 🔍")
 		for k, v := range output {
-			slog.Info("• " + k + ": " + color.New(color.FgGreen).Sprintf("%v", v))
+			valStr := fmt.Sprintf("%v", v)
+			slog.Info("• " + k + ": " + greenColor.Sprint(valStr))
 		}
 	}
 
