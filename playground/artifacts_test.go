@@ -1,8 +1,12 @@
 package playground
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnodeGeneration(t *testing.T) {
@@ -15,6 +19,20 @@ func TestEnodeGeneration(t *testing.T) {
 			t.Fatalf("enode IDs are not the same")
 		}
 	}
+}
+
+func TestL2PrefundedAccounts(t *testing.T) {
+	o := newTestOutput(t)
+
+	b := NewArtifactsBuilder()
+	require.NoError(t, b.Build(o))
+
+	genesisRaw, err := o.Read("l2-genesis.json")
+	require.NoError(t, err)
+
+	var genesis core.Genesis
+	require.NoError(t, json.Unmarshal([]byte(genesisRaw), &genesis))
+	require.Len(t, genesis.Alloc, 10)
 }
 
 func newTestOutput(t *testing.T) *output {

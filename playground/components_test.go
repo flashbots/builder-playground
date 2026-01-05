@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
@@ -23,7 +25,17 @@ func TestRecipeOpstackSimple(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&OpRecipe{}, nil)
+	m := tt.test(&OpRecipe{}, nil)
+
+	httpPort := m.MustGetService("op-geth").MustGetPort("http")
+	client, err := ethclient.Dial(fmt.Sprintf("http://localhost:%d", httpPort.HostPort))
+	require.NoError(t, err)
+
+	// validate that the default addresses are prefunded
+	knownAddress := common.HexToAddress("0xf49Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+	balance, err := client.BalanceAt(context.Background(), knownAddress, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, balance, big.NewInt(0))
 }
 
 func TestRecipeOpstackExternalBuilder(t *testing.T) {

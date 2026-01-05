@@ -257,7 +257,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		// override l2 genesis, make the timestamp start 2 seconds after the L1 genesis
 		input := map[string]interface{}{
 			"timestamp": hexutil.Uint64(opTimestamp).String(),
-			"allocs":    allocs,
+			"alloc":     allocs,
 		}
 		if forkTime != nil {
 			// We need to enable prague on the EL to enable the engine v4 calls
@@ -420,6 +420,14 @@ func NewOutput(dst string) (*output, error) {
 	}
 
 	return out, nil
+}
+
+func (o *output) Read(path string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(o.dst, path))
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func (o *output) AbsoluteDstPath() (string, error) {
