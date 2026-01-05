@@ -10,6 +10,7 @@ require (
 	github.com/docker/docker v28.0.1+incompatible
 	github.com/dustinkirkland/golang-petname v0.0.0-20240428194347-eebcea082ee0
 	github.com/ethereum/go-ethereum v1.15.10
+	github.com/fatih/color v1.18.0
 	github.com/flashbots/go-boost-utils v1.9.1-0.20250819134059-e5294cb450c9
 	github.com/flashbots/go-template v1.0.0
 	github.com/flashbots/mev-boost-relay v0.32.0-rc2
@@ -17,6 +18,7 @@ require (
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/holiman/uint256 v1.3.2
 	github.com/otiai10/copy v1.14.1
+	github.com/phsym/console-slog v0.3.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
@@ -93,6 +95,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect

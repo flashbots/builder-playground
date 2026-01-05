@@ -54,7 +54,7 @@ func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {
 	admin := builderHubService.MustGetPort("admin")
 	internal := builderHubService.MustGetPort("internal")
 
-	output["builder-hub-http (proxy)"] = fmt.Sprintf("http://localhost:%d", http.HostPort)
+	output["builder-hub-proxy"] = fmt.Sprintf("http://localhost:%d", http.HostPort)
 	output["builder-hub-admin"] = fmt.Sprintf("http://localhost:%d", admin.HostPort)
 	output["builder-hub-internal"] = fmt.Sprintf("http://localhost:%d", internal.HostPort)
 

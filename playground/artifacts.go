@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"maps"
 	"math/big"
 	"os"
@@ -176,7 +177,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	block := gen.ToBlock()
-	log.Printf("Genesis block hash: %s", block.Hash())
+	slog.Info("Genesis block created", "hash", block.Hash())
 
 	var v int
 	if b.applyLatestL1Fork {
@@ -185,7 +186,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		v = version.Deneb
 	}
 
-	log.Println("Generating keys...")
+	slog.Debug("Generating keys...")
 	keys, err := keys.GetPregeneratedBLSKeys()
 	if err != nil {
 		return err
@@ -213,7 +214,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		return err
 	}
 
-	log.Println("Writing artifacts...")
+	slog.Debug("Writing artifacts...")
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
@@ -228,7 +229,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	if err != nil {
 		return err
 	}
-	log.Println("Done writing artifacts.")
+	slog.Debug("Done writing artifacts.")
 
 	{
 		// We have to start slightly ahead of L1 genesis time
