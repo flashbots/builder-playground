@@ -5,13 +5,16 @@ import (
 	_ "embed"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/flashbots/builder-playground/playground"
 	"github.com/flashbots/builder-playground/utils"
+	"github.com/flashbots/builder-playground/utils/logging"
 	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/spf13/cobra"
 )
@@ -315,17 +318,17 @@ func main() {
 }
 
 func runIt(recipe playground.Recipe) error {
+	fmt.Println()
+
 	var logLevel playground.LogLevel
 	if err := logLevel.Unmarshal(logLevelFlag); err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
-
-	if logLevel == playground.LevelTrace {
-		// TODO: We can remove this once we have a logger with log.Trace support
-		utils.TraceMode = true
-	}
-
-	log.Printf("Log level: %s\n", logLevel)
+	logging.ConfigureSlog(logLevelFlag)
+	sessionID := utils.GeneratePetName()
+	slog.Info("Welcome to Builder Playground! ⚡️🤖")
+	slog.Info("Session ID: "+color.New(color.FgGreen).Sprintf(sessionID), "log-level", logLevel)
+	slog.Info("")
 
 	// parse the overrides
 	overrides := map[string]string{}
@@ -342,7 +345,7 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	log.Println("Building artifacts...")
+	slog.Debug("Building artifacts...")
 	builder := recipe.Artifacts()
 	builder.GenesisDelay(genesisDelayFlag)
 	builder.PrefundedAccounts(prefundedAccounts)
@@ -360,12 +363,12 @@ func runIt(recipe playground.Recipe) error {
 		},
 	}
 
-	svcManager := playground.NewManifest(exCtx, out)
+	svcManager := playground.NewManifest(exCtx, out, sessionID)
 
 	recipe.Apply(svcManager)
 
 	// generate the dot graph
-	log.Println("Generating dot graph...")
+	slog.Debug("Generating dot graph...")
 	dotGraph := svcManager.GenerateDotGraph()
 	if err := out.WriteFile("graph.dot", dotGraph); err != nil {
 		return err
@@ -410,11 +413,9 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	// Add callback to log service updates in debug mode
-	if logLevel == playground.LevelDebug {
-		cfg.AddCallback(func(serviceName string, update playground.TaskStatus) {
-			log.Printf("[DEBUG] [%s] %s\n", serviceName, update)
-		})
-	}
+	cfg.AddCallback(func(serviceName string, update playground.TaskStatus) {
+		slog.Debug("service update", "service", serviceName, "status", update)
+	})
 
 	dockerRunner, err := playground.NewLocalRunner(cfg)
 	if err != nil {
@@ -423,34 +424,36 @@ func runIt(recipe playground.Recipe) error {
 
 	ctx := mainctx.Get()
 
-	log.Println("Starting services...")
+	slog.Info("Starting services... ⏳", "session-id", svcManager.ID)
 	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to run docker: %w", err)
 	}
 
 	if !interactive {
+		log.Println()
+		log.Println("All services started! ✅")
 		// print services info
-		fmt.Printf("\n========= Services started =========\n")
 		for _, ss := range svcManager.Services {
 			ports := ss.GetPorts()
 			sort.Slice(ports, func(i, j int) bool {
 				return ports[i].Name < ports[j].Name
 			})
 
-			portsStr := []string{}
+			var portsStr []any
 			for _, p := range ports {
 				protocol := ""
 				if p.Protocol == playground.ProtocolUDP {
 					protocol = "/udp"
 				}
-				portsStr = append(portsStr, fmt.Sprintf("%s: %d/%d%s", p.Name, p.Port, p.HostPort, protocol))
+				portsStr = append(portsStr, p.Name, fmt.Sprintf("%d/%d%s", p.Port, p.HostPort, protocol))
 			}
-			fmt.Printf("- %s (%s)\n", ss.Name, strings.Join(portsStr, ", "))
+			slog.Info("• "+ss.Name, portsStr...)
 		}
+		log.Println()
 	}
 
-	fmt.Println("\nWaiting for services to get healthy...")
+	log.Println("Waiting for services to get healthy... ⏳")
 	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	if err := dockerRunner.WaitForReady(waitCtx); err != nil {
@@ -458,15 +461,15 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
-	fmt.Println("\nAll services are healthy! Ready to accept transactions.")
-	fmt.Println("Session ID:", svcManager.ID)
+	slog.Info("All services are healthy! Ready to accept transactions. 🚀", "session-id", svcManager.ID)
 
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
 	if len(output) > 0 {
-		fmt.Printf("\n========= Output =========\n")
+		slog.Info("")
+		slog.Info("Recipe outputs 🔍")
 		for k, v := range output {
-			fmt.Printf("- %s: %v\n", k, v)
+			slog.Info("• " + k + ": " + color.New(color.FgGreen).Sprintf("%v", v))
 		}
 	}
 
@@ -492,13 +495,13 @@ func runIt(recipe playground.Recipe) error {
 
 	select {
 	case <-ctx.Done():
-		fmt.Println("Stopping...")
+		log.Println("Stopping...")
 	case err := <-dockerRunner.ExitErr():
-		fmt.Println("Service failed:", err)
+		log.Println("Service failed:", err)
 	case err := <-watchdogErr:
-		fmt.Println("Watchdog failed:", err)
+		log.Println("Watchdog failed:", err)
 	case <-timerCh:
-		fmt.Println("Timeout reached")
+		log.Println("Timeout reached")
 	}
 
 	if err := dockerRunner.Stop(keepFlag); err != nil {

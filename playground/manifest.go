@@ -72,10 +72,13 @@ func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
 	return nil
 }
 
-func NewManifest(ctx *ExContext, out *output) *Manifest {
+func NewManifest(ctx *ExContext, out *output, name ...string) *Manifest {
+	if len(name) == 0 {
+		name = []string{utils.GeneratePetName()}
+	}
 	ctx.Output = out
 	return &Manifest{
-		ID:        utils.GeneratePetName(),
+		ID:        name[0],
 		ctx:       ctx,
 		out:       out,
 		overrides: make(map[string]string),
