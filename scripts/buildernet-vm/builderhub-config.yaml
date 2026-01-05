@@ -1,0 +1,3 @@
+disk_encryption:
+  key: 5d7052c0c3aff5834f45e3f33aca0a55ef9f43ca9cf6c5c8e8375ab82564ddb6  # playground value
+instance_name: buildernet-playground-vm
