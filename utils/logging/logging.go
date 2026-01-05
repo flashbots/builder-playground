@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/flashbots/go-template/common"
 	"github.com/phsym/console-slog"
 )
 
@@ -37,13 +36,4 @@ func newConsoleLogger(debug bool) *slog.Logger {
 		Theme:      newTheme(),
 	})
 	return slog.New(handler)
-}
-
-// This is just for comparing with the other log handler between runs and will be removed before merging.
-func newGoTemplateLogger(debug bool) *slog.Logger {
-	return common.SetupLogger(&common.LoggingOpts{
-		Service: "",
-		JSON:    false,
-		Debug:   debug,
-	}).Logger
 }
