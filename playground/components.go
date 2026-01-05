@@ -434,7 +434,6 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			"--chain", "/data/genesis.json",
 			"--datadir", "/data_reth",
 			"--color", "never",
-			"--ipcdisable",
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
@@ -461,6 +460,15 @@ func (r *RethEL) Apply(manifest *Manifest) {
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
+
+	if r.UseNativeReth {
+		// When Reth runs in the host machine, if we enable ipc, the IPC path /data_reth/reth.ipc
+		// points to the artifact folder with an absolute path that is too long for an IPC path.
+		// https://discussions.apple.com/thread/250275651
+		svc.WithArgs("--ipcdisable")
+	} else {
+		svc.WithArgs("--ipcpath", "/data_reth/reth.ipc")
+	}
 
 	UseHealthmon(manifest, svc, healthmonExecution)
 
@@ -867,7 +875,14 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		WithTag("0.3.1-alpha1").
 		WithPort("http", 8888).
 		WithEnv("TARGET", Connect("builder-hub-api", "http")).
-		DependsOnHealthy("builder-hub-api")
+		DependsOnHealthy("builder-hub-api").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8888",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 }
 
 const (

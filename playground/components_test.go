@@ -186,13 +186,18 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	dockerRunner, err := NewLocalRunner(cfg)
 	require.NoError(t, err)
 
-	dockerRunner.cleanupNetwork = true
+	t.Cleanup(func() {
+		require.NoError(t, dockerRunner.Stop(false))
+	})
+
 	tt.runner = dockerRunner
 
 	err = dockerRunner.Run(context.Background())
 	require.NoError(t, err)
 
-	require.NoError(t, dockerRunner.WaitForReady(context.Background(), 20*time.Second))
+	waitCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	require.NoError(t, dockerRunner.WaitForReady(waitCtx))
 	return svcManager
 }
 

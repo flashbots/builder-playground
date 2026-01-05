@@ -15,7 +15,6 @@ import (
 	"maps"
 	"math/big"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -24,7 +23,7 @@ import (
 	"time"
 
 	"github.com/OffchainLabs/prysm/v6/config/params"
-	"github.com/OffchainLabs/prysm/v6/crypto/bls/common"
+	"github.com/OffchainLabs/prysm/v6/crypto/bls"
 	"github.com/OffchainLabs/prysm/v6/runtime/interop"
 	"github.com/OffchainLabs/prysm/v6/runtime/version"
 	gethcommon "github.com/ethereum/go-ethereum/common"
@@ -32,9 +31,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/flashbots/builder-playground/utils"
-	"github.com/hashicorp/go-uuid"
+	"github.com/flashbots/builder-playground/utils/keys"
 	"github.com/otiai10/copy"
-	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
 )
 
@@ -188,9 +186,18 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	log.Println("Generating keys...")
-	priv, pub, err := interop.DeterministicallyGenerateKeys(0, 100)
+	keys, err := keys.GetPregeneratedBLSKeys()
 	if err != nil {
 		return err
+	}
+
+	var (
+		priv []bls.SecretKey
+		pub  []bls.PublicKey
+	)
+	for _, key := range keys {
+		priv = append(priv, key.Priv)
+		pub = append(pub, key.Pub)
 	}
 
 	depositData, roots, err := interop.DepositDataFromKeysWithExecCreds(priv, pub, 100)
@@ -216,10 +223,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		"testnet/deploy_block.txt":            "0",
 		"testnet/deposit_contract_block.txt":  "0",
 		"testnet/genesis_validators_root.txt": hex.EncodeToString(state.GenesisValidatorsRoot()),
-		"data_validator/": &lighthouseKeystore{
-			privKeys: priv,
-			cacheDir: path.Join(out.homeDir, "cache", "data_validator"),
-		},
+		"data_validator/":                     &lighthouseKeystore{privKeys: keys},
 	})
 	if err != nil {
 		return err
@@ -562,64 +566,23 @@ func (o *output) WriteFile(dst string, data interface{}) error {
 	return nil
 }
 
-var secret = "secret"
-
 type lighthouseKeystore struct {
-	privKeys []common.SecretKey
-	cacheDir string
-}
-
-func isExistingDir(path string) bool {
-	info, err := os.Stat(path)
-	if err == nil {
-		return info.IsDir()
-	}
-	return false
+	privKeys []*keys.Key
 }
 
 func (l *lighthouseKeystore) Encode(o *output) error {
-	// If the cache dir exists, just copy to destination.
-	if isExistingDir(l.cacheDir) {
-		return o.WriteDir(l.cacheDir)
-	}
-
-	// If the cache dir doesn't exist, set dst as the cache dir to write the keys there first.
-	oldDst := o.dst
-	o.dst = l.cacheDir
-
 	for _, key := range l.privKeys {
-		encryptor := keystorev4.New()
-		cryptoFields, err := encryptor.Encrypt(key.Marshal(), secret)
-		if err != nil {
-			return err
-		}
-
-		id, _ := uuid.GenerateUUID()
-
-		pubKeyHex := "0x" + hex.EncodeToString(key.PublicKey().Marshal())
-		item := map[string]interface{}{
-			"crypto":      cryptoFields,
-			"uuid":        id,
-			"pubkey":      pubKeyHex[2:], // without 0x in the json file
-			"version":     4,
-			"description": "",
-		}
-		valJSON, err := json.MarshalIndent(item, "", "\t")
-		if err != nil {
-			return err
-		}
+		pubKeyHex := "0x" + hex.EncodeToString(key.Pub.Marshal())
 
 		if err := o.WriteBatch(map[string]interface{}{
-			"validators/" + pubKeyHex + "/voting-keystore.json": valJSON,
-			"secrets/" + pubKeyHex:                              secret,
+			"validators/" + pubKeyHex + "/voting-keystore.json": key.Keystore,
+			"secrets/" + pubKeyHex:                              keys.DefaultSecret,
 		}); err != nil {
 			return err
 		}
 	}
 
-	// Restore the dst and write from the cache.
-	o.dst = oldDst
-	return o.WriteDir(l.cacheDir)
+	return nil
 }
 
 type encObject interface {
