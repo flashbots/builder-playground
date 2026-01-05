@@ -382,7 +382,7 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 }
 
 type RethEL struct {
@@ -470,7 +470,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 		svc.WithArgs("--ipcpath", "/data_reth/reth.ipc")
 	}
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -515,14 +515,9 @@ func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
 		).
 		WithArtifact("/data/testnet-dir", "testnet").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_beacon").
-		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
-			Interval:    1 * time.Second,
-			Timeout:     30 * time.Second,
-			Retries:     3,
-			StartPeriod: 1 * time.Second,
-		})
+		WithVolume("data", "/data_beacon")
+
+	UseHealthmon(manifest, svc, healthmonBeacon)
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -643,7 +638,7 @@ func (o *OpReth) Apply(manifest *Manifest) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 }
 
 type MevBoost struct {
@@ -890,16 +885,24 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 }
 
-func UseHealthmon(m *Manifest, s *Service) {
-	m.NewService(s.Name+"_healthmon").
-		WithImage("ghcr.io/flashbots/ethereum-healthmon").
-		WithTag("v0.0.1").
-		// TODO: Use this also for beacon node
-		WithArgs("--chain", "execution", "--url", Connect(s.Name, "http")).
+const (
+	healthmonBeacon    = "beacon"
+	healthmonExecution = "execution"
+)
+
+func UseHealthmon(m *Manifest, s *Service, chain string) {
+	healthmonName := s.Name + "_healthmon"
+
+	s.WithLabel(healthCheckSidecarLabel, healthmonName)
+	m.NewService(healthmonName).
+		WithImage("docker.io/flashbots/playground-utils").
+		WithTag("latest").
+		WithEntrypoint("healthmon").
+		WithArgs("--chain", chain, "--url", Connect(s.Name, "http")).
 		WithReady(ReadyCheck{
 			Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
 			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
+			Timeout:     10 * time.Minute,
 			Retries:     20,
 			StartPeriod: 1 * time.Second,
 		})
