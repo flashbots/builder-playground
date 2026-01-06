@@ -1,7 +1,11 @@
 package playground
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 
 	flag "github.com/spf13/pflag"
 )
@@ -59,4 +63,100 @@ func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {
 	output["builder-hub-internal"] = fmt.Sprintf("http://localhost:%d", internal.HostPort)
 
 	return output
+}
+
+func postRequest(endpoint string, path string, input interface{}) error {
+	var data []byte
+	if dataBytes, ok := input.([]byte); ok {
+		data = dataBytes
+	} else if dataMap, ok := input.(map[string]interface{}); ok {
+		dataBytes, err := json.Marshal(dataMap)
+		if err != nil {
+			return err
+		}
+		data = dataBytes
+	} else if dataStr, ok := input.(string); ok {
+		data = []byte(dataStr)
+	} else {
+		return fmt.Errorf("input type not expected")
+	}
+
+	fullEndpoint := endpoint + path
+
+	resp, err := http.Post(fullEndpoint, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("failed to request endpoint '%s': %v", fullEndpoint, err)
+	}
+	defer resp.Body.Close()
+
+	dataResp, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("incorrect status code %s: %s", resp.Status, string(dataResp))
+	}
+	return nil
+}
+
+type builderHubRegisterBuilderInput struct {
+	BuilderID     string
+	BuilderIP     string
+	MeasurementID string
+	Network       string
+	Config        string
+}
+
+func registerBuilder(httpEndpoint string, input *builderHubRegisterBuilderInput) error {
+	httpEndpoint = httpEndpoint + "/api/admin/v1"
+
+	// Validate input.Config, it must be a valid json file
+	var configMap map[string]interface{}
+	if err := json.Unmarshal([]byte(input.Config), &configMap); err != nil {
+		return err
+	}
+
+	// Create Allow-All Measurements
+	err := postRequest(httpEndpoint, "/measurements", map[string]interface{}{
+		"measurement_id":   input.MeasurementID,
+		"attestation_type": "test",
+		"measurements":     map[string]interface{}{},
+	})
+	if err != nil {
+		return err
+	}
+
+	// Enable Measurements
+	err = postRequest(httpEndpoint, fmt.Sprintf("/measurements/activation/%s", input.MeasurementID), map[string]interface{}{
+		"enabled": true,
+	})
+	if err != nil {
+		return err
+	}
+
+	// create the builder
+	err = postRequest(httpEndpoint, "/builders", map[string]interface{}{
+		"name":       input.BuilderID,
+		"ip_address": input.BuilderIP,
+		"network":    input.Network,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Create Builder Configuration
+	err = postRequest(httpEndpoint, fmt.Sprintf("/builders/configuration/%s", input.BuilderID), input.Config)
+	if err != nil {
+		return err
+	}
+
+	// Enable Builder
+	err = postRequest(httpEndpoint, fmt.Sprintf("/builders/activation/%s", input.BuilderID), map[string]interface{}{
+		"enabled": true,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
