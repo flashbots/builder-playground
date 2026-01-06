@@ -25,6 +25,7 @@ func TestL2PrefundedAccounts(t *testing.T) {
 	o := newTestOutput(t)
 
 	b := NewArtifactsBuilder()
+	b.WithL2()
 	require.NoError(t, b.Build(o))
 
 	genesisRaw, err := o.Read("l2-genesis.json")

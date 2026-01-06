@@ -60,12 +60,18 @@ var opState []byte
 var clConfigContent []byte
 
 type ArtifactsBuilder struct {
+	// Shared options
+	prefundedAccounts []string
+
+	// L1 options
 	applyLatestL1Fork    bool
 	genesisDelay         uint64
-	applyLatestL2Fork    *uint64
 	l1BlockTimeInSeconds uint64
+
+	// Op-stack options
+	l2Enabled            bool
+	applyLatestL2Fork    *uint64
 	opBlockTimeInSeconds uint64
-	prefundedAccounts    []string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -94,6 +100,11 @@ func (b *ArtifactsBuilder) GenesisDelay(genesisDelaySeconds uint64) *ArtifactsBu
 
 func (b *ArtifactsBuilder) L1BlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
 	b.l1BlockTimeInSeconds = blockTimeSeconds
+	return b
+}
+
+func (b *ArtifactsBuilder) WithL2() *ArtifactsBuilder {
+	b.l2Enabled = true
 	return b
 }
 
@@ -168,7 +179,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	// Apply Optimism pre-state
-	{
+	if b.l2Enabled {
 		opAllocs, err := readOptimismL1Allocs()
 		if err != nil {
 			return err
@@ -231,7 +242,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 	slog.Debug("Done writing artifacts.")
 
-	{
+	if b.l2Enabled {
 		// We have to start slightly ahead of L1 genesis time
 		opTimestamp := genesisTime + 2
 
