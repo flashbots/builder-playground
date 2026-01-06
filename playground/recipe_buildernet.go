@@ -65,7 +65,7 @@ func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {
 	return output
 }
 
-func postRequest(endpoint string, path string, input interface{}) error {
+func postRequest(endpoint, path string, input interface{}) error {
 	var data []byte
 	if dataBytes, ok := input.([]byte); ok {
 		data = dataBytes
