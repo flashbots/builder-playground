@@ -28,7 +28,7 @@ func TestPrefundedAccounts_Default(t *testing.T) {
 	b := NewArtifactsBuilder()
 	require.NoError(t, b.Build(o))
 
-	var prefundedAccount = common.HexToAddress("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266")
+	prefundedAccount := common.HexToAddress("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266")
 
 	l1Genesis := readGenesis(t, o, "l2-genesis.json")
 	l2Genesis := readGenesis(t, o, "genesis.json")
@@ -37,7 +37,6 @@ func TestPrefundedAccounts_Default(t *testing.T) {
 	for _, genesis := range []*core.Genesis{l1Genesis, l2Genesis} {
 		require.Contains(t, genesis.Alloc, prefundedAccount)
 	}
-
 }
 
 func TestPrefundedAccounts_Custom(t *testing.T) {
