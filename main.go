@@ -463,6 +463,15 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
+	// run post hook operations
+	for _, svc := range svcManager.Services {
+		if svc.PostHook != nil {
+			if err := svc.PostHook.Action(svc); err != nil {
+				panic(err)
+			}
+		}
+	}
+
 	slog.Info("All services are healthy! Ready to accept transactions. 🚀", "session-id", svcManager.ID)
 
 	// get the output from the recipe

@@ -861,6 +861,13 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
 		WithEnv("DISABLE_ADMIN_AUTH", "1").
 		WithEnv("ALLOW_EMPTY_MEASUREMENTS", "1").
+		WithPostHook(&PostHook{
+			Name: "register-builder",
+			Action: func(s *Service) error {
+				fmt.Println("- run post hook -")
+				return nil
+			},
+		}).
 		WithReady(ReadyCheck{
 			QueryURL:    "http://localhost:8080",
 			Interval:    1 * time.Second,

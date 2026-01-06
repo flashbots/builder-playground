@@ -336,7 +336,8 @@ type Service struct {
 
 	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
-	release *release
+	PostHook *PostHook
+	release  *release
 }
 
 type DependsOnCondition string
@@ -485,6 +486,16 @@ func (s *Service) WithArtifact(localPath, artifactName string) *Service {
 
 func (s *Service) WithReady(check ReadyCheck) *Service {
 	s.ReadyCheck = &check
+	return s
+}
+
+type PostHook struct {
+	Name   string
+	Action func(s *Service) error
+}
+
+func (s *Service) WithPostHook(hook *PostHook) *Service {
+	s.PostHook = hook
 	return s
 }
 
