@@ -126,6 +126,25 @@ func TestRecipeBuilderHub(t *testing.T) {
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 }
 
+func TestRecipeBuilderHub_RegisterBuilder(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	manifest := tt.test(&BuilderHub{}, nil)
+
+	apiPort := manifest.MustGetService("builder-hub-api").MustGetPort("admin")
+	endpoint := fmt.Sprintf("http://localhost:%d", apiPort.HostPort)
+
+	err := registerBuilder(endpoint, &builderHubRegisterBuilderInput{
+		BuilderID:     "test_builder",
+		BuilderIP:     "1.2.3.4",
+		MeasurementID: "test",
+		Network:       "playground",
+		Config:        "{}",
+	})
+	require.NoError(t, err)
+}
+
 func TestRecipeBuilderNet(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()

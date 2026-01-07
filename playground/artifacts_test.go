@@ -26,6 +26,7 @@ func TestPrefundedAccounts_Default(t *testing.T) {
 	o := newTestOutput(t)
 
 	b := NewArtifactsBuilder()
+	b.WithL2()
 	require.NoError(t, b.Build(o))
 
 	prefundedAccount := common.HexToAddress("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266")
