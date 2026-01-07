@@ -15,6 +15,7 @@ require (
 	github.com/flashbots/go-template v1.0.0
 	github.com/flashbots/mev-boost-relay v0.32.0-rc2
 	github.com/go-chi/httplog/v2 v2.1.1
+	github.com/goccy/go-yaml v1.17.1
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/holiman/uint256 v1.3.2
 	github.com/otiai10/copy v1.14.1
@@ -75,7 +76,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/goccy/go-json v0.10.4 // indirect
-	github.com/goccy/go-yaml v1.17.1 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e // indirect
