@@ -25,6 +25,7 @@ There are no plans of using [buildernet-playground](https://github.com/flashbots
 
 ```bash
 ./start.sh     # Start VM (background)
+./console.sh   # Open console to the VM
 ./ssh.sh       # SSH into running VM (requires SSH key setup)
 ./stop.sh      # Stop VM
 ```

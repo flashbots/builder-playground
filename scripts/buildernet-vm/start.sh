@@ -9,6 +9,7 @@ VM_IMAGE="${RUNTIME_DIR}/buildernet-vm.raw"
 VM_DATA_DISK="${RUNTIME_DIR}/persistent.raw"
 PIDFILE="${RUNTIME_DIR}/qemu.pid"
 CONSOLE_LOG="${RUNTIME_DIR}/console.log"
+CONSOLE_SOCK="${RUNTIME_DIR}/console.sock"
 
 CPU=8
 RAM=32G
@@ -29,6 +30,7 @@ echo "Starting VM..."
 echo "  SSH: localhost:${SSH_PORT}"
 echo "  Operator API: localhost:${OPERATOR_API_PORT}"
 echo "  Console log: ${CONSOLE_LOG}"
+echo "  Console socket: ${CONSOLE_SOCK}"
 
 qemu-system-x86_64 \
   -daemonize \
@@ -44,10 +46,13 @@ qemu-system-x86_64 \
   -drive file="${VM_DATA_DISK}",format=raw,if=none,id=datadisk \
   -device nvme,id=nvme0,serial=nvme-data \
   -device nvme-ns,drive=datadisk,bus=nvme0,nsid=12 \
-  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:40192,hostfwd=tcp:127.0.0.1:${OPERATOR_API_PORT}-:3535
+  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:40192,hostfwd=tcp:127.0.0.1:${OPERATOR_API_PORT}-:3535 \
+  -chardev socket,id=virtcon,path="${CONSOLE_SOCK}",server=on,wait=off \
+  -device virtio-serial-pci \
+  -device virtconsole,chardev=virtcon,name=org.qemu.console.0
 
 echo "VM started (PID: $(cat ${PIDFILE}))"
-echo "Use './stop.sh' to stop, './ssh.sh' to connect"
+echo "Use './stop.sh' to stop, './console.sh' to connect"
 echo "Use 'tail -f ${CONSOLE_LOG}' to watch console output"
 
 
