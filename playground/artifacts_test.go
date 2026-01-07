@@ -48,7 +48,7 @@ func TestPrefundedAccounts_Custom(t *testing.T) {
 	customPrivKey := "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
 	customAddress := common.HexToAddress("0x1Be31A94361a391bBaFB2a4CCd704F57dc04d4bb")
 
-	b := NewArtifactsBuilder().PrefundedAccounts([]string{customPrivKey})
+	b := NewArtifactsBuilder().PrefundedAccounts([]string{customPrivKey}).WithL2()
 	require.NoError(t, b.Build(o))
 
 	l1Genesis := readGenesis(t, o, "genesis.json")
