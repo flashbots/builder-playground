@@ -67,6 +67,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 
 func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
+	builder.WithL2()
 	builder.ApplyLatestL2Fork(o.enableLatestFork)
 	builder.OpBlockTime(o.blockTime)
 	return builder
