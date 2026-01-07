@@ -121,3 +121,23 @@ jobs:
           go mod tidy
           git update-index -q --really-refresh
           git diff-index HEAD
+
+  docs-check:
+    name: Check documentation is up to date
+    runs-on: warp-ubuntu-latest-x64-8x
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.24
+
+      - name: Generate documentation
+        run: go run main.go generate-docs
+
+      - name: Check for uncommitted changes
+        run: |
+          git update-index -q --really-refresh
+          git diff-index --quiet HEAD -- docs/recipes/ || (echo "Documentation is out of date. Please run 'go run main.go generate-docs' and commit the changes." && exit 1)
