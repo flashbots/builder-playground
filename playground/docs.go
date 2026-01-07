@@ -12,7 +12,7 @@ import (
 func GenerateDocs(recipes []Recipe) error {
 	// Create docs/recipes directory
 	recipesDir := filepath.Join("docs", "recipes")
-	if err := os.MkdirAll(recipesDir, 0755); err != nil {
+	if err := os.MkdirAll(recipesDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create recipes directory: %w", err)
 	}
 
@@ -56,7 +56,7 @@ func GenerateDocs(recipes []Recipe) error {
 
 		// Write to file
 		filename := filepath.Join(recipesDir, fmt.Sprintf("%s.md", recipe.Name()))
-		if err := os.WriteFile(filename, []byte(md.String()), 0644); err != nil {
+		if err := os.WriteFile(filename, []byte(md.String()), 0o644); err != nil {
 			return fmt.Errorf("failed to write docs for recipe %s: %w", recipe.Name(), err)
 		}
 
