@@ -132,12 +132,17 @@ var inspectCmd = &cobra.Command{
 }
 
 var debugCmd = &cobra.Command{
-	Use: "debug",
+	Use:   "debug",
+	Short: "Debug commands for running services",
 }
 
 var probeCmd = &cobra.Command{
-	Use: "probe",
+	Use:   "probe <service>",
+	Short: "Execute a service's health check manually",
+	Long:  "Manually runs the configured Docker health check command for a service and displays the result.",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		serviceName := args[0]
 
 		resp, err := playground.ExecuteHealthCheckManually(serviceName)
