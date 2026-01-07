@@ -3,6 +3,7 @@ package playground
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -336,7 +337,8 @@ type Service struct {
 
 	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
-	release *release
+	postHook *postHook
+	release  *release
 }
 
 type DependsOnCondition string
@@ -486,6 +488,29 @@ func (s *Service) WithArtifact(localPath, artifactName string) *Service {
 func (s *Service) WithReady(check ReadyCheck) *Service {
 	s.ReadyCheck = &check
 	return s
+}
+
+type postHook struct {
+	Name   string
+	Action func(s *Service) error
+}
+
+func (s *Service) WithPostHook(hook *postHook) *Service {
+	s.postHook = hook
+	return s
+}
+
+func (m *Manifest) ExecutePostHookActions() error {
+	for _, svc := range m.Services {
+		if svc.postHook != nil {
+			slog.Info("Executing post-hook operation", "name", svc.postHook.Name)
+			if err := svc.postHook.Action(svc); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 type ReadyCheck struct {
