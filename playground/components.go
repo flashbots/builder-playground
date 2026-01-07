@@ -861,10 +861,20 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
 		WithEnv("DISABLE_ADMIN_AUTH", "1").
 		WithEnv("ALLOW_EMPTY_MEASUREMENTS", "1").
-		WithPostHook(&PostHook{
+		WithPostHook(&postHook{
 			Name: "register-builder",
 			Action: func(s *Service) error {
-				fmt.Println("- run post hook -")
+				endpoint := fmt.Sprintf("http://localhost:%d", s.MustGetPort("admin").HostPort)
+				input := &builderHubRegisterBuilderInput{
+					BuilderID:     "builder",
+					BuilderIP:     "1.2.3.4",
+					MeasurementID: "test",
+					Network:       "playground",
+					Config:        "{}", // TODO
+				}
+				if err := registerBuilder(endpoint, input); err != nil {
+					return err
+				}
 				return nil
 			},
 		}).

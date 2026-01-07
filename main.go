@@ -464,12 +464,9 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	// run post hook operations
-	for _, svc := range svcManager.Services {
-		if svc.PostHook != nil {
-			if err := svc.PostHook.Action(svc); err != nil {
-				panic(err)
-			}
-		}
+	if err := svcManager.ExecutePostHookActions(); err != nil {
+		dockerRunner.Stop(keepFlag)
+		return fmt.Errorf("failed to execute post-hook operations: %w", err)
 	}
 
 	slog.Info("All services are healthy! Ready to accept transactions. 🚀", "session-id", svcManager.ID)
