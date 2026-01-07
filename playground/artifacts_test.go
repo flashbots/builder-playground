@@ -35,7 +35,9 @@ func TestPrefundedAccounts_Default(t *testing.T) {
 
 	// both genesis must have 10 prefunded accounts and the prefundedAccount' '0xf39..'
 	for _, genesis := range []*core.Genesis{l1Genesis, l2Genesis} {
-		require.Contains(t, genesis.Alloc, prefundedAccount)
+		alloc, ok := genesis.Alloc[prefundedAccount]
+		require.True(t, ok)
+		require.Equal(t, alloc.Balance, prefundedBalance)
 	}
 }
 
@@ -53,7 +55,9 @@ func TestPrefundedAccounts_Custom(t *testing.T) {
 
 	// both genesis must have the custom prefunded account
 	for _, genesis := range []*core.Genesis{l1Genesis, l2Genesis} {
-		require.Contains(t, genesis.Alloc, customAddress)
+		alloc, ok := genesis.Alloc[customAddress]
+		require.True(t, ok)
+		require.Equal(t, alloc.Balance, prefundedBalance)
 	}
 }
 
