@@ -1,8 +1,7 @@
-package main
+package playground
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"log"
 	"log/slog"
@@ -12,14 +11,14 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/flashbots/builder-playground/playground"
 	"github.com/flashbots/builder-playground/utils"
 	"github.com/flashbots/builder-playground/utils/logging"
 	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/spf13/cobra"
 )
 
-var version = "dev"
+// Version can be set by the main package before calling Main()
+var Version = "dev"
 
 var greenColor = color.New(color.FgGreen)
 
@@ -36,7 +35,7 @@ var (
 	bindExternal      bool
 	withPrometheus    bool
 	networkName       string
-	labels            playground.MapStringFlag
+	labels            MapStringFlag
 	disableLogs       bool
 	platform          string
 	contenderEnabled  bool
@@ -48,10 +47,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "playground",
-	Short:   "",
-	Long:    ``,
-	Version: version,
+	Use:   "playground",
+	Short: "",
+	Long:  ``,
 }
 
 var startCmd = &cobra.Command{
@@ -60,7 +58,7 @@ var startCmd = &cobra.Command{
 	Aliases: []string{"cook"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		recipeNames := []string{}
-		for _, recipe := range recipes {
+		for _, recipe := range Recipes {
 			recipeNames = append(recipeNames, recipe.Name())
 		}
 		return fmt.Errorf("please specify a recipe to cook. Available recipes: %s", recipeNames)
@@ -97,14 +95,14 @@ func shutDownCmdFunc(cmdName string) func(cmd *cobra.Command, args []string) err
 		}
 		if len(sessions) == 1 && sessions[0] == "all" {
 			var err error
-			sessions, err = playground.GetLocalSessions()
+			sessions, err = GetLocalSessions()
 			if err != nil {
 				return err
 			}
 		}
 		for _, session := range sessions {
 			fmt.Printf("%s: %s\n", cmdName, session)
-			if err := playground.StopSession(session, keepResources); err != nil {
+			if err := StopSession(session, keepResources); err != nil {
 				return err
 			}
 		}
@@ -125,7 +123,7 @@ var inspectCmd = &cobra.Command{
 
 		ctx := mainctx.Get()
 
-		if err := playground.Inspect(ctx, serviceName, connectionName); err != nil {
+		if err := Inspect(ctx, serviceName, connectionName); err != nil {
 			return fmt.Errorf("failed to inspect connection: %w", err)
 		}
 		return nil
@@ -146,7 +144,7 @@ var probeCmd = &cobra.Command{
 		cmd.SilenceUsage = true
 		serviceName := args[0]
 
-		resp, err := playground.ExecuteHealthCheckManually(serviceName)
+		resp, err := ExecuteHealthCheckManually(serviceName)
 		if err != nil {
 			return err
 		}
@@ -167,7 +165,7 @@ var logsCmd = &cobra.Command{
 
 		switch len(args) {
 		case 1:
-			sessions, err := playground.GetLocalSessions()
+			sessions, err := GetLocalSessions()
 			if err != nil {
 				return err
 			}
@@ -176,12 +174,12 @@ var logsCmd = &cobra.Command{
 				fmt.Println("multiple sessions found: please use 'list' to see all and provide like 'logs <session-name> <service-name>'")
 				return fmt.Errorf("invalid amount of args")
 			} else {
-				if err := playground.Logs(ctx, "", args[0], follow); err != nil && !strings.Contains(err.Error(), "signal") {
+				if err := Logs(ctx, "", args[0], follow); err != nil && !strings.Contains(err.Error(), "signal") {
 					return fmt.Errorf("failed to show logs: %w", err)
 				}
 			}
 		case 2:
-			if err := playground.Logs(ctx, args[0], args[1], follow); err != nil && !strings.Contains(err.Error(), "signal") {
+			if err := Logs(ctx, args[0], args[1], follow); err != nil && !strings.Contains(err.Error(), "signal") {
 				return fmt.Errorf("failed to show logs: %w", err)
 			}
 
@@ -201,14 +199,14 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all sessions and running services",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		sessions, err := playground.GetLocalSessions()
+		sessions, err := GetLocalSessions()
 		if err != nil {
 			return err
 		}
 
 		// If running single session, just list the services of that without expecting a session name.
 		if len(sessions) == 1 {
-			services, err := playground.GetSessionServices(sessions[0])
+			services, err := GetSessionServices(sessions[0])
 			if err != nil {
 				return err
 			}
@@ -229,7 +227,7 @@ var listCmd = &cobra.Command{
 			}
 
 		case 1:
-			services, err := playground.GetSessionServices(args[0])
+			services, err := GetSessionServices(args[0])
 			if err != nil {
 				return err
 			}
@@ -260,18 +258,22 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("playground %s\n", version)
+		fmt.Printf("playground %s\n", Version)
 	},
 }
 
-var recipes = []playground.Recipe{
-	&playground.L1Recipe{},
-	&playground.OpRecipe{},
-	&playground.BuilderNetRecipe{},
+// Recipes is the list of available recipes. External packages can append to this
+// to add custom recipes.
+var Recipes = []Recipe{
+	&L1Recipe{},
+	&OpRecipe{},
+	&BuilderNetRecipe{},
 }
 
-func main() {
-	for _, recipe := range recipes {
+func Main() {
+	rootCmd.Version = Version
+
+	for _, recipe := range Recipes {
 		recipeCmd := &cobra.Command{
 			Use:   recipe.Name(),
 			Short: recipe.Description(),
@@ -290,7 +292,7 @@ func main() {
 		recipeCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
 		recipeCmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
 		recipeCmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
-		recipeCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
+		recipeCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", MinimumGenesisDelay, "")
 		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
 		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
 		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
@@ -332,10 +334,10 @@ func main() {
 	}
 }
 
-func runIt(recipe playground.Recipe) error {
+func runIt(recipe Recipe) error {
 	fmt.Println()
 
-	var logLevel playground.LogLevel
+	var logLevel LogLevel
 	if err := logLevel.Unmarshal(logLevelFlag); err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
@@ -355,7 +357,7 @@ func runIt(recipe playground.Recipe) error {
 		overrides[parts[0]] = parts[1]
 	}
 
-	out, err := playground.NewOutput(outputFlag)
+	out, err := NewOutput(outputFlag)
 	if err != nil {
 		return err
 	}
@@ -368,17 +370,17 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	exCtx := &playground.ExContext{
+	exCtx := &ExContext{
 		LogLevel: logLevel,
 		// if contender.tps is set, assume contender is enabled
-		Contender: &playground.ContenderContext{
+		Contender: &ContenderContext{
 			Enabled:     contenderEnabled,
 			ExtraArgs:   contenderArgs,
 			TargetChain: contenderTarget,
 		},
 	}
 
-	svcManager := playground.NewManifest(exCtx, out, sessionID)
+	svcManager := NewManifest(exCtx, out, sessionID)
 
 	recipe.Apply(svcManager)
 
@@ -399,7 +401,7 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	if withPrometheus {
-		if err := playground.CreatePrometheusServices(svcManager, out); err != nil {
+		if err := CreatePrometheusServices(svcManager, out); err != nil {
 			return fmt.Errorf("failed to create prometheus services: %w", err)
 		}
 	}
@@ -412,7 +414,7 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	cfg := &playground.RunnerConfig{
+	cfg := &RunnerConfig{
 		Out:                  out,
 		Manifest:             svcManager,
 		BindHostPortsLocally: !bindExternal,
@@ -423,16 +425,16 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	if interactive {
-		i := playground.NewInteractiveDisplay(svcManager)
+		i := NewInteractiveDisplay(svcManager)
 		cfg.AddCallback(i.HandleUpdate)
 	}
 
 	// Add callback to log service updates in debug mode
-	cfg.AddCallback(func(serviceName string, update playground.TaskStatus) {
+	cfg.AddCallback(func(serviceName string, update TaskStatus) {
 		slog.Debug("service update", "service", serviceName, "status", update)
 	})
 
-	dockerRunner, err := playground.NewLocalRunner(cfg)
+	dockerRunner, err := NewLocalRunner(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
@@ -459,7 +461,7 @@ func runIt(recipe playground.Recipe) error {
 			svcInfo = append(svcInfo, "image", ss.Image, "tag", ss.Tag)
 			for _, p := range ports {
 				protocol := ""
-				if p.Protocol == playground.ProtocolUDP {
+				if p.Protocol == ProtocolUDP {
 					protocol = "/udp"
 				}
 				svcInfo = append(svcInfo, p.Name, fmt.Sprintf("%d/%d%s", p.Port, p.HostPort, protocol))
@@ -503,8 +505,8 @@ func runIt(recipe playground.Recipe) error {
 	watchdogErr := make(chan error, 1)
 	if watchdog {
 		go func() {
-			cfg.AddCallback(func(name string, status playground.TaskStatus) {
-				if status == playground.TaskStatusUnhealty {
+			cfg.AddCallback(func(name string, status TaskStatus) {
+				if status == TaskStatusUnhealty {
 					watchdogErr <- fmt.Errorf("watchdog failed: %w", fmt.Errorf("task '%s' is not healthy anymore", name))
 				}
 			})
