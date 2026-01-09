@@ -506,7 +506,7 @@ func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
-			"--target-peers", "0",
+			"--target-peers", "1",
 			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
 			"--execution-jwt", "/data/jwtsecret",
 			"--always-prepare-payload",
