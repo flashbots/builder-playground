@@ -904,3 +904,21 @@ func UseHealthmon(m *Manifest, s *Service) {
 			StartPeriod: 1 * time.Second,
 		})
 }
+
+// Fileserver serves genesis and testnet files over HTTP using Caddy.
+// This allows VMs or external clients to fetch configuration files.
+type Fileserver struct{}
+
+func (f *Fileserver) Apply(manifest *Manifest) {
+	manifest.NewService("fileserver").
+		WithImage("caddy").
+		WithTag("2-alpine").
+		WithArgs(
+			"caddy", "file-server",
+			"--root", "/data",
+			"--listen", `:{{Port "http" 8100}}`,
+			"--browse",
+		).
+		WithArtifact("/data/genesis.json", "genesis.json").
+		WithArtifact("/data/testnet", "testnet")
+}
