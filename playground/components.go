@@ -167,7 +167,11 @@ type BProxy struct {
 func (f *BProxy) Apply(manifest *Manifest) {
 	peers := []string{}
 	for _, peer := range f.Peers {
-		peers = append(peers, Connect(peer, "authrpc"))
+		if strings.HasPrefix(peer, "http") {
+			peers = append(peers, peer)
+		} else {
+			peers = append(peers, Connect(peer, "authrpc"))
+		}
 	}
 	service := manifest.NewService("bproxy").
 		WithImage("ghcr.io/flashbots/bproxy").
@@ -188,6 +192,7 @@ func (f *BProxy) Apply(manifest *Manifest) {
 			"--authrpc-peers", strings.Join(peers, ","),
 			"--authrpc-remove-backend-from-peers",
 			"--authrpc-use-priority-queue",
+			"--authrpc-extra-mirrored-jrpc-methods", "eth_sendRawTransaction",
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret")
 
