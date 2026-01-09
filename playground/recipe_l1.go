@@ -133,6 +133,8 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 	}
 
 	svcManager.RunContenderIfEnabled()
+
+	svcManager.AddService(&Fileserver{})
 }
 
 func (l *L1Recipe) Output(manifest *Manifest) map[string]interface{} {

@@ -506,7 +506,7 @@ func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
-			"--target-peers", "0",
+			"--target-peers", "1",
 			"--execution-endpoint", Connect(l.ExecutionNode, "authrpc"),
 			"--execution-jwt", "/data/jwtsecret",
 			"--always-prepare-payload",
@@ -906,4 +906,22 @@ func UseHealthmon(m *Manifest, s *Service, chain string) {
 			Retries:     20,
 			StartPeriod: 1 * time.Second,
 		})
+}
+
+// Fileserver serves genesis and testnet files over HTTP using Caddy.
+// This allows VMs or external clients to fetch configuration files.
+type Fileserver struct{}
+
+func (f *Fileserver) Apply(manifest *Manifest) {
+	manifest.NewService("fileserver").
+		WithImage("caddy").
+		WithTag("2-alpine").
+		WithArgs(
+			"caddy", "file-server",
+			"--root", "/data",
+			"--listen", `:{{Port "http" 8100}}`,
+			"--browse",
+		).
+		WithArtifact("/data/genesis.json", "genesis.json").
+		WithArtifact("/data/testnet", "testnet")
 }
