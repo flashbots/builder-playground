@@ -13,32 +13,28 @@ Deploy a full L1 stack with mev-boost and builder-hub.
 
 ## Architecture Diagram
 
-```dot
-digraph G {
-  rankdir=LR;
-  node [shape=record];
+```mermaid
+graph LR
+  el["el<br/>rpc:30303<br/>http:8545<br/>ws:8546<br/>authrpc:8551<br/>metrics:9090"]
+  el_healthmon["el_healthmon"]
+  beacon["beacon<br/>p2p:9000<br/>p2p:9000<br/>quic-p2p:9100<br/>http:3500"]
+  beacon_healthmon["beacon_healthmon"]
+  validator["validator"]
+  mev_boost_relay["mev-boost-relay<br/>http:5555"]
+  builder_hub_db["builder-hub-db<br/>postgres:5432"]
+  builder_hub_api["builder-hub-api<br/>http:8080<br/>admin:8081<br/>internal:8082<br/>metrics:8090"]
+  builder_hub_proxy["builder-hub-proxy<br/>http:8888"]
 
-  el [label="el|{rpc:30303|http:8545|ws:8546|authrpc:8551|metrics:9090}"];
-  el_healthmon [label="el_healthmon"];
-  beacon [label="beacon|{p2p:9000|p2p:9000|quic-p2p:9100|http:3500}"];
-  beacon_healthmon [label="beacon_healthmon"];
-  validator [label="validator"];
-  mev_boost_relay [label="mev-boost-relay|{http:5555}"];
-  builder_hub_db [label="builder-hub-db|{postgres:5432}"];
-  builder_hub_api [label="builder-hub-api|{http:8080|admin:8081|internal:8082|metrics:8090}"];
-  builder_hub_proxy [label="builder-hub-proxy|{http:8888}"];
-
-  el_healthmon -> el [label="http"];
-  beacon -> el [label="authrpc"];
-  beacon -> mev_boost_relay [label="http"];
-  beacon_healthmon -> beacon [label="http"];
-  validator -> beacon [label="http"];
-  mev_boost_relay -> beacon [label="http"];
-  builder_hub_api -> builder_hub_db [label="postgres"];
-  builder_hub_proxy -> builder_hub_api [label="http"];
-  mev_boost_relay -> beacon [style=dashed, color=gray, constraint=true, label="depends_on"];
-  builder_hub_api -> builder_hub_db [style=dashed, color=gray, constraint=true, label="depends_on"];
-  builder_hub_proxy -> builder_hub_api [style=dashed, color=gray, constraint=true, label="depends_on"];
-}
+  el_healthmon -->|http| el
+  beacon -->|authrpc| el
+  beacon -->|http| mev_boost_relay
+  beacon_healthmon -->|http| beacon
+  validator -->|http| beacon
+  mev_boost_relay -->|http| beacon
+  builder_hub_api -->|postgres| builder_hub_db
+  builder_hub_proxy -->|http| builder_hub_api
+  mev_boost_relay -.->|depends_on| beacon
+  builder_hub_api -.->|depends_on| builder_hub_db
+  builder_hub_proxy -.->|depends_on| builder_hub_api
 ```
 

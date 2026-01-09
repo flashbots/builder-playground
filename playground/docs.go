@@ -50,8 +50,8 @@ func GenerateDocs(recipes []Recipe) error {
 
 		// Dot graph section
 		md.WriteString("## Architecture Diagram\n\n")
-		md.WriteString("```dot\n")
-		md.WriteString(manifest.GenerateDotGraph())
+		md.WriteString("```mermaid\n")
+		md.WriteString(manifest.GenerateMermaidGraph())
 		md.WriteString("```\n\n")
 
 		// Write to file

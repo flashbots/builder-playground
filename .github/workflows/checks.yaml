@@ -135,7 +135,7 @@ jobs:
           go-version: 1.24
 
       - name: Generate documentation
-        run: go run main.go generate-docs
+        run: make generate-docs
 
       - name: Check for uncommitted changes
         run: |

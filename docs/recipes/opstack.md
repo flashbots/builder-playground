@@ -16,32 +16,28 @@ Deploy an OP stack.
 
 ## Architecture Diagram
 
-```dot
-digraph G {
-  rankdir=LR;
-  node [shape=record];
+```mermaid
+graph LR
+  el["el<br/>rpc:30303<br/>http:8545<br/>ws:8546<br/>authrpc:8551<br/>metrics:9090"]
+  el_healthmon["el_healthmon"]
+  beacon["beacon<br/>p2p:9000<br/>p2p:9000<br/>quic-p2p:9100<br/>http:3500"]
+  beacon_healthmon["beacon_healthmon"]
+  validator["validator"]
+  op_geth["op-geth<br/>http:8545<br/>ws:8546<br/>authrpc:8551<br/>rpc:30303<br/>metrics:6061"]
+  op_geth_healthmon["op-geth_healthmon"]
+  op_node["op-node<br/>metrics:7300<br/>http:8549<br/>p2p:9003<br/>p2p:9003"]
+  op_batcher["op-batcher"]
 
-  el [label="el|{rpc:30303|http:8545|ws:8546|authrpc:8551|metrics:9090}"];
-  el_healthmon [label="el_healthmon"];
-  beacon [label="beacon|{p2p:9000|p2p:9000|quic-p2p:9100|http:3500}"];
-  beacon_healthmon [label="beacon_healthmon"];
-  validator [label="validator"];
-  op_geth [label="op-geth|{http:8545|ws:8546|authrpc:8551|rpc:30303|metrics:6061}"];
-  op_geth_healthmon [label="op-geth_healthmon"];
-  op_node [label="op-node|{metrics:7300|http:8549|p2p:9003|p2p:9003}"];
-  op_batcher [label="op-batcher"];
-
-  el_healthmon -> el [label="http"];
-  beacon -> el [label="authrpc"];
-  beacon_healthmon -> beacon [label="http"];
-  validator -> beacon [label="http"];
-  op_geth_healthmon -> op_geth [label="http"];
-  op_node -> el [label="http"];
-  op_node -> beacon [label="http"];
-  op_node -> op_geth [label="authrpc"];
-  op_batcher -> el [label="http"];
-  op_batcher -> op_geth [label="http"];
-  op_batcher -> op_node [label="http"];
-}
+  el_healthmon -->|http| el
+  beacon -->|authrpc| el
+  beacon_healthmon -->|http| beacon
+  validator -->|http| beacon
+  op_geth_healthmon -->|http| op_geth
+  op_node -->|http| el
+  op_node -->|http| beacon
+  op_node -->|authrpc| op_geth
+  op_batcher -->|http| el
+  op_batcher -->|http| op_geth
+  op_batcher -->|http| op_node
 ```
 
