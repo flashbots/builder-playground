@@ -5,7 +5,7 @@ set -eu -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 RUNTIME_DIR="${SCRIPT_DIR}/.runtime"
-VM_IMAGE="${RUNTIME_DIR}/buildernet-vm.raw"
+VM_IMAGE="${RUNTIME_DIR}/buildernet-vm.qcow2"
 VM_DATA_DISK="${RUNTIME_DIR}/persistent.raw"
 PIDFILE="${RUNTIME_DIR}/qemu.pid"
 CONSOLE_LOG="${RUNTIME_DIR}/console.log"
@@ -39,7 +39,7 @@ qemu-system-x86_64 \
   -name buildernet-playground \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_VARS_4M.fd \
-  -drive format=raw,if=none,cache=none,id=osdisk,file="${VM_IMAGE}" \
+  -drive format=qcow2,if=none,cache=none,id=osdisk,file="${VM_IMAGE}" \
   -device nvme,drive=osdisk,serial=nvme-os,bootindex=0 \
   -enable-kvm -cpu host -m "${RAM}" -smp "${CPU}" -display none \
   -device virtio-scsi-pci,id=scsi0 \
