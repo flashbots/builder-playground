@@ -1,3 +1,11 @@
 disk_encryption:
   key: 5d7052c0c3aff5834f45e3f33aca0a55ef9f43ca9cf6c5c8e8375ab82564ddb6  # playground value
 instance_name: buildernet-playground-vm
+
+playground:
+  artifacts_url: http://10.0.2.2:8100
+  # Reth P2P bootnode
+  el_bootnode: "{{EL_BOOTNODE}}"
+  # Lighthouse libp2p multiaddr
+  # Format: /ip4/<IP>/tcp/<PORT>/p2p/<PEER_ID>
+  cl_libp2p_addr: "{{CL_LIBP2P_ADDR}}"
