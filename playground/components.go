@@ -86,7 +86,7 @@ func (o *OpRbuilder) Apply(manifest *Manifest) {
 		})
 
 	if manifest.ctx.Bootnode != nil {
-		service.WithArgs("--trusted-peers", manifest.ctx.Bootnode.Connect())
+		service.WithArgs("--bootnodes", manifest.ctx.Bootnode.Connect())
 	}
 
 	if o.Flashblocks {
@@ -152,7 +152,7 @@ func (f *FlashblocksRPC) Apply(manifest *Manifest) {
 
 	if manifest.ctx.Bootnode != nil {
 		service.WithArgs(
-			"--trusted-peers", manifest.ctx.Bootnode.Connect(),
+			"--bootnodes", manifest.ctx.Bootnode.Connect(),
 		)
 	}
 }
@@ -883,6 +883,38 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
 		})
+}
+
+type BootnodeProtocol string
+
+const (
+	BootnodeProtocolV5 BootnodeProtocol = "v5"
+)
+
+type Bootnode struct {
+	Protocol BootnodeProtocol
+	Enode    *EnodeAddr
+}
+
+func (b *Bootnode) Apply(manifest *Manifest) {
+	b.Enode = manifest.ctx.Output.GetEnodeAddr()
+
+	svc := manifest.NewService("bootnode").
+		WithImage("ghcr.io/paradigmxyz/reth").
+		WithTag("v1.9.3").
+		WithEntrypoint("/usr/local/bin/reth").
+		WithArgs(
+			"p2p", "bootnode",
+			"--addr", `0.0.0.0:{{Port "rpc" 30303}}`,
+			"--p2p-secret-key", "/data/p2p_key.txt",
+			"-vvvv",
+			"--color", "never",
+		).
+		WithArtifact("/data/p2p_key.txt", b.Enode.Artifact)
+
+	if b.Protocol == BootnodeProtocolV5 {
+		svc.WithArgs("--v5")
+	}
 }
 
 const (

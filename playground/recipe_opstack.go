@@ -86,12 +86,12 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 	externalBuilderRef := o.externalBuilder
 	peers := []string{}
 
-	opGeth := &OpGeth{}
-	svcManager.AddService(opGeth)
+	bootnode := &Bootnode{}
+	svcManager.AddService(bootnode)
 
 	svcManager.ctx.Bootnode = &BootnodeRef{
-		Service: "op-geth",
-		ID:      opGeth.Enode.NodeID(),
+		Service: "bootnode",
+		ID:      bootnode.Enode.NodeID(),
 	}
 
 	if o.externalBuilder == "op-reth" {
@@ -168,6 +168,7 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 		})
 	}
 
+	svcManager.AddService(&OpGeth{})
 	svcManager.AddService(&OpNode{
 		L1Node:   "el",
 		L1Beacon: "beacon",
