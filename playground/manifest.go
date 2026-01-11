@@ -149,7 +149,7 @@ func (b *BootnodeRef) Connect() string {
 	return ConnectEnode(b.Service, b.ID)
 }
 
-type ServiceGen interface {
+type Component interface {
 	Apply(manifest *Manifest)
 }
 
@@ -157,8 +157,8 @@ type ServiceReady interface {
 	Ready(service *Service) error
 }
 
-func (s *Manifest) AddService(srv ServiceGen) {
-	srv.Apply(s)
+func (s *Manifest) AddComponent(component Component) {
+	component.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -654,6 +654,6 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
 	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddService(svcManager.ctx.Contender.Contender())
+		svcManager.AddComponent(svcManager.ctx.Contender.Contender())
 	}
 }
