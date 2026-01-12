@@ -42,8 +42,6 @@ func (b *BuilderNetRecipe) Apply(svcManager *Manifest) {
 	b.l1Recipe.Apply(svcManager)
 
 	svcManager.AddService(&BuilderHub{})
-
-	svcManager.RunContenderIfEnabled()
 }
 
 func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {

@@ -131,8 +131,6 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 			ValidationServer: mevBoostValidationServer,
 		})
 	}
-
-	svcManager.RunContenderIfEnabled()
 }
 
 func (l *L1Recipe) Output(manifest *Manifest) map[string]interface{} {

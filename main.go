@@ -39,9 +39,6 @@ var (
 	labels            playground.MapStringFlag
 	disableLogs       bool
 	platform          string
-	contenderEnabled  bool
-	contenderArgs     []string
-	contenderTarget   string
 	detached          bool
 	prefundedAccounts []string
 )
@@ -295,9 +292,6 @@ func main() {
 		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
 		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
 		recipeCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
-		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
-		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
-		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
 		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
 		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present)")
 
@@ -362,12 +356,6 @@ func runIt(recipe playground.Recipe) error {
 
 	exCtx := &playground.ExContext{
 		LogLevel: logLevel,
-		// if contender.tps is set, assume contender is enabled
-		Contender: &playground.ContenderContext{
-			Enabled:     contenderEnabled,
-			ExtraArgs:   contenderArgs,
-			TargetChain: contenderTarget,
-		},
 	}
 
 	svcManager := playground.NewManifest(exCtx, out, sessionID)

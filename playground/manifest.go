@@ -113,17 +113,6 @@ func (l *LogLevel) Unmarshal(s string) error {
 	return nil
 }
 
-type ContenderContext struct {
-	// Run `contender spam` automatically once all playground services are running.
-	Enabled bool
-
-	// Provide additional args to contender's CLI.
-	ExtraArgs []string
-
-	// Override the default target chain for contender to spam.
-	TargetChain string
-}
-
 // Execution context
 type ExContext struct {
 	LogLevel LogLevel
@@ -136,8 +125,6 @@ type ExContext struct {
 	// Bootnode reference for EL nodes.
 	// TODO: Extend for CL nodes too
 	Bootnode *BootnodeRef
-
-	Contender *ContenderContext
 }
 
 type BootnodeRef struct {
@@ -650,10 +637,4 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 		dst: outputFolder,
 	}
 	return &manifestData, nil
-}
-
-func (svcManager *Manifest) RunContenderIfEnabled() {
-	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddService(svcManager.ctx.Contender.Contender())
-	}
 }

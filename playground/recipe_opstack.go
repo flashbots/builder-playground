@@ -189,11 +189,6 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 			L2RPC:            "op-geth",
 		})
 	}
-
-	if svcManager.ctx.Contender.TargetChain == "" {
-		svcManager.ctx.Contender.TargetChain = "op-geth"
-	}
-	svcManager.RunContenderIfEnabled()
 }
 
 func (o *OpRecipe) Output(manifest *Manifest) map[string]interface{} {

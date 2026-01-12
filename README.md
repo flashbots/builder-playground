@@ -77,37 +77,6 @@ Here's a complete example showing how to run the L1 recipe with the latest fork 
 $ builder-playground start l1 --latest-fork --output ~/my-builder-testnet --genesis-delay 15 --log-level debug
 ```
 
-### Generate transaction flow with contender
-
-builder-playground can generate transaction flow to its nodes with [contender](https://github.com/flashbots/contender). Just pass the `--contender` flag to send spam transactions that fill each block:
-
-```bash
-go run main.go start l1 --contender
-```
-
-The default contender flags are as follows:
-
-- `--min-balance "10 ether"` -- gives each spammer account 10 ETH.
-- `--tps 20` -- sends 20 transactions per second.
-- `-l` -- runs spammer indefinitely (pass `-l <num>` to set a finite number of spam runs).
-
-To add or modify contender flags, use `--contender.arg`:
-
-```bash
-# run the builtin erc20 scenario instead of the default "fill block" scenario, at 100 TPS
-go run main.go start l1 --contender \
-  --contender.arg "--tps 100" \
-  --contender.arg "erc20"
-```
-
-To read about more contender flag options, see the [contender CLI docs](https://github.com/flashbots/contender/blob/main/docs/cli.md). To see all available flags, [install contender](https://github.com/flashbots/contender/blob/main/docs/installation.md) or [run it in docker](https://github.com/flashbots/contender?tab=readme-ov-file#docker-instructions), and run `contender --help`.
-
-To see what contender is doing internally, check its docker logs:
-
-```bash
-docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
-```
-
 ## Common Options
 
 - `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.playground/devnet`
@@ -119,10 +88,6 @@ docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
 - `--labels` (key=val): Custom labels to apply to your deployment.
 - `--disable-logs` (bool): Disable the logs for the services. Defaults to `false`.
 - `--prefunded-accounts` (string, repeated): Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present).
-- `--contender` (bool): Enable [contender](https://github.com/flashbots/contender) spammer. Required to use other contender flags.
-  - `--contender.arg` (string): Pass custom args to the contender CLI.
-  Example: `--contender.arg "--tpb 20"`
-  - `--contender.target` (string): Change the default target node to spam. On the `l1` recipe, the default is "el", and on `opstack` it's "op-geth".
 - `--with-prometheus` (bool); Whether to deploy a Prometheus server and gather metrics. Defaults to `false`.
 
 To stop the playground, press `Ctrl+C`.

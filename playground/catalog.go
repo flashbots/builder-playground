@@ -21,7 +21,6 @@ func init() {
 	register(&nullService{})
 	register(&OpRbuilder{})
 	register(&FlashblocksRPC{})
-	register(&Contender{})
 	register(&BProxy{})
 	register(&WebsocketProxy{})
 	register(&BuilderHub{})
