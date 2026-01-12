@@ -1,3 +1,51 @@
+bidding_service:
+  config: |
+    slot_delta_to_start_bidding_ms = -1000
+    subsidy = "0.01"
+
+rbuilder:
+  enabled: true
+  # blocklist: ""
+  evm_caching_enable: true
+  ignore_blobs: false
+  extra_data: BuilderNet (playground)
+  require_non_empty_blocklist: false
+  root_hash_threads: 4
+  # 0 for debugging
+  watchdog_timeout_sec: 0
+  max_order_execution_duration_warning_us: 50000
+  time_to_keep_mempool_txs_secs: 300
+  live_builders: '["mgp-ordering", "mp-ordering"]'
+  system_recipient_allowlist: '[]'
+  builders: |
+    [[builders]]
+    name = "mgp-ordering"
+    algo = "ordering-builder"
+    discard_txs = true
+    sorting = "mev-gas-price"
+    failed_order_retries = 1
+    drop_failed_orders = true
+
+    [[builders]]
+    name = "mp-ordering"
+    algo = "ordering-builder"
+    discard_txs = true
+    sorting = "max-profit"
+    failed_order_retries = 1
+    drop_failed_orders = true
+
+  relays: |
+    [[relays]]
+    name = "playground"
+    url = "http://10.0.2.2:5555"
+
+  relay_bid_scrapers: |
+    [[relay_bid_scrapers]]
+    type = "external-ws"
+    name = "playground"
+    url = "ws://10.0.2.2:5555"
+    auth_header = ""
+
 disk_encryption:
   key: 5d7052c0c3aff5834f45e3f33aca0a55ef9f43ca9cf6c5c8e8375ab82564ddb6  # playground value
 instance_name: buildernet-playground-vm
