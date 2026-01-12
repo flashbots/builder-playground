@@ -2,6 +2,7 @@ package playground
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -827,7 +828,10 @@ func (c *Contender) Apply(manifest *Manifest) {
 	}
 }
 
-type BuilderHub struct{}
+type BuilderHub struct {
+	BuilderIP     string
+	BuilderConfig string
+}
 
 func (b *BuilderHub) Apply(manifest *Manifest) {
 	// Database service
@@ -848,7 +852,7 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 
 	// API service
-	manifest.NewService("builder-hub-api").
+	apiSrv := manifest.NewService("builder-hub-api").
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("0.3.1-alpha1").
 		DependsOnHealthy("builder-hub-db").
@@ -872,6 +876,13 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			StartPeriod: 1 * time.Second,
 		})
 
+	apiSrv.WithPostHook(&postHook{
+		Name: "register-builder",
+		Action: func(s *Service) error {
+			return registerBuilderHook(manifest, s, b)
+		},
+	})
+
 	// Proxy service
 	manifest.NewService("builder-hub-proxy").
 		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
@@ -886,6 +897,44 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
 		})
+}
+
+func registerBuilderHook(manifest *Manifest, s *Service, b *BuilderHub) error {
+	genesis, err := manifest.out.Read("genesis.json")
+	if err != nil {
+		return err
+	}
+
+	configYaml, err := os.ReadFile(b.BuilderConfig)
+	if err != nil {
+		return err
+	}
+
+	// we need to convert the config to JSON because it is what the API server accepts
+	configJSON, err := yamlToJson([]byte(configYaml))
+	if err != nil {
+		return err
+	}
+
+	overrideConfig := map[string]interface{}{
+		"genesis": genesis,
+	}
+	if configJSON, err = overrideJSON(configJSON, overrideConfig); err != nil {
+		return err
+	}
+
+	endpoint := fmt.Sprintf("http://localhost:%d", s.MustGetPort("admin").HostPort)
+	input := &builderHubRegisterBuilderInput{
+		BuilderID:     "builder",
+		BuilderIP:     b.BuilderIP,
+		MeasurementID: "test",
+		Network:       "playground",
+		Config:        string(configJSON),
+	}
+	if err := registerBuilder(endpoint, input); err != nil {
+		return err
+	}
+	return nil
 }
 
 const (

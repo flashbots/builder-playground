@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/goccy/go-yaml"
 	flag "github.com/spf13/pflag"
 )
 
@@ -16,6 +17,9 @@ var _ Recipe = &BuilderNetRecipe{}
 type BuilderNetRecipe struct {
 	// Embed the L1Recipe to reuse its functionality
 	l1Recipe L1Recipe
+
+	builderIP     string
+	builderConfig string
 }
 
 func (b *BuilderNetRecipe) Name() string {
@@ -29,6 +33,8 @@ func (b *BuilderNetRecipe) Description() string {
 func (b *BuilderNetRecipe) Flags() *flag.FlagSet {
 	// Reuse the L1Recipe flags
 	flags := b.l1Recipe.Flags()
+	flags.StringVar(&b.builderIP, "builder-ip", "127.0.0.1", "IP address of the external builder to register in BuilderHub")
+	flags.StringVar(&b.builderConfig, "builder-config", "", "Builder config in YAML format")
 	return flags
 }
 
@@ -41,7 +47,10 @@ func (b *BuilderNetRecipe) Apply(svcManager *Manifest) {
 	// Start with the L1Recipe manifest
 	b.l1Recipe.Apply(svcManager)
 
-	svcManager.AddComponent(&BuilderHub{})
+	svcManager.AddComponent(&BuilderHub{
+		BuilderIP:     b.builderIP,
+		BuilderConfig: b.builderConfig,
+	})
 
 	svcManager.RunContenderIfEnabled()
 }
@@ -159,4 +168,26 @@ func registerBuilder(httpEndpoint string, input *builderHubRegisterBuilderInput)
 	}
 
 	return nil
+}
+
+// YAMLToJSON converts a YAML string to a JSON string
+func yamlToJson(yamlStr []byte) ([]byte, error) {
+	// Unmarshal YAML into a map
+	var data interface{}
+	err := yaml.Unmarshal(yamlStr, &data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)
+	}
+
+	if data == nil {
+		return []byte("{}"), nil
+	}
+
+	// Convert to JSON
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+
+	return jsonBytes, nil
 }

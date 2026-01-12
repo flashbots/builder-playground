@@ -477,6 +477,12 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
+	// run post hook operations
+	if err := svcManager.ExecutePostHookActions(); err != nil {
+		dockerRunner.Stop(keepFlag)
+		return fmt.Errorf("failed to execute post-hook operations: %w", err)
+	}
+
 	slog.Info("All services are healthy! Ready to accept transactions. 🚀", "session-id", svcManager.ID)
 
 	// get the output from the recipe
