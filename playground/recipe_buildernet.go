@@ -33,8 +33,8 @@ func (b *BuilderNetRecipe) Description() string {
 func (b *BuilderNetRecipe) Flags() *flag.FlagSet {
 	// Reuse the L1Recipe flags
 	flags := b.l1Recipe.Flags()
-	flags.StringVar(&b.builderIP, "builder-ip", "127.0.0.1", "Ip of the external builder to register in BuilderHup")
-	flags.StringVar(&b.builderConfig, "builder-config", "", "Config in YAML for the builder")
+	flags.StringVar(&b.builderIP, "builder-ip", "127.0.0.1", "IP address of the external builder to register in BuilderHub")
+	flags.StringVar(&b.builderConfig, "builder-config", "", "Builder config in YAML format")
 	return flags
 }
 
