@@ -164,7 +164,7 @@ func newTestFramework(t *testing.T) *testFramework {
 	return &testFramework{t: t}
 }
 
-func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
+func (tt *testFramework) test(component Component, args []string) *Manifest {
 	t := tt.t
 
 	// use the name of the repo and the current timestamp to generate
@@ -189,7 +189,7 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 		homeDir: filepath.Join(e2eTestDir, "artifacts"),
 	}
 
-	if recipe, ok := s.(Recipe); ok {
+	if recipe, ok := component.(Recipe); ok {
 		// We have to parse the flags since they are used to set the
 		// default values for the recipe inputs
 		err := recipe.Flags().Parse(args)
@@ -200,7 +200,7 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	}
 
 	svcManager := NewManifest(exCtx, o)
-	s.Apply(svcManager)
+	component.Apply(svcManager)
 
 	require.NoError(t, svcManager.Validate())
 
