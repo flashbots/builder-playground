@@ -11,6 +11,19 @@ Changes are made in two repos:
 
 There are no plans of using [buildernet-playground](https://github.com/flashbots/buildernet-playground) repo.
 
+## Start playground
+
+Start playground with: `--bind-external` (expose ports to the VM) and `--contender` (create transactions)
+
+```bash
+builder-playground \
+  start buildernet \
+  --bind-external \
+  --output ".playground-home" \
+  --contender \
+  --detached fryd-vm-builder
+```
+
 ## First Time Setup
 
 ```bash
