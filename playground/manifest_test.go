@@ -68,7 +68,7 @@ func TestManifestWriteRead(t *testing.T) {
 	err := builder.Build(out)
 	assert.NoError(t, err)
 
-	manifest := NewManifest(&ExContext{Contender: &ContenderContext{}}, out)
+	manifest := NewManifest(&ExContext{}, out)
 	recipe.Apply(manifest)
 	assert.NoError(t, manifest.SaveJson())
 

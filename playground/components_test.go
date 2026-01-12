@@ -179,9 +179,6 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 
 	exCtx := &ExContext{
 		LogLevel: LevelDebug,
-		Contender: &ContenderContext{
-			Enabled: false,
-		},
 	}
 
 	o := &output{
