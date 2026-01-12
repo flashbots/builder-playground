@@ -251,6 +251,14 @@ var listCmd = &cobra.Command{
 	},
 }
 
+var generateDocsCmd = &cobra.Command{
+	Use:   "generate-docs",
+	Short: "Generate documentation for all recipes",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return playground.GenerateDocs(recipes)
+	},
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version",
@@ -317,6 +325,7 @@ func main() {
 	debugCmd.AddCommand(probeCmd)
 	debugCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(debugCmd)
+	rootCmd.AddCommand(generateDocsCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
