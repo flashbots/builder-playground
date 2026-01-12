@@ -86,6 +86,11 @@ func NewManifest(ctx *ExContext, out *output, name ...string) *Manifest {
 	}
 }
 
+// GetContext returns the execution context for the manifest
+func (m *Manifest) GetContext() *ExContext {
+	return m.ctx
+}
+
 type LogLevel string
 
 var (
