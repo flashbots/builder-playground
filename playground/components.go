@@ -13,7 +13,10 @@ import (
 	"github.com/flashbots/go-boost-utils/utils"
 )
 
-var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
+var (
+	defaultJWTToken          = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
+	latestPlaygroundUtilsTag = "cc6f172493d7ef6b88a5b7895f4b8619806c99f9"
+)
 
 type RollupBoost struct {
 	ELNode  string
@@ -563,7 +566,7 @@ type ClProxy struct {
 func (c *ClProxy) Apply(manifest *Manifest) {
 	manifest.NewService("cl-proxy").
 		WithImage("docker.io/flashbots/playground-utils").
-		WithTag("latest").
+		WithTag(latestPlaygroundUtilsTag).
 		WithEntrypoint("cl-proxy").
 		WithArgs(
 			"--primary-builder", Connect(c.PrimaryBuilder, "authrpc"),
@@ -580,7 +583,7 @@ type MevBoostRelay struct {
 func (m *MevBoostRelay) Apply(manifest *Manifest) {
 	service := manifest.NewService("mev-boost-relay").
 		WithImage("docker.io/flashbots/playground-utils").
-		WithTag("latest").
+		WithTag(latestPlaygroundUtilsTag).
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
 		WithEntrypoint("mev-boost-relay").
 		DependsOnHealthy(m.BeaconClient).
@@ -945,7 +948,7 @@ func UseHealthmon(m *Manifest, s *Service, chain string) {
 	s.WithLabel(healthCheckSidecarLabel, healthmonName)
 	m.NewService(healthmonName).
 		WithImage("docker.io/flashbots/playground-utils").
-		WithTag("latest").
+		WithTag(latestPlaygroundUtilsTag).
 		WithEntrypoint("healthmon").
 		WithArgs("--chain", chain, "--url", Connect(s.Name, "http")).
 		WithReady(ReadyCheck{

@@ -150,7 +150,7 @@ func (b *BootnodeRef) Connect() string {
 	return ConnectEnode(b.Service, b.ID)
 }
 
-type ServiceGen interface {
+type Component interface {
 	Apply(manifest *Manifest)
 }
 
@@ -158,8 +158,8 @@ type ServiceReady interface {
 	Ready(service *Service) error
 }
 
-func (s *Manifest) AddService(srv ServiceGen) {
-	srv.Apply(s)
+func (s *Manifest) AddComponent(component Component) {
+	component.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -591,6 +591,55 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 	return res, portRef, nodeRef
 }
 
+func (s *Manifest) GenerateMermaidGraph() string {
+	var b strings.Builder
+	b.WriteString("graph LR\n")
+
+	// Add nodes (services) with their ports as labels
+	for _, ss := range s.Services {
+		var ports []string
+		for _, p := range ss.Ports {
+			ports = append(ports, fmt.Sprintf("%s:%d", p.Name, p.Port))
+		}
+		portLabel := ""
+		if len(ports) > 0 {
+			portLabel = "<br/>" + strings.Join(ports, "<br/>")
+		}
+		// Sanitize node name for Mermaid
+		nodeName := strings.ReplaceAll(ss.Name, "-", "_")
+		b.WriteString(fmt.Sprintf("  %s[\"%s%s\"]\n", nodeName, ss.Name, portLabel))
+	}
+
+	b.WriteString("\n")
+
+	// Add edges (connections between services)
+	for _, ss := range s.Services {
+		sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
+		for _, ref := range ss.NodeRefs {
+			targetNode := strings.ReplaceAll(ref.Service, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -->|%s| %s\n",
+				sourceNode,
+				ref.PortLabel,
+				targetNode,
+			))
+		}
+	}
+
+	// Add edges for depends_on
+	for _, ss := range s.Services {
+		for _, dep := range ss.DependsOn {
+			sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
+			targetNode := strings.ReplaceAll(dep.Name, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -.->|depends_on| %s\n",
+				sourceNode,
+				targetNode,
+			))
+		}
+	}
+
+	return b.String()
+}
+
 func (s *Manifest) GenerateDotGraph() string {
 	var b strings.Builder
 	b.WriteString("digraph G {\n")
@@ -679,6 +728,6 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
 	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddService(svcManager.ctx.Contender.Contender())
+		svcManager.AddComponent(svcManager.ctx.Contender.Contender())
 	}
 }

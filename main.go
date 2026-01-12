@@ -132,12 +132,17 @@ var inspectCmd = &cobra.Command{
 }
 
 var debugCmd = &cobra.Command{
-	Use: "debug",
+	Use:   "debug",
+	Short: "Debug commands for running services",
 }
 
 var probeCmd = &cobra.Command{
-	Use: "probe",
+	Use:   "probe <service>",
+	Short: "Execute a service's health check manually",
+	Long:  "Manually runs the configured Docker health check command for a service and displays the result.",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		serviceName := args[0]
 
 		resp, err := playground.ExecuteHealthCheckManually(serviceName)
@@ -246,6 +251,14 @@ var listCmd = &cobra.Command{
 	},
 }
 
+var generateDocsCmd = &cobra.Command{
+	Use:   "generate-docs",
+	Short: "Generate documentation for all recipes",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return playground.GenerateDocs(recipes)
+	},
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version",
@@ -312,6 +325,7 @@ func main() {
 	debugCmd.AddCommand(probeCmd)
 	debugCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(debugCmd)
+	rootCmd.AddCommand(generateDocsCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
