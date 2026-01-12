@@ -873,14 +873,12 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			StartPeriod: 1 * time.Second,
 		})
 
-	if b.BuilderConfig != "" {
-		apiSrv.WithPostHook(&postHook{
-			Name: "register-builder",
-			Action: func(s *Service) error {
-				return registerBuilderHook(manifest, s, b)
-			},
-		})
-	}
+	apiSrv.WithPostHook(&postHook{
+		Name: "register-builder",
+		Action: func(s *Service) error {
+			return registerBuilderHook(manifest, s, b)
+		},
+	})
 
 	// Proxy service
 	manifest.NewService("builder-hub-proxy").
