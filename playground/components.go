@@ -829,7 +829,6 @@ func (c *Contender) Apply(manifest *Manifest) {
 }
 
 type BuilderHub struct {
-	BuilderIP     string
 	BuilderConfig string
 }
 
@@ -851,10 +850,17 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			StartPeriod: 2 * time.Second,
 		})
 
+	builderConfig, err := os.ReadFile(b.BuilderConfig)
+	if err != nil {
+		panic(err) // handle
+	}
+	manifest.out.WriteFile("builder-config", builderConfig)
+
 	// API service
-	apiSrv := manifest.NewService("builder-hub-api").
+	manifest.NewService("builder-hub-api").
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("0.3.1-alpha1").
+		WithArgs("--builder-config", "/data/builder-config").
 		DependsOnHealthy("builder-hub-db").
 		WithPort("http", 8080).
 		WithPort("admin", 8081).
@@ -868,6 +874,7 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		WithEnv("METRICS_ADDR", "0.0.0.0:"+`{{Port "metrics" 8090}}`).
 		WithEnv("DISABLE_ADMIN_AUTH", "1").
 		WithEnv("ALLOW_EMPTY_MEASUREMENTS", "1").
+		WithArtifact("/data/builder-config", "builder-config").
 		WithReady(ReadyCheck{
 			QueryURL:    "http://localhost:8080",
 			Interval:    1 * time.Second,
@@ -875,13 +882,6 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
 		})
-
-	apiSrv.WithPostHook(&postHook{
-		Name: "register-builder",
-		Action: func(s *Service) error {
-			return registerBuilderHook(manifest, s, b)
-		},
-	})
 
 	// Proxy service
 	manifest.NewService("builder-hub-proxy").
@@ -897,44 +897,6 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
 		})
-}
-
-func registerBuilderHook(manifest *Manifest, s *Service, b *BuilderHub) error {
-	genesis, err := manifest.out.Read("genesis.json")
-	if err != nil {
-		return err
-	}
-
-	configYaml, err := os.ReadFile(b.BuilderConfig)
-	if err != nil {
-		return err
-	}
-
-	// we need to convert the config to JSON because it is what the API server accepts
-	configJSON, err := yamlToJson([]byte(configYaml))
-	if err != nil {
-		return err
-	}
-
-	overrideConfig := map[string]interface{}{
-		"genesis": genesis,
-	}
-	if configJSON, err = overrideJSON(configJSON, overrideConfig); err != nil {
-		return err
-	}
-
-	endpoint := fmt.Sprintf("http://localhost:%d", s.MustGetPort("admin").HostPort)
-	input := &builderHubRegisterBuilderInput{
-		BuilderID:     "builder",
-		BuilderIP:     b.BuilderIP,
-		MeasurementID: "test",
-		Network:       "playground",
-		Config:        string(configJSON),
-	}
-	if err := registerBuilder(endpoint, input); err != nil {
-		return err
-	}
-	return nil
 }
 
 const (
