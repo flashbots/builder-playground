@@ -781,7 +781,7 @@ func (c *Contender) Apply(manifest *Manifest) {
 		if (flag == "--infinite" || flag == "--indefinite" || flag == "--indefinitely" || flag == "--infinite") && seen["--forever"] {
 			return true
 		}
-		if (flag == "-r" || flag == "--rpc-url") && (seen["-r"] || seen["--rpc-url"]) {
+		if (flag == "-r" && seen["--rpc-url"]) || (flag == "--rpc-url" && seen["-r"]) {
 			return true
 		}
 		if (flag == "--tpb" || flag == "--txs-per-second" || flag == "--tps" || flag == "--txs-per-block") &&
