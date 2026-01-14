@@ -44,6 +44,7 @@ var (
 	contenderTarget   string
 	detached          bool
 	prefundedAccounts []string
+	followFlag        bool
 )
 
 var rootCmd = &cobra.Command{
@@ -162,6 +163,7 @@ var logsCmd = &cobra.Command{
 	Short: "Show logs for a service",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := mainctx.Get()
+		follow := followFlag
 
 		switch len(args) {
 		case 1:
@@ -173,18 +175,13 @@ var logsCmd = &cobra.Command{
 				cmd.SilenceUsage = true
 				fmt.Println("multiple sessions found: please use 'list' to see all and provide like 'logs <session-name> <service-name>'")
 				return fmt.Errorf("invalid amount of args")
-			}
-			if len(sessions) == 1 {
-				if err := playground.Logs(ctx, "", args[0]); err != nil && !strings.Contains(err.Error(), "signal") {
+			} else {
+				if err := playground.Logs(ctx, "", args[0], follow); err != nil && !strings.Contains(err.Error(), "signal") {
 					return fmt.Errorf("failed to show logs: %w", err)
 				}
 			}
-			if err := playground.Logs(ctx, "", args[0]); err != nil && !strings.Contains(err.Error(), "signal") {
-				return fmt.Errorf("failed to show logs: %w", err)
-			}
-
 		case 2:
-			if err := playground.Logs(ctx, args[0], args[1]); err != nil && !strings.Contains(err.Error(), "signal") {
+			if err := playground.Logs(ctx, args[0], args[1], follow); err != nil && !strings.Contains(err.Error(), "signal") {
 				return fmt.Errorf("failed to show logs: %w", err)
 			}
 
@@ -314,6 +311,8 @@ func main() {
 
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(inspectCmd)
+
+	logsCmd.Flags().BoolVarP(&followFlag, "follow", "f", false, "Stream logs continuously instead of displaying and exiting")
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(versionCmd)
@@ -456,15 +455,16 @@ func runIt(recipe playground.Recipe) error {
 				return ports[i].Name < ports[j].Name
 			})
 
-			var portsStr []any
+			var svcInfo []any
+			svcInfo = append(svcInfo, "image", ss.Image, "tag", ss.Tag)
 			for _, p := range ports {
 				protocol := ""
 				if p.Protocol == playground.ProtocolUDP {
 					protocol = "/udp"
 				}
-				portsStr = append(portsStr, p.Name, fmt.Sprintf("%d/%d%s", p.Port, p.HostPort, protocol))
+				svcInfo = append(svcInfo, p.Name, fmt.Sprintf("%d/%d%s", p.Port, p.HostPort, protocol))
 			}
-			slog.Info("• "+ss.Name, portsStr...)
+			slog.Info("• "+ss.Name, svcInfo...)
 		}
 		log.Println()
 	}

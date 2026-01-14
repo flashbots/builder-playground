@@ -348,7 +348,7 @@ func overrideJSON(jsonData []byte, overrides map[string]interface{}) ([]byte, er
 	mergeMap(original, overrides)
 
 	// Marshal back to JSON
-	result, err := json.Marshal(original)
+	result, err := json.MarshalIndent(original, "", " ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal modified JSON: %w", err)
 	}

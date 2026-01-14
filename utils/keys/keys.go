@@ -1,11 +1,10 @@
 package keys
 
 import (
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-
-	_ "embed"
 
 	"github.com/OffchainLabs/prysm/v6/crypto/bls"
 	"github.com/hashicorp/go-uuid"
