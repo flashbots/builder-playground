@@ -455,15 +455,16 @@ func runIt(recipe playground.Recipe) error {
 				return ports[i].Name < ports[j].Name
 			})
 
-			var portsStr []any
+			var svcInfo []any
+			svcInfo = append(svcInfo, "image", ss.Image, "tag", ss.Tag)
 			for _, p := range ports {
 				protocol := ""
 				if p.Protocol == playground.ProtocolUDP {
 					protocol = "/udp"
 				}
-				portsStr = append(portsStr, p.Name, fmt.Sprintf("%d/%d%s", p.Port, p.HostPort, protocol))
+				svcInfo = append(svcInfo, p.Name, fmt.Sprintf("%d/%d%s", p.Port, p.HostPort, protocol))
 			}
-			slog.Info("• "+ss.Name, portsStr...)
+			slog.Info("• "+ss.Name, svcInfo...)
 		}
 		log.Println()
 	}
