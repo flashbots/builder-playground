@@ -27,7 +27,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
@@ -60,7 +60,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
@@ -78,7 +78,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
@@ -99,7 +99,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ^1.24
+          go-version: 1.25
 
       - name: Download dependencies
         run: go mod download
@@ -132,7 +132,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Generate documentation
         run: make generate-docs

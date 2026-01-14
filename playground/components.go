@@ -397,7 +397,7 @@ type RethEL struct {
 var rethELRelease = &release{
 	Name:    "reth",
 	Org:     "paradigmxyz",
-	Version: "v1.4.8",
+	Version: "v1.9.3",
 	Arch: func(goos, goarch string) string {
 		if goos == "linux" {
 			return "x86_64-unknown-linux-gnu"
@@ -431,7 +431,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 	// start the reth el client
 	svc := manifest.NewService("el").
 		WithImage("ghcr.io/paradigmxyz/reth").
-		WithTag("v1.8.2").
+		WithTag("v1.9.3").
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",

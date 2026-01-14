@@ -17,16 +17,15 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/OffchainLabs/prysm/v6/config/params"
-	"github.com/OffchainLabs/prysm/v6/crypto/bls"
-	"github.com/OffchainLabs/prysm/v6/runtime/interop"
-	"github.com/OffchainLabs/prysm/v6/runtime/version"
+	"github.com/OffchainLabs/prysm/v7/config/params"
+	"github.com/OffchainLabs/prysm/v7/crypto/bls"
+	"github.com/OffchainLabs/prysm/v7/runtime/interop"
+	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -166,7 +165,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		return err
 	}
 
-	genesisTime := uint64(time.Now().Add(time.Duration(b.genesisDelay) * time.Second).Unix())
+	genesisTime := time.Now().Add(time.Duration(b.genesisDelay) * time.Second)
 	config := params.BeaconConfig()
 
 	gen := interop.GethTestnetGenesis(genesisTime, config)
@@ -192,9 +191,9 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	var v int
 	if b.applyLatestL1Fork {
-		v = version.Electra
+		v = version.Fulu
 	} else {
-		v = version.Deneb
+		v = version.Electra
 	}
 
 	slog.Debug("Generating keys...")
@@ -227,7 +226,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	slog.Debug("Writing artifacts...")
 	err = out.WriteBatch(map[string]interface{}{
-		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
+		"testnet/config.yaml":                 params.ConfigToYaml(config),
 		"testnet/genesis.ssz":                 state,
 		"genesis.json":                        gen,
 		"jwtsecret":                           defaultJWTToken,
@@ -244,7 +243,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	if b.l2Enabled {
 		// We have to start slightly ahead of L1 genesis time
-		opTimestamp := genesisTime + 2
+		opTimestamp := uint64(genesisTime.Unix()) + 2
 
 		// If the latest fork is applied, convert the time to a fork time.
 		// If the time is 0, apply on genesis, the fork time is zero.
@@ -628,51 +627,6 @@ func GetHomeDir() (string, error) {
 	}
 
 	return customHomeDir, nil
-}
-
-func convert(config *params.BeaconChainConfig) ([]byte, error) {
-	val := reflect.ValueOf(config).Elem()
-
-	vals := []string{}
-	for i := 0; i < val.NumField(); i++ {
-		// only encode the public fields with tag 'yaml'
-		tag := val.Type().Field(i).Tag.Get("yaml")
-		if tag == "" {
-			continue
-		}
-
-		// decode the type of the value
-		typ := val.Field(i).Type()
-
-		var resTyp string
-		if isByteArray(typ) || isByteSlice(typ) {
-			resTyp = "0x" + hex.EncodeToString(val.Field(i).Bytes())
-		} else {
-			// basic types
-			switch typ.Kind() {
-			case reflect.String:
-				resTyp = val.Field(i).String()
-			case reflect.Uint8, reflect.Uint64:
-				resTyp = fmt.Sprintf("%d", val.Field(i).Uint())
-			case reflect.Int:
-				resTyp = fmt.Sprintf("%d", val.Field(i).Int())
-			default:
-				panic(fmt.Sprintf("BUG: unsupported type, tag '%s', err: '%s'", tag, val.Field(i).Kind()))
-			}
-		}
-
-		vals = append(vals, fmt.Sprintf("%s: %s", tag, resTyp))
-	}
-
-	return []byte(strings.Join(vals, "\n")), nil
-}
-
-func isByteArray(t reflect.Type) bool {
-	return t.Kind() == reflect.Array && t.Elem().Kind() == reflect.Uint8
-}
-
-func isByteSlice(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
 }
 
 type EnodeAddr struct {
