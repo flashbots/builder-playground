@@ -89,7 +89,7 @@ The default contender flags are as follows:
 
 - `--min-balance "10 ether"` -- gives each spammer account 10 ETH.
 - `--tps 20` -- sends 20 transactions per second.
-- `-l` -- runs spammer indefinitely (pass `-l <num>` to set a finite number of spam runs).
+- `--forever` -- runs spammer indefinitely.
 
 To add or modify contender flags, use `--contender.arg`:
 

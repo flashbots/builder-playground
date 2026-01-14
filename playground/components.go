@@ -748,7 +748,7 @@ func (c *Contender) Apply(manifest *Manifest) {
 	}
 
 	defaults := []opt{
-		{name: "-l"},
+		{name: "--forever"},
 		{name: "--min-balance", val: "10 ether", hasVal: true},
 		{name: "-r", val: Connect(targetChain, "http"), hasVal: true},
 		{name: "--tps", val: "20", hasVal: true},
@@ -773,15 +773,15 @@ func (c *Contender) Apply(manifest *Manifest) {
 		seen[name] = true
 	}
 
-	// Minimal conflict example: --loops overrides default "-l"
+	// Minimal conflict example: -r overrides default -r
 	conflict := func(flag string) bool {
 		if seen[flag] {
 			return true
 		}
-		if flag == "-l" && seen["--loops"] {
+		if (flag == "--infinite" || flag == "--indefinite" || flag == "--indefinitely" || flag == "--infinite") && seen["--forever"] {
 			return true
 		}
-		if flag == "-r" && seen["--rpc-url"] {
+		if (flag == "-r" || flag == "--rpc-url") && (seen["-r"] || seen["--rpc-url"]) {
 			return true
 		}
 		if (flag == "--tpb" || flag == "--txs-per-second" || flag == "--tps" || flag == "--txs-per-block") &&
@@ -819,7 +819,7 @@ func (c *Contender) Apply(manifest *Manifest) {
 
 	service := manifest.NewService("contender").
 		WithImage("flashbots/contender").
-		WithTag("latest").
+		WithTag("v0.7.1").
 		WithArgs(args...).
 		DependsOnHealthy("beacon")
 
