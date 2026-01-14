@@ -749,6 +749,7 @@ func (c *Contender) Apply(manifest *Manifest) {
 
 	defaults := []opt{
 		{name: "--forever"},
+		{name: "--optimistic-nonces"},
 		{name: "--min-balance", val: "10 ether", hasVal: true},
 		{name: "-r", val: Connect(targetChain, "http"), hasVal: true},
 		{name: "--tps", val: "20", hasVal: true},
