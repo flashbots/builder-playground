@@ -819,7 +819,7 @@ func (c *Contender) Apply(manifest *Manifest) {
 
 	service := manifest.NewService("contender").
 		WithImage("flashbots/contender").
-		WithTag("v0.7.1").
+		WithTag("0.7.2").
 		WithArgs(args...).
 		DependsOnHealthy("beacon")
 
