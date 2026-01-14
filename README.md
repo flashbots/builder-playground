@@ -67,7 +67,7 @@ $ builder-playground start opstack [flags]
 Flags:
 
 - `--external-builder`: URL of an external builder to use (enables rollup-boost)
-- `--enable-latest-fork` (int): Enables the latest fork (isthmus) at startup (0) or n blocks after genesis.
+- `--enable-latest-fork` (int): Enables the latest fork (jovian) at startup (0) or n blocks after genesis.
 
 ### Example Commands
 
