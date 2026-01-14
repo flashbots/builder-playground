@@ -44,7 +44,7 @@ var (
 	contenderTarget   string
 	detached          bool
 	prefundedAccounts []string
-	noFollow          bool
+	followFlag        bool
 )
 
 var rootCmd = &cobra.Command{
@@ -163,7 +163,7 @@ var logsCmd = &cobra.Command{
 	Short: "Show logs for a service",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := mainctx.Get()
-		follow := !noFollow
+		follow := followFlag
 
 		switch len(args) {
 		case 1:
@@ -312,7 +312,7 @@ func main() {
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(inspectCmd)
 
-	logsCmd.Flags().BoolVar(&noFollow, "no-follow", false, "Display all logs and exit instead of streaming")
+	logsCmd.Flags().BoolVarP(&followFlag, "follow", "f", false, "Stream logs continuously instead of displaying and exiting")
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(versionCmd)
