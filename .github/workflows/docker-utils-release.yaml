@@ -10,6 +10,7 @@ on:
     paths:
       - 'cl-proxy/**'
       - 'mev-boost-relay/**'
+      - 'healthmon/**'
       - 'go.mod'
       - 'go.sum'
       - 'Dockerfile'

@@ -2,7 +2,7 @@ package mainctx
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,7 +23,7 @@ func init() {
 		syscall.SIGQUIT)
 	go func() {
 		sig := <-sigCh
-		log.Printf("received signal: %s", sig)
+		slog.Warn("received signal", "signal", sig)
 		cancel()
 	}()
 }

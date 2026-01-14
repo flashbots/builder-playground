@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"maps"
 	"math/big"
 	"os"
@@ -59,12 +60,18 @@ var opState []byte
 var clConfigContent []byte
 
 type ArtifactsBuilder struct {
+	// Shared options
+	prefundedAccounts []string
+
+	// L1 options
 	applyLatestL1Fork    bool
 	genesisDelay         uint64
-	applyLatestL2Fork    *uint64
 	l1BlockTimeInSeconds uint64
+
+	// Op-stack options
+	l2Enabled            bool
+	applyLatestL2Fork    *uint64
 	opBlockTimeInSeconds uint64
-	prefundedAccounts    []string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -93,6 +100,11 @@ func (b *ArtifactsBuilder) GenesisDelay(genesisDelaySeconds uint64) *ArtifactsBu
 
 func (b *ArtifactsBuilder) L1BlockTime(blockTimeSeconds uint64) *ArtifactsBuilder {
 	b.l1BlockTimeInSeconds = blockTimeSeconds
+	return b
+}
+
+func (b *ArtifactsBuilder) WithL2() *ArtifactsBuilder {
+	b.l2Enabled = true
 	return b
 }
 
@@ -167,7 +179,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	// Apply Optimism pre-state
-	{
+	if b.l2Enabled {
 		opAllocs, err := readOptimismL1Allocs()
 		if err != nil {
 			return err
@@ -176,7 +188,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	block := gen.ToBlock()
-	log.Printf("Genesis block hash: %s", block.Hash())
+	slog.Info("Genesis block created", "hash", block.Hash())
 
 	var v int
 	if b.applyLatestL1Fork {
@@ -185,7 +197,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		v = version.Deneb
 	}
 
-	log.Println("Generating keys...")
+	slog.Debug("Generating keys...")
 	keys, err := keys.GetPregeneratedBLSKeys()
 	if err != nil {
 		return err
@@ -213,7 +225,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		return err
 	}
 
-	log.Println("Writing artifacts...")
+	slog.Debug("Writing artifacts...")
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
@@ -228,9 +240,9 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	if err != nil {
 		return err
 	}
-	log.Println("Done writing artifacts.")
+	slog.Debug("Done writing artifacts.")
 
-	{
+	if b.l2Enabled {
 		// We have to start slightly ahead of L1 genesis time
 		opTimestamp := genesisTime + 2
 
@@ -257,7 +269,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		// override l2 genesis, make the timestamp start 2 seconds after the L1 genesis
 		input := map[string]interface{}{
 			"timestamp": hexutil.Uint64(opTimestamp).String(),
-			"allocs":    allocs,
+			"alloc":     allocs,
 		}
 		if forkTime != nil {
 			// We need to enable prague on the EL to enable the engine v4 calls
@@ -420,6 +432,14 @@ func NewOutput(dst string) (*output, error) {
 	}
 
 	return out, nil
+}
+
+func (o *output) Read(path string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(o.dst, path))
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func (o *output) AbsoluteDstPath() (string, error) {

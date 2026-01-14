@@ -3,6 +3,7 @@ package playground
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,10 +73,13 @@ func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
 	return nil
 }
 
-func NewManifest(ctx *ExContext, out *output) *Manifest {
+func NewManifest(ctx *ExContext, out *output, name ...string) *Manifest {
+	if len(name) == 0 {
+		name = []string{utils.GeneratePetName()}
+	}
 	ctx.Output = out
 	return &Manifest{
-		ID:        utils.GeneratePetName(),
+		ID:        name[0],
 		ctx:       ctx,
 		out:       out,
 		overrides: make(map[string]string),
@@ -146,7 +150,7 @@ func (b *BootnodeRef) Connect() string {
 	return ConnectEnode(b.Service, b.ID)
 }
 
-type ServiceGen interface {
+type Component interface {
 	Apply(manifest *Manifest)
 }
 
@@ -154,8 +158,8 @@ type ServiceReady interface {
 	Ready(service *Service) error
 }
 
-func (s *Manifest) AddService(srv ServiceGen) {
-	srv.Apply(s)
+func (s *Manifest) AddComponent(component Component) {
+	component.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -333,7 +337,8 @@ type Service struct {
 
 	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
-	release *release
+	postHook *postHook
+	release  *release
 }
 
 type DependsOnCondition string
@@ -485,6 +490,29 @@ func (s *Service) WithReady(check ReadyCheck) *Service {
 	return s
 }
 
+type postHook struct {
+	Name   string
+	Action func(s *Service) error
+}
+
+func (s *Service) WithPostHook(hook *postHook) *Service {
+	s.postHook = hook
+	return s
+}
+
+func (m *Manifest) ExecutePostHookActions() error {
+	for _, svc := range m.Services {
+		if svc.postHook != nil {
+			slog.Info("Executing post-hook operation", "name", svc.postHook.Name)
+			if err := svc.postHook.Action(svc); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 type ReadyCheck struct {
 	QueryURL    string        `json:"query_url"`
 	Test        []string      `json:"test"`
@@ -561,6 +589,55 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 	res = strings.ReplaceAll(res, `&#34;`, `"`)
 
 	return res, portRef, nodeRef
+}
+
+func (s *Manifest) GenerateMermaidGraph() string {
+	var b strings.Builder
+	b.WriteString("graph LR\n")
+
+	// Add nodes (services) with their ports as labels
+	for _, ss := range s.Services {
+		var ports []string
+		for _, p := range ss.Ports {
+			ports = append(ports, fmt.Sprintf("%s:%d", p.Name, p.Port))
+		}
+		portLabel := ""
+		if len(ports) > 0 {
+			portLabel = "<br/>" + strings.Join(ports, "<br/>")
+		}
+		// Sanitize node name for Mermaid
+		nodeName := strings.ReplaceAll(ss.Name, "-", "_")
+		b.WriteString(fmt.Sprintf("  %s[\"%s%s\"]\n", nodeName, ss.Name, portLabel))
+	}
+
+	b.WriteString("\n")
+
+	// Add edges (connections between services)
+	for _, ss := range s.Services {
+		sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
+		for _, ref := range ss.NodeRefs {
+			targetNode := strings.ReplaceAll(ref.Service, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -->|%s| %s\n",
+				sourceNode,
+				ref.PortLabel,
+				targetNode,
+			))
+		}
+	}
+
+	// Add edges for depends_on
+	for _, ss := range s.Services {
+		for _, dep := range ss.DependsOn {
+			sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
+			targetNode := strings.ReplaceAll(dep.Name, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -.->|depends_on| %s\n",
+				sourceNode,
+				targetNode,
+			))
+		}
+	}
+
+	return b.String()
 }
 
 func (s *Manifest) GenerateDotGraph() string {
@@ -651,6 +728,6 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 
 func (svcManager *Manifest) RunContenderIfEnabled() {
 	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddService(svcManager.ctx.Contender.Contender())
+		svcManager.AddComponent(svcManager.ctx.Contender.Contender())
 	}
 }

@@ -66,7 +66,7 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 var looksLikePortRegex = regexp.MustCompile(`^\d{2,5}$`)
 
 func (l *L1Recipe) Apply(svcManager *Manifest) {
-	svcManager.AddService(&RethEL{
+	svcManager.AddComponent(&RethEL{
 		UseRethForValidation: l.useRethForValidation,
 		UseNativeReth:        l.useNativeReth,
 	})
@@ -81,7 +81,7 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		// we are going to use the cl-proxy service to connect the beacon node to two builders
 		// one the 'el' builder and another one the remote one
 		elService = "cl-proxy"
-		svcManager.AddService(&ClProxy{
+		svcManager.AddComponent(&ClProxy{
 			PrimaryBuilder:   "el",
 			SecondaryBuilder: address,
 		})
@@ -98,11 +98,11 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		mevBoostNode = "mev-boost-relay"
 	}
 
-	svcManager.AddService(&LighthouseBeaconNode{
+	svcManager.AddComponent(&LighthouseBeaconNode{
 		ExecutionNode: elService,
 		MevBoostNode:  mevBoostNode,
 	})
-	svcManager.AddService(&LighthouseValidator{
+	svcManager.AddComponent(&LighthouseValidator{
 		BeaconNode: "beacon",
 	})
 
@@ -112,12 +112,12 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 			mevBoostValidationServer = "el"
 		}
 
-		svcManager.AddService(&MevBoostRelay{
+		svcManager.AddComponent(&MevBoostRelay{
 			BeaconClient:     "beacon",
 			ValidationServer: mevBoostValidationServer,
 		})
 
-		svcManager.AddService(&MevBoost{
+		svcManager.AddComponent(&MevBoost{
 			RelayEndpoints: []string{"mev-boost-relay"},
 		})
 	} else {
@@ -126,7 +126,7 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		if l.useRethForValidation {
 			mevBoostValidationServer = "el"
 		}
-		svcManager.AddService(&MevBoostRelay{
+		svcManager.AddComponent(&MevBoostRelay{
 			BeaconClient:     "beacon",
 			ValidationServer: mevBoostValidationServer,
 		})

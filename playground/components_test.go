@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
@@ -23,7 +25,17 @@ func TestRecipeOpstackSimple(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&OpRecipe{}, nil)
+	m := tt.test(&OpRecipe{}, nil)
+
+	httpPort := m.MustGetService("op-geth").MustGetPort("http")
+	client, err := ethclient.Dial(fmt.Sprintf("http://localhost:%d", httpPort.HostPort))
+	require.NoError(t, err)
+
+	// validate that the default addresses are prefunded
+	knownAddress := common.HexToAddress("0xf49Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+	balance, err := client.BalanceAt(context.Background(), knownAddress, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, balance, big.NewInt(0))
 }
 
 func TestRecipeOpstackExternalBuilder(t *testing.T) {
@@ -114,6 +126,25 @@ func TestRecipeBuilderHub(t *testing.T) {
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 }
 
+func TestRecipeBuilderHub_RegisterBuilder(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	manifest := tt.test(&BuilderHub{}, nil)
+
+	apiPort := manifest.MustGetService("builder-hub-api").MustGetPort("admin")
+	endpoint := fmt.Sprintf("http://localhost:%d", apiPort.HostPort)
+
+	err := registerBuilder(endpoint, &builderHubRegisterBuilderInput{
+		BuilderID:     "test_builder",
+		BuilderIP:     "1.2.3.4",
+		MeasurementID: "test",
+		Network:       "playground",
+		Config:        "{}",
+	})
+	require.NoError(t, err)
+}
+
 func TestRecipeBuilderNet(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
@@ -133,7 +164,7 @@ func newTestFramework(t *testing.T) *testFramework {
 	return &testFramework{t: t}
 }
 
-func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
+func (tt *testFramework) test(component Component, args []string) *Manifest {
 	t := tt.t
 
 	// use the name of the repo and the current timestamp to generate
@@ -158,7 +189,7 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 		homeDir: filepath.Join(e2eTestDir, "artifacts"),
 	}
 
-	if recipe, ok := s.(Recipe); ok {
+	if recipe, ok := component.(Recipe); ok {
 		// We have to parse the flags since they are used to set the
 		// default values for the recipe inputs
 		err := recipe.Flags().Parse(args)
@@ -169,7 +200,7 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	}
 
 	svcManager := NewManifest(exCtx, o)
-	s.Apply(svcManager)
+	component.Apply(svcManager)
 
 	require.NoError(t, svcManager.Validate())
 

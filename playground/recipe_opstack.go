@@ -67,17 +67,18 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 
 func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
+	builder.WithL2()
 	builder.ApplyLatestL2Fork(o.enableLatestFork)
 	builder.OpBlockTime(o.blockTime)
 	return builder
 }
 
 func (o *OpRecipe) Apply(svcManager *Manifest) {
-	svcManager.AddService(&RethEL{})
-	svcManager.AddService(&LighthouseBeaconNode{
+	svcManager.AddComponent(&RethEL{})
+	svcManager.AddComponent(&LighthouseBeaconNode{
 		ExecutionNode: "el",
 	})
-	svcManager.AddService(&LighthouseValidator{
+	svcManager.AddComponent(&LighthouseValidator{
 		BeaconNode: "beacon",
 	})
 
@@ -86,7 +87,7 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 	peers := []string{}
 
 	opGeth := &OpGeth{}
-	svcManager.AddService(opGeth)
+	svcManager.AddComponent(opGeth)
 
 	svcManager.ctx.Bootnode = &BootnodeRef{
 		Service: "op-geth",
@@ -95,11 +96,11 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 
 	if o.externalBuilder == "op-reth" {
 		// Add a new op-reth service and connect it to Rollup-boost
-		svcManager.AddService(&OpReth{})
+		svcManager.AddComponent(&OpReth{})
 
 		externalBuilderRef = Connect("op-reth", "authrpc")
 	} else if o.externalBuilder == "op-rbuilder" {
-		svcManager.AddService(&OpRbuilder{
+		svcManager.AddComponent(&OpRbuilder{
 			Flashblocks: o.flashblocks,
 		})
 		externalBuilderRef = Connect("op-rbuilder", "authrpc")
@@ -116,7 +117,7 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 
 	// Only enable bproxy if flashblocks is enabled (since flashblocks-rpc is the only service that needs it)
 	if o.flashblocks {
-		svcManager.AddService(&BProxy{
+		svcManager.AddComponent(&BProxy{
 			TargetAuthrpc:         externalBuilderRef,
 			Peers:                 peers,
 			Flashblocks:           o.flashblocks,
@@ -126,7 +127,7 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 
 	// Only enable websocket-proxy if the flag is set
 	if o.enableWebsocketProxy {
-		svcManager.AddService(&WebsocketProxy{
+		svcManager.AddComponent(&WebsocketProxy{
 			Upstream: "rollup-boost",
 		})
 	}
@@ -143,7 +144,7 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 			flashblocksBuilderRef = ConnectWs("bproxy", "flashblocks")
 		}
 
-		svcManager.AddService(&RollupBoost{
+		svcManager.AddComponent(&RollupBoost{
 			ELNode:                "op-geth",
 			Builder:               builderRef,
 			Flashblocks:           o.flashblocks,
@@ -160,20 +161,20 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 			useWebsocketProxy = true
 		}
 
-		svcManager.AddService(&FlashblocksRPC{
+		svcManager.AddComponent(&FlashblocksRPC{
 			FlashblocksWSService: flashblocksWSService,
 			BaseOverlay:          o.baseOverlay,
 			UseWebsocketProxy:    useWebsocketProxy,
 		})
 	}
 
-	svcManager.AddService(&OpNode{
+	svcManager.AddComponent(&OpNode{
 		L1Node:   "el",
 		L1Beacon: "beacon",
 		L2Node:   elNode,
 	})
 
-	svcManager.AddService(&OpBatcher{
+	svcManager.AddComponent(&OpBatcher{
 		L1Node:             "el",
 		L2Node:             "op-geth",
 		RollupNode:         "op-node",
@@ -181,7 +182,7 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 	})
 
 	if o.enableChainMonitor {
-		svcManager.AddService(&ChainMonitor{
+		svcManager.AddComponent(&ChainMonitor{
 			L1RPC:            "el",
 			L2BlockTime:      o.blockTime,
 			L2BuilderAddress: defaultL2BuilderAddress,

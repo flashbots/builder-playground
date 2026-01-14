@@ -2,6 +2,7 @@ package playground
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -12,7 +13,10 @@ import (
 	"github.com/flashbots/go-boost-utils/utils"
 )
 
-var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
+var (
+	defaultJWTToken          = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
+	latestPlaygroundUtilsTag = "cc6f172493d7ef6b88a5b7895f4b8619806c99f9"
+)
 
 type RollupBoost struct {
 	ELNode  string
@@ -382,7 +386,7 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 }
 
 type RethEL struct {
@@ -470,7 +474,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 		svc.WithArgs("--ipcpath", "/data_reth/reth.ipc")
 	}
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
@@ -517,14 +521,9 @@ func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
 		).
 		WithArtifact("/data/testnet-dir", "testnet").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_beacon").
-		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:3500/eth/v1/node/syncing",
-			Interval:    1 * time.Second,
-			Timeout:     30 * time.Second,
-			Retries:     3,
-			StartPeriod: 1 * time.Second,
-		})
+		WithVolume("data", "/data_beacon")
+
+	UseHealthmon(manifest, svc, healthmonBeacon)
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -569,7 +568,7 @@ type ClProxy struct {
 func (c *ClProxy) Apply(manifest *Manifest) {
 	manifest.NewService("cl-proxy").
 		WithImage("docker.io/flashbots/playground-utils").
-		WithTag("latest").
+		WithTag(latestPlaygroundUtilsTag).
 		WithEntrypoint("cl-proxy").
 		WithArgs(
 			"--primary-builder", Connect(c.PrimaryBuilder, "authrpc"),
@@ -586,7 +585,7 @@ type MevBoostRelay struct {
 func (m *MevBoostRelay) Apply(manifest *Manifest) {
 	service := manifest.NewService("mev-boost-relay").
 		WithImage("docker.io/flashbots/playground-utils").
-		WithTag("latest").
+		WithTag(latestPlaygroundUtilsTag).
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
 		WithEntrypoint("mev-boost-relay").
 		DependsOnHealthy(m.BeaconClient).
@@ -645,7 +644,7 @@ func (o *OpReth) Apply(manifest *Manifest) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
 
-	UseHealthmon(manifest, svc)
+	UseHealthmon(manifest, svc, healthmonExecution)
 }
 
 type MevBoost struct {
@@ -831,7 +830,10 @@ func (c *Contender) Apply(manifest *Manifest) {
 	}
 }
 
-type BuilderHub struct{}
+type BuilderHub struct {
+	BuilderIP     string
+	BuilderConfig string
+}
 
 func (b *BuilderHub) Apply(manifest *Manifest) {
 	// Database service
@@ -852,7 +854,7 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 
 	// API service
-	manifest.NewService("builder-hub-api").
+	apiSrv := manifest.NewService("builder-hub-api").
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("0.3.1-alpha1").
 		DependsOnHealthy("builder-hub-db").
@@ -876,6 +878,13 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			StartPeriod: 1 * time.Second,
 		})
 
+	apiSrv.WithPostHook(&postHook{
+		Name: "register-builder",
+		Action: func(s *Service) error {
+			return registerBuilderHook(manifest, s, b)
+		},
+	})
+
 	// Proxy service
 	manifest.NewService("builder-hub-proxy").
 		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
@@ -892,16 +901,62 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 }
 
-func UseHealthmon(m *Manifest, s *Service) {
-	m.NewService(s.Name+"_healthmon").
-		WithImage("ghcr.io/flashbots/ethereum-healthmon").
-		WithTag("v0.0.1").
-		// TODO: Use this also for beacon node
-		WithArgs("--chain", "execution", "--url", Connect(s.Name, "http")).
+func registerBuilderHook(manifest *Manifest, s *Service, b *BuilderHub) error {
+	genesis, err := manifest.out.Read("genesis.json")
+	if err != nil {
+		return err
+	}
+
+	configYaml, err := os.ReadFile(b.BuilderConfig)
+	if err != nil {
+		return err
+	}
+
+	// we need to convert the config to JSON because it is what the API server accepts
+	configJSON, err := yamlToJson([]byte(configYaml))
+	if err != nil {
+		return err
+	}
+
+	overrideConfig := map[string]interface{}{
+		"genesis": genesis,
+	}
+	if configJSON, err = overrideJSON(configJSON, overrideConfig); err != nil {
+		return err
+	}
+
+	endpoint := fmt.Sprintf("http://localhost:%d", s.MustGetPort("admin").HostPort)
+	input := &builderHubRegisterBuilderInput{
+		BuilderID:     "builder",
+		BuilderIP:     b.BuilderIP,
+		MeasurementID: "test",
+		Network:       "playground",
+		Config:        string(configJSON),
+	}
+	if err := registerBuilder(endpoint, input); err != nil {
+		return err
+	}
+	return nil
+}
+
+const (
+	healthmonBeacon    = "beacon"
+	healthmonExecution = "execution"
+)
+
+func UseHealthmon(m *Manifest, s *Service, chain string) {
+	healthmonName := s.Name + "_healthmon"
+
+	s.WithLabel(healthCheckSidecarLabel, healthmonName)
+	m.NewService(healthmonName).
+		WithImage("docker.io/flashbots/playground-utils").
+		WithTag(latestPlaygroundUtilsTag).
+		WithEntrypoint("healthmon").
+		WithArgs("--chain", chain, "--url", Connect(s.Name, "http")).
 		WithReady(ReadyCheck{
 			Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
 			Interval:    1 * time.Second,
-			Timeout:     10 * time.Second,
+			Timeout:     10 * time.Minute,
 			Retries:     20,
 			StartPeriod: 1 * time.Second,
 		})

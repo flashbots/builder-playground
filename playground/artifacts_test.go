@@ -1,8 +1,13 @@
 package playground
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnodeGeneration(t *testing.T) {
@@ -15,6 +20,56 @@ func TestEnodeGeneration(t *testing.T) {
 			t.Fatalf("enode IDs are not the same")
 		}
 	}
+}
+
+func TestPrefundedAccounts_Default(t *testing.T) {
+	o := newTestOutput(t)
+
+	b := NewArtifactsBuilder()
+	b.WithL2()
+	require.NoError(t, b.Build(o))
+
+	prefundedAccount := common.HexToAddress("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266")
+
+	l1Genesis := readGenesis(t, o, "l2-genesis.json")
+	l2Genesis := readGenesis(t, o, "genesis.json")
+
+	// both genesis must have 10 prefunded accounts and the prefundedAccount' '0xf39..'
+	for _, genesis := range []*core.Genesis{l1Genesis, l2Genesis} {
+		alloc, ok := genesis.Alloc[prefundedAccount]
+		require.True(t, ok)
+		require.Equal(t, alloc.Balance, prefundedBalance)
+	}
+}
+
+func TestPrefundedAccounts_Custom(t *testing.T) {
+	o := newTestOutput(t)
+
+	customPrivKey := "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+	customAddress := common.HexToAddress("0x1Be31A94361a391bBaFB2a4CCd704F57dc04d4bb")
+
+	b := NewArtifactsBuilder().PrefundedAccounts([]string{customPrivKey}).WithL2()
+	require.NoError(t, b.Build(o))
+
+	l1Genesis := readGenesis(t, o, "genesis.json")
+	l2Genesis := readGenesis(t, o, "l2-genesis.json")
+
+	// both genesis must have the custom prefunded account
+	for _, genesis := range []*core.Genesis{l1Genesis, l2Genesis} {
+		alloc, ok := genesis.Alloc[customAddress]
+		require.True(t, ok)
+		require.Equal(t, alloc.Balance, prefundedBalance)
+	}
+}
+
+func readGenesis(t *testing.T, o *output, genesisName string) *core.Genesis {
+	genesisRaw, err := o.Read(genesisName)
+	require.NoError(t, err)
+
+	var genesis core.Genesis
+	require.NoError(t, json.Unmarshal([]byte(genesisRaw), &genesis))
+
+	return &genesis
 }
 
 func newTestOutput(t *testing.T) *output {
