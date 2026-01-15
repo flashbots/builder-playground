@@ -17,7 +17,12 @@ func GenerateDocs(recipes []Recipe) error {
 	}
 
 	for _, recipe := range recipes {
-		components := recipe.Apply(&ExContext{Contender: &ContenderContext{}})
+		out, err := NewOutput("/tmp/docs-output")
+		if err != nil {
+			return err
+		}
+
+		components := recipe.Apply(&ExContext{Contender: &ContenderContext{}, Output: out})
 		manifest := NewManifest("", components)
 
 		// Generate markdown content
