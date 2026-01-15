@@ -177,16 +177,17 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 		t.Fatal(err)
 	}
 
+	o := &output{
+		dst:     e2eTestDir,
+		homeDir: filepath.Join(e2eTestDir, "artifacts"),
+	}
+
 	exCtx := &ExContext{
+		Output:   o,
 		LogLevel: LevelDebug,
 		Contender: &ContenderContext{
 			Enabled: false,
 		},
-	}
-
-	o := &output{
-		dst:     e2eTestDir,
-		homeDir: filepath.Join(e2eTestDir, "artifacts"),
 	}
 
 	if recipe, ok := component.(Recipe); ok {
