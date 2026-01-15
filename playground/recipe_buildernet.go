@@ -16,7 +16,7 @@ var _ Recipe = &BuilderNetRecipe{}
 // BuilderNetRecipe is a recipe that extends the L1 recipe to include builder-hub
 type BuilderNetRecipe struct {
 	// Embed the L1Recipe to reuse its functionality
-	l1Recipe *L1Recipe
+	l1Recipe L1Recipe
 
 	builderIP     string
 	builderConfig string
@@ -47,7 +47,7 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
 	component := NewComponent("buildernet-recipe")
 
 	// Start with the L1Recipe manifest
-	component.AddComponent(ctx, b.l1Recipe)
+	component.AddComponent(ctx, &b.l1Recipe)
 	component.AddComponent(ctx, &BuilderHub{
 		BuilderIP:     b.builderIP,
 		BuilderConfig: b.builderConfig,
