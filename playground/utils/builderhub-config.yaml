@@ -51,6 +51,11 @@ disk_encryption:
 instance_name: buildernet-playground-vm
 
 playground:
+  builder_hub_config:
+    builder_id: "playground_vm_builder"
+    builder_ip: "1.2.3.4"
+    measurement_id: "test1"
+    network: "playground"
   artifacts_url: http://10.0.2.2:8100
   # Reth P2P bootnode
   el_bootnode: "{{EL_BOOTNODE}}"

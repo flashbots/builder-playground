@@ -59,6 +59,9 @@ var opState []byte
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
 
+//go:embed utils/builderhub-config.yaml
+var defaultBuilderHubConfig []byte
+
 type ArtifactsBuilder struct {
 	// Shared options
 	prefundedAccounts []string
