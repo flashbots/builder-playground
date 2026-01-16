@@ -27,7 +27,7 @@ type RollupBoost struct {
 }
 
 func (r *RollupBoost) Apply(ctx *ExContext) *Component {
-	component := NewComponent("bproxy")
+	component := NewComponent("rollup-boost")
 
 	service := component.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
@@ -62,7 +62,7 @@ type OpRbuilder struct {
 }
 
 func (o *OpRbuilder) Apply(ctx *ExContext) *Component {
-	component := NewComponent("bproxy")
+	component := NewComponent("op-rbuilder")
 
 	service := component.NewService("op-rbuilder").
 		WithImage("ghcr.io/flashbots/op-rbuilder").
@@ -117,7 +117,7 @@ type FlashblocksRPC struct {
 }
 
 func (f *FlashblocksRPC) Apply(ctx *ExContext) *Component {
-	component := NewComponent("bproxy")
+	component := NewComponent("flashblocks-rpc")
 
 	websocketURL := ConnectWs(f.FlashblocksWSService, "flashblocks")
 	if f.UseWebsocketProxy {
