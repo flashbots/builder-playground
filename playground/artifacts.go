@@ -40,6 +40,7 @@ import (
 var (
 	defaultL1BlockTimeSeconds = uint64(12)
 	defaultOpBlockTimeSeconds = uint64(2)
+	DefaultOpBlockTimeSeconds = defaultOpBlockTimeSeconds
 )
 
 // minimumGenesisDelay is the minimum delay for the genesis time. This is required
