@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
 )
 
 func TestOpGenesisIshtmus(t *testing.T) {
@@ -13,8 +14,8 @@ func TestOpGenesisIshtmus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read file: %v", err)
 	}
-	var opGenesisObj OpGenesis
-	if err := json.Unmarshal(data, &opGenesisObj); err != nil {
+	var genesisObj core.Genesis
+	if err := json.Unmarshal(data, &genesisObj); err != nil {
 		t.Fatalf("failed to unmarshal genesis: %v", err)
 	}
 

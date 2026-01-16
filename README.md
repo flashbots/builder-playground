@@ -67,7 +67,7 @@ $ builder-playground start opstack [flags]
 Flags:
 
 - `--external-builder`: URL of an external builder to use (enables rollup-boost)
-- `--enable-latest-fork` (int): Enables the latest fork (isthmus) at startup (0) or n blocks after genesis.
+- `--enable-latest-fork` (int): Enables the latest fork (jovian) at startup (0) or n blocks after genesis.
 
 ### Example Commands
 
@@ -89,7 +89,7 @@ The default contender flags are as follows:
 
 - `--min-balance "10 ether"` -- gives each spammer account 10 ETH.
 - `--tps 20` -- sends 20 transactions per second.
-- `-l` -- runs spammer indefinitely (pass `-l <num>` to set a finite number of spam runs).
+- `--forever` -- runs spammer indefinitely.
 
 To add or modify contender flags, use `--contender.arg`:
 

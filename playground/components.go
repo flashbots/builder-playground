@@ -31,7 +31,7 @@ func (r *RollupBoost) Apply(ctx *ExContext) *Component {
 
 	service := component.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("v0.7.5").
+		WithTag("v0.7.12-rc1").
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -66,7 +66,7 @@ func (o *OpRbuilder) Apply(ctx *ExContext) *Component {
 
 	service := component.NewService("op-rbuilder").
 		WithImage("ghcr.io/flashbots/op-rbuilder").
-		WithTag("v0.2.8").
+		WithTag("v0.2.13").
 		WithArgs(
 			"node",
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
@@ -281,7 +281,7 @@ func (o *OpBatcher) Apply(ctx *ExContext) *Component {
 	}
 	component.NewService("op-batcher").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
-		WithTag("v1.12.0-rc.1").
+		WithTag("v1.16.3").
 		WithEntrypoint("op-batcher").
 		WithArgs(
 			"--l1-eth-rpc", Connect(o.L1Node, "http"),
@@ -308,7 +308,7 @@ func (o *OpNode) Apply(ctx *ExContext) *Component {
 
 	component.NewService("op-node").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
-		WithTag("v1.13.0-rc.1").
+		WithTag("v1.16.3").
 		WithEntrypoint("op-node").
 		WithEnv("A", "B"). // this is just a placeholder to make sure env works since we e2e test with the recipes
 		WithArgs(
@@ -326,6 +326,7 @@ func (o *OpNode) Apply(ctx *ExContext) *Component {
 			"--verifier.l1-confs", "0",
 			"--p2p.sequencer.key", "8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
 			"--rollup.config", "/data/rollup.json",
+			"--rollup.l1-chain-config", "/data/genesis.json",
 			"--rpc.addr", "0.0.0.0",
 			"--rpc.port", `{{Port "http" 8549}}`,
 			"--p2p.listen.ip", "0.0.0.0",
@@ -339,6 +340,7 @@ func (o *OpNode) Apply(ctx *ExContext) *Component {
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/rollup.json", "rollup.json").
+		WithArtifact("/data/genesis.json", "genesis.json").
 		WithVolume("data", "/data_db")
 
 	return component
@@ -377,7 +379,7 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 
 	svc := component.NewService("op-geth").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
-		WithTag("v1.101503.2-rc.5").
+		WithTag("v1.101604.0").
 		WithEntrypoint("/bin/sh").
 		WithLabel("metrics_path", "/debug/metrics/prometheus").
 		WithArgs(
@@ -659,7 +661,7 @@ var opRethRelease = &release{
 	Name:    "op-reth",
 	Repo:    "reth",
 	Org:     "paradigmxyz",
-	Version: "v1.3.12",
+	Version: "v1.9.3",
 	Arch: func(goos, goarch string) string {
 		if goos == "linux" {
 			return "x86_64-unknown-linux-gnu"
@@ -677,7 +679,7 @@ func (o *OpReth) Apply(ctx *ExContext) *Component {
 
 	svc := component.NewService("op-reth").
 		WithImage("ghcr.io/paradigmxyz/op-reth").
-		WithTag("nightly").
+		WithTag("v1.9.3").
 		WithEntrypoint("op-reth").
 		WithArgs(
 			"node",
@@ -812,7 +814,8 @@ func (c *Contender) Apply(ctx *ExContext) *Component {
 	}
 
 	defaults := []opt{
-		{name: "-l"},
+		{name: "--forever"},
+		{name: "--optimistic-nonces"},
 		{name: "--min-balance", val: "10 ether", hasVal: true},
 		{name: "-r", val: Connect(targetChain, "http"), hasVal: true},
 		{name: "--tps", val: "20", hasVal: true},
@@ -837,15 +840,15 @@ func (c *Contender) Apply(ctx *ExContext) *Component {
 		seen[name] = true
 	}
 
-	// Minimal conflict example: --loops overrides default "-l"
+	// Minimal conflict example: -r overrides default -r
 	conflict := func(flag string) bool {
 		if seen[flag] {
 			return true
 		}
-		if flag == "-l" && seen["--loops"] {
+		if (flag == "--infinite" || flag == "--indefinite" || flag == "--indefinitely") && seen["--forever"] {
 			return true
 		}
-		if flag == "-r" && seen["--rpc-url"] {
+		if (flag == "-r" && seen["--rpc-url"]) || (flag == "--rpc-url" && seen["-r"]) {
 			return true
 		}
 		if (flag == "--tpb" || flag == "--txs-per-second" || flag == "--tps" || flag == "--txs-per-block") &&
@@ -884,7 +887,7 @@ func (c *Contender) Apply(ctx *ExContext) *Component {
 	component := NewComponent("contender")
 	service := component.NewService("contender").
 		WithImage("flashbots/contender").
-		WithTag("latest").
+		WithTag("0.7.2").
 		WithArgs(args...).
 		DependsOnHealthy("beacon")
 

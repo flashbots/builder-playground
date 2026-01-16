@@ -19,6 +19,7 @@ jobs:
           - "l1 --with-prometheus"
           - "opstack"
           - "opstack --external-builder http://host.docker.internal:4444"
+          - "opstack --enable-latest-fork=0"
           - "opstack --enable-latest-fork=10"
     steps:
       - name: Check out code

@@ -47,6 +47,15 @@ func TestRecipeOpstackExternalBuilder(t *testing.T) {
 	})
 }
 
+func TestRecipeOpstackEnableForkAtGenesis(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&OpRecipe{}, []string{
+		"--enable-latest-fork", "0",
+	})
+}
+
 func TestRecipeOpstackEnableForkAfter(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
