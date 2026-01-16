@@ -24,14 +24,13 @@ type Recipe interface {
 	Description() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
-	Apply(manifest *Manifest)
+	Apply(ctx *ExContext) *Component
 	Output(manifest *Manifest) map[string]interface{}
 }
 
 // Manifest describes a list of services and their dependencies
 type Manifest struct {
-	ctx *ExContext
-	ID  string `json:"session_id"`
+	ID string `json:"session_id"`
 
 	// list of Services
 	Services []*Service `json:"services"`
@@ -39,8 +38,47 @@ type Manifest struct {
 	// overrides is a map of service name to the path of the executable to run
 	// on the host machine instead of a container.
 	overrides map[string]string
+}
 
-	out *output
+func (s *Manifest) NewService(name string) *Service {
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	s.Services = append(s.Services, ss)
+	return ss
+}
+
+type Component struct {
+	Name     string
+	Services []*Service
+	Inner    []*Component
+}
+
+func NewComponent(name string) *Component {
+	return &Component{Name: name, Inner: []*Component{}}
+}
+
+func (p *Component) NewService(name string) *Service {
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	p.Services = append(p.Services, ss)
+	return ss
+}
+
+func (p *Component) AddComponent(ctx *ExContext, gen ComponentGen) {
+	p.Inner = append(p.Inner, gen.Apply(ctx))
+}
+
+func (p *Component) AddService(srv ComponentGen) {
+	p.Inner = append(p.Inner, srv.Apply(nil))
+}
+
+func componentToManifest(p *Component) []*Service {
+	services := p.Services
+
+	for _, innerComponent := range p.Inner {
+		innerServices := componentToManifest(innerComponent)
+		services = append(services, innerServices...)
+	}
+
+	return services
 }
 
 func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
@@ -73,15 +111,13 @@ func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
 	return nil
 }
 
-func NewManifest(ctx *ExContext, out *output, name ...string) *Manifest {
-	if len(name) == 0 {
-		name = []string{utils.GeneratePetName()}
+func NewManifest(name string, component *Component) *Manifest {
+	if name == "" {
+		name = utils.GeneratePetName()
 	}
-	ctx.Output = out
 	return &Manifest{
-		ID:        name[0],
-		ctx:       ctx,
-		out:       out,
+		ID:        name,
+		Services:  componentToManifest(component),
 		overrides: make(map[string]string),
 	}
 }
@@ -150,16 +186,12 @@ func (b *BootnodeRef) Connect() string {
 	return ConnectEnode(b.Service, b.ID)
 }
 
-type Component interface {
-	Apply(manifest *Manifest)
+type ComponentGen interface {
+	Apply(manifest *ExContext) *Component
 }
 
 type ServiceReady interface {
 	Ready(service *Service) error
-}
-
-func (s *Manifest) AddComponent(component Component) {
-	component.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -182,7 +214,7 @@ func (s *Manifest) GetService(name string) (*Service, bool) {
 // Validate validates the manifest
 // - checks if all the port dependencies are met from the service description
 // - downloads any local release artifacts for the services that require host execution
-func (s *Manifest) Validate() error {
+func (s *Manifest) Validate(out *output) error {
 	for _, ss := range s.Services {
 		// override ready checks that use the QueryURL feature
 		if ss.ReadyCheck != nil && ss.ReadyCheck.QueryURL != "" {
@@ -253,7 +285,7 @@ func (s *Manifest) Validate() error {
 	// validate that the mounts are correct
 	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
-			fileLoc := filepath.Join(s.out.dst, fileNameRef)
+			fileLoc := filepath.Join(out.dst, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
 				if os.IsNotExist(err) {
@@ -267,7 +299,7 @@ func (s *Manifest) Validate() error {
 	// validate that the mounts are correct
 	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
-			fileLoc := filepath.Join(s.out.dst, fileNameRef)
+			fileLoc := filepath.Join(out.dst, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
 				if os.IsNotExist(err) {
@@ -394,12 +426,6 @@ func (s *Service) WithLabel(key, value string) *Service {
 	}
 	s.Labels[key] = value
 	return s
-}
-
-func (s *Manifest) NewService(name string) *Service {
-	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
-	s.Services = append(s.Services, ss)
-	return ss
 }
 
 func (s *Service) WithImage(image string) *Service {
@@ -698,8 +724,8 @@ func (s *Manifest) GenerateDotGraph() string {
 	return b.String()
 }
 
-func (m *Manifest) SaveJson() error {
-	return m.out.WriteFile("manifest.json", m)
+func (m *Manifest) SaveJson(out *output) error {
+	return out.WriteFile("manifest.json", m)
 }
 
 func ReadManifest(outputFolder string) (*Manifest, error) {
@@ -720,14 +746,11 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 	}
 
 	// set the output folder
-	manifestData.out = &output{
-		dst: outputFolder,
-	}
 	return &manifestData, nil
 }
 
-func (svcManager *Manifest) RunContenderIfEnabled() {
-	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddComponent(svcManager.ctx.Contender.Contender())
+func (component *Component) RunContenderIfEnabled(ctx *ExContext) {
+	if ctx.Contender.Enabled {
+		component.AddService(ctx.Contender.Contender())
 	}
 }

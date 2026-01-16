@@ -65,8 +65,10 @@ func (l *L1Recipe) Artifacts() *ArtifactsBuilder {
 
 var looksLikePortRegex = regexp.MustCompile(`^\d{2,5}$`)
 
-func (l *L1Recipe) Apply(svcManager *Manifest) {
-	svcManager.AddComponent(&RethEL{
+func (l *L1Recipe) Apply(ctx *ExContext) *Component {
+	component := NewComponent("l1-recipe")
+
+	component.AddComponent(ctx, &RethEL{
 		UseRethForValidation: l.useRethForValidation,
 		UseNativeReth:        l.useNativeReth,
 	})
@@ -81,7 +83,7 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		// we are going to use the cl-proxy service to connect the beacon node to two builders
 		// one the 'el' builder and another one the remote one
 		elService = "cl-proxy"
-		svcManager.AddComponent(&ClProxy{
+		component.AddComponent(ctx, &ClProxy{
 			PrimaryBuilder:   "el",
 			SecondaryBuilder: address,
 		})
@@ -98,11 +100,11 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		mevBoostNode = "mev-boost-relay"
 	}
 
-	svcManager.AddComponent(&LighthouseBeaconNode{
+	component.AddComponent(ctx, &LighthouseBeaconNode{
 		ExecutionNode: elService,
 		MevBoostNode:  mevBoostNode,
 	})
-	svcManager.AddComponent(&LighthouseValidator{
+	component.AddComponent(ctx, &LighthouseValidator{
 		BeaconNode: "beacon",
 	})
 
@@ -112,12 +114,12 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 			mevBoostValidationServer = "el"
 		}
 
-		svcManager.AddComponent(&MevBoostRelay{
+		component.AddComponent(ctx, &MevBoostRelay{
 			BeaconClient:     "beacon",
 			ValidationServer: mevBoostValidationServer,
 		})
 
-		svcManager.AddComponent(&MevBoost{
+		component.AddComponent(ctx, &MevBoost{
 			RelayEndpoints: []string{"mev-boost-relay"},
 		})
 	} else {
@@ -126,13 +128,14 @@ func (l *L1Recipe) Apply(svcManager *Manifest) {
 		if l.useRethForValidation {
 			mevBoostValidationServer = "el"
 		}
-		svcManager.AddComponent(&MevBoostRelay{
+		component.AddComponent(ctx, &MevBoostRelay{
 			BeaconClient:     "beacon",
 			ValidationServer: mevBoostValidationServer,
 		})
 	}
 
-	svcManager.RunContenderIfEnabled()
+	component.RunContenderIfEnabled(ctx)
+	return component
 }
 
 func (l *L1Recipe) Output(manifest *Manifest) map[string]interface{} {

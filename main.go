@@ -369,6 +369,7 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	exCtx := &playground.ExContext{
+		Output:   out,
 		LogLevel: logLevel,
 		// if contender.tps is set, assume contender is enabled
 		Contender: &playground.ContenderContext{
@@ -378,9 +379,8 @@ func runIt(recipe playground.Recipe) error {
 		},
 	}
 
-	svcManager := playground.NewManifest(exCtx, out, sessionID)
-
-	recipe.Apply(svcManager)
+	components := recipe.Apply(exCtx)
+	svcManager := playground.NewManifest(sessionID, components)
 
 	// generate the dot graph
 	slog.Debug("Generating dot graph...")
@@ -389,12 +389,12 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	if err := svcManager.Validate(); err != nil {
+	if err := svcManager.Validate(out); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
 
 	// save the manifest.json file
-	if err := svcManager.SaveJson(); err != nil {
+	if err := svcManager.SaveJson(out); err != nil {
 		return fmt.Errorf("failed to save manifest: %w", err)
 	}
 

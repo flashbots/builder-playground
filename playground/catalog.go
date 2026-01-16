@@ -1,8 +1,8 @@
 package playground
 
-var Components = []Component{}
+var Components = []ComponentGen{}
 
-func register(component Component) {
+func register(component ComponentGen) {
 	Components = append(Components, component)
 }
 

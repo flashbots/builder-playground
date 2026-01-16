@@ -43,16 +43,19 @@ func (b *BuilderNetRecipe) Artifacts() *ArtifactsBuilder {
 	return b.l1Recipe.Artifacts()
 }
 
-func (b *BuilderNetRecipe) Apply(svcManager *Manifest) {
-	// Start with the L1Recipe manifest
-	b.l1Recipe.Apply(svcManager)
+func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
+	component := NewComponent("buildernet-recipe")
 
-	svcManager.AddComponent(&BuilderHub{
+	// Start with the L1Recipe manifest
+	component.AddComponent(ctx, &b.l1Recipe)
+	component.AddComponent(ctx, &BuilderHub{
 		BuilderIP:     b.builderIP,
 		BuilderConfig: b.builderConfig,
 	})
 
-	svcManager.RunContenderIfEnabled()
+	component.RunContenderIfEnabled(ctx)
+
+	return component
 }
 
 func (b *BuilderNetRecipe) Output(manifest *Manifest) map[string]interface{} {
