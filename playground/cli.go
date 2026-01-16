@@ -250,7 +250,7 @@ var generateDocsCmd = &cobra.Command{
 	Use:   "generate-docs",
 	Short: "Generate documentation for all recipes",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return playground.GenerateDocs(recipes)
+		return GenerateDocs(Recipes)
 	},
 }
 
