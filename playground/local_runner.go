@@ -189,7 +189,14 @@ func (d *LocalRunner) checkAndUpdateReadiness() {
 			}
 		}
 	}
-	close(d.allTasksReadyCh)
+
+	select {
+	case <-d.allTasksReadyCh:
+		// Channel is already closed, do nothing
+	default:
+		// Channel is not closed yet, close it
+		close(d.allTasksReadyCh)
+	}
 }
 
 func (d *LocalRunner) WaitForReady(ctx context.Context) error {
