@@ -18,6 +18,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/flashbots/builder-playground/utils/flags"
+	flag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
@@ -201,7 +203,10 @@ func (tt *testFramework) test(component Component, args []string) *Manifest {
 	if recipe, ok := component.(Recipe); ok {
 		// We have to parse the flags since they are used to set the
 		// default values for the recipe inputs
-		err := recipe.Flags().Parse(args)
+		recipeFlagSet := flag.NewFlagSet(recipe.Name(), flag.ContinueOnError)
+		flags.ParseFlags(recipe, recipeFlagSet)
+
+		err := recipeFlagSet.Parse(args)
 		require.NoError(t, err)
 
 		err = recipe.Artifacts().Build(o)

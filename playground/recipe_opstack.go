@@ -1,9 +1,5 @@
 package playground
 
-import (
-	flag "github.com/spf13/pflag"
-)
-
 var _ Recipe = &OpRecipe{}
 
 const defaultL2BuilderAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
@@ -12,35 +8,35 @@ const defaultL2BuilderAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 type OpRecipe struct {
 	// externalBuilder is the URL of the external builder to use. If enabled, the recipe deploys
 	// rollup-boost on the sequencer and uses this URL as the external builder.
-	externalBuilder string
+	ExternalBuilder string `flag:"external-builder" description:"External builder URL"`
 
 	// whether to enable the latest fork jovian and when
-	enableLatestFork *uint64
+	EnableLatestFork *uint64 `flag:"enable-latest-fork" description:"Enable Jovian fork: 0 = at genesis, N > 0 = at block N (default: Isthmus only)"`
 
 	// blockTime is the block time to use for the rollup
 	// (default is 2 seconds)
-	blockTime uint64
+	BlockTime uint64 `flag:"block-time" description:"Block time to use for the rollup" default:"2"`
 
 	// batcherMaxChannelDuration is the maximum channel duration to use for the batcher
 	// (default is 2 seconds)
-	batcherMaxChannelDuration uint64
+	BatcherMaxChannelDuration uint64 `flag:"batcher-max-channel-duration" description:"Maximum channel duration to use for the batcher" default:"2"`
 
 	// whether to enable flashblocks in Rollup-boost. Note the internal builder **will not** be
 	// using flashblocks. This is meant to be used with an external builder for now.
-	flashblocks bool
+	Flashblocks bool `flag:"flashblocks" description:"Whether to enable flashblocks" default:"false"`
 
 	// flashblocksBuilderURL is the URL of the builder that returns the flashblocks. This is meant to be used
 	// for external builders.
-	flashblocksBuilderURL string
+	FlashblocksBuilderURL string `flag:"flashblocks-builder" description:"External URL of builder flashblocks stream"`
 
 	// Indicates that flashblocks-rpc should use base image
-	baseOverlay bool
+	BaseOverlay bool `flag:"base-overlay" description:"Whether to use base implementation for flashblocks-rpc" default:"false"`
 
 	// whether to enable websocket proxy
-	enableWebsocketProxy bool
+	EnableWebsocketProxy bool `flag:"enable-websocket-proxy" description:"Whether to enable websocket proxy" default:"false"`
 
 	// whether to enable chain-monitor
-	enableChainMonitor bool
+	EnableChainMonitor bool `flag:"chain-monitor" description:"Whether to enable chain-monitor" default:"false"`
 }
 
 func (o *OpRecipe) Name() string {
@@ -51,25 +47,11 @@ func (o *OpRecipe) Description() string {
 	return "Deploy an OP stack"
 }
 
-func (o *OpRecipe) Flags() *flag.FlagSet {
-	flags := flag.NewFlagSet("opstack", flag.ContinueOnError)
-	flags.StringVar(&o.externalBuilder, "external-builder", "", "External builder URL")
-	flags.Var(&nullableUint64Value{&o.enableLatestFork}, "enable-latest-fork", "Enable Jovian fork: 0 = at genesis, N > 0 = at block N (default: Isthmus only)")
-	flags.Uint64Var(&o.blockTime, "block-time", defaultOpBlockTimeSeconds, "Block time to use for the rollup")
-	flags.Uint64Var(&o.batcherMaxChannelDuration, "batcher-max-channel-duration", 2, "Maximum channel duration to use for the batcher")
-	flags.BoolVar(&o.flashblocks, "flashblocks", false, "Whether to enable flashblocks")
-	flags.BoolVar(&o.baseOverlay, "base-overlay", false, "Whether to use base implementation for flashblocks-rpc")
-	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
-	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
-	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
-	return flags
-}
-
 func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
 	builder.WithL2()
-	builder.ApplyLatestL2Fork(o.enableLatestFork)
-	builder.OpBlockTime(o.blockTime)
+	builder.ApplyLatestL2Fork(o.EnableLatestFork)
+	builder.OpBlockTime(o.BlockTime)
 	return builder
 }
 
@@ -82,8 +64,8 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 		BeaconNode: "beacon",
 	})
 
-	flashblocksBuilderURLRef := o.flashblocksBuilderURL
-	externalBuilderRef := o.externalBuilder
+	flashblocksBuilderURLRef := o.FlashblocksBuilderURL
+	externalBuilderRef := o.ExternalBuilder
 	peers := []string{}
 
 	opGeth := &OpGeth{}
@@ -94,52 +76,52 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 		ID:      opGeth.Enode.NodeID(),
 	}
 
-	if o.externalBuilder == "op-reth" {
+	if o.ExternalBuilder == "op-reth" {
 		// Add a new op-reth service and connect it to Rollup-boost
 		svcManager.AddComponent(&OpReth{})
 
 		externalBuilderRef = Connect("op-reth", "authrpc")
-	} else if o.externalBuilder == "op-rbuilder" {
+	} else if o.ExternalBuilder == "op-rbuilder" {
 		svcManager.AddComponent(&OpRbuilder{
-			Flashblocks: o.flashblocks,
+			Flashblocks: o.Flashblocks,
 		})
 		externalBuilderRef = Connect("op-rbuilder", "authrpc")
 	}
 
-	if o.flashblocks && o.externalBuilder == "op-rbuilder" {
+	if o.Flashblocks && o.ExternalBuilder == "op-rbuilder" {
 		// If flashblocks is enabled and using op-rbuilder, use it to deliver flashblocks
 		flashblocksBuilderURLRef = ConnectWs("op-rbuilder", "flashblocks")
 	}
 
-	if o.flashblocks {
+	if o.Flashblocks {
 		peers = append(peers, "flashblocks-rpc")
 	}
 
 	// Only enable bproxy if flashblocks is enabled (since flashblocks-rpc is the only service that needs it)
-	if o.flashblocks {
+	if o.Flashblocks {
 		svcManager.AddComponent(&BProxy{
 			TargetAuthrpc:         externalBuilderRef,
 			Peers:                 peers,
-			Flashblocks:           o.flashblocks,
+			Flashblocks:           o.Flashblocks,
 			FlashblocksBuilderURL: flashblocksBuilderURLRef,
 		})
 	}
 
 	// Only enable websocket-proxy if the flag is set
-	if o.enableWebsocketProxy {
+	if o.EnableWebsocketProxy {
 		svcManager.AddComponent(&WebsocketProxy{
 			Upstream: "rollup-boost",
 		})
 	}
 
 	elNode := "op-geth"
-	if o.externalBuilder != "" {
+	if o.ExternalBuilder != "" {
 		elNode = "rollup-boost"
 
 		// Use bproxy if flashblocks is enabled, otherwise use external builder directly
 		builderRef := externalBuilderRef
 		flashblocksBuilderRef := flashblocksBuilderURLRef
-		if o.flashblocks {
+		if o.Flashblocks {
 			builderRef = Connect("bproxy", "authrpc")
 			flashblocksBuilderRef = ConnectWs("bproxy", "flashblocks")
 		}
@@ -147,23 +129,23 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 		svcManager.AddComponent(&RollupBoost{
 			ELNode:                "op-geth",
 			Builder:               builderRef,
-			Flashblocks:           o.flashblocks,
+			Flashblocks:           o.Flashblocks,
 			FlashblocksBuilderURL: flashblocksBuilderRef,
 		})
 	}
 
-	if o.flashblocks {
+	if o.Flashblocks {
 		// Determine which service to use for flashblocks websocket connection
 		flashblocksWSService := "rollup-boost"
 		useWebsocketProxy := false
-		if o.enableWebsocketProxy {
+		if o.EnableWebsocketProxy {
 			flashblocksWSService = "websocket-proxy"
 			useWebsocketProxy = true
 		}
 
 		svcManager.AddComponent(&FlashblocksRPC{
 			FlashblocksWSService: flashblocksWSService,
-			BaseOverlay:          o.baseOverlay,
+			BaseOverlay:          o.BaseOverlay,
 			UseWebsocketProxy:    useWebsocketProxy,
 		})
 	}
@@ -178,13 +160,13 @@ func (o *OpRecipe) Apply(svcManager *Manifest) {
 		L1Node:             "el",
 		L2Node:             "op-geth",
 		RollupNode:         "op-node",
-		MaxChannelDuration: o.batcherMaxChannelDuration,
+		MaxChannelDuration: o.BatcherMaxChannelDuration,
 	})
 
-	if o.enableChainMonitor {
+	if o.EnableChainMonitor {
 		svcManager.AddComponent(&ChainMonitor{
 			L1RPC:            "el",
-			L2BlockTime:      o.blockTime,
+			L2BlockTime:      o.BlockTime,
 			L2BuilderAddress: defaultL2BuilderAddress,
 			L2RPC:            "op-geth",
 		})
