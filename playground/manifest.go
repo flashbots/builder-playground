@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/flashbots/builder-playground/utils"
-	flag "github.com/spf13/pflag"
 )
 
 const (
@@ -22,7 +21,6 @@ const (
 type Recipe interface {
 	Name() string
 	Description() string
-	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
 	Apply(manifest *Manifest)
 	Output(manifest *Manifest) map[string]interface{}

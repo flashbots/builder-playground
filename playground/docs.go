@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/flashbots/builder-playground/utils/flags"
 	flag "github.com/spf13/pflag"
 )
 
@@ -34,9 +35,11 @@ func GenerateDocs(recipes []Recipe) error {
 
 		// Flags section
 		md.WriteString("## Flags\n\n")
-		flags := recipe.Flags()
-		if flags != nil && flags.HasFlags() {
-			flags.VisitAll(func(f *flag.Flag) {
+		recipeFlagSet := flag.NewFlagSet(recipe.Name(), flag.ContinueOnError)
+		flags.ParseFlags(recipe, recipeFlagSet)
+
+		if recipeFlagSet != nil && recipeFlagSet.HasFlags() {
+			recipeFlagSet.VisitAll(func(f *flag.Flag) {
 				flagType := f.Value.Type()
 				defaultVal := f.DefValue
 				usage := f.Usage

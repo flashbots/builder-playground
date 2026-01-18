@@ -2,6 +2,7 @@ package flags
 
 import (
 	"testing"
+	"time"
 
 	flag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
@@ -11,10 +12,12 @@ func TestParseFlags_BasicTypes(t *testing.T) {
 	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
 
 	type Config struct {
-		Name    string  `flag:"name" description:"User name" default:"john"`
-		Age     int     `flag:"age" description:"User age" default:"25"`
-		Enabled bool    `flag:"enabled" description:"Is enabled" default:"true"`
-		Score   float64 `flag:"score" description:"Score" default:"99.5"`
+		Name            string        `flag:"name" description:"User name" default:"john"`
+		Age             int           `flag:"age" description:"User age" default:"25"`
+		Enabled         bool          `flag:"enabled" description:"Is enabled" default:"true"`
+		Score           float64       `flag:"score" description:"Score" default:"99.5"`
+		Timeout         time.Duration `flag:"timeout" description:"Request timeout" default:"30s"`
+		OptionalValue   *uint64       `flag:"optional" description:"Optional uint64 value"`
 	}
 
 	cfg := &Config{}
@@ -24,25 +27,32 @@ func TestParseFlags_BasicTypes(t *testing.T) {
 	require.Equal(t, 25, cfg.Age)
 	require.Equal(t, true, cfg.Enabled)
 	require.Equal(t, 99.5, cfg.Score)
+	require.Equal(t, 30*time.Second, cfg.Timeout)
+	require.Nil(t, cfg.OptionalValue)
 }
 
 func TestParseFlags_ActualParsing(t *testing.T) {
 	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
 
 	type Config struct {
-		Host string `flag:"host" description:"Host address" default:"localhost"`
-		Port int    `flag:"port" description:"Port number" default:"8080"`
+		Host          string        `flag:"host" description:"Host address" default:"localhost"`
+		Port          int           `flag:"port" description:"Port number" default:"8080"`
+		Timeout       time.Duration `flag:"timeout" description:"Request timeout" default:"30s"`
+		OptionalValue *uint64       `flag:"optional" description:"Optional uint64 value"`
 	}
 
 	cfg := &Config{}
 	require.NoError(t, ParseFlags(cfg, flagSet))
 
-	args := []string{"--host=example.com", "--port=9000"}
+	args := []string{"--host=example.com", "--port=9000", "--timeout=10s", "--optional=42"}
 	err := flagSet.Parse(args)
 	require.NoError(t, err)
 
 	require.Equal(t, "example.com", cfg.Host)
 	require.Equal(t, 9000, cfg.Port)
+	require.Equal(t, 10*time.Second, cfg.Timeout)
+	require.NotNil(t, cfg.OptionalValue)
+	require.Equal(t, uint64(42), *cfg.OptionalValue)
 }
 
 func TestParseFlags_NestedStructs(t *testing.T) {

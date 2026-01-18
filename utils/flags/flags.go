@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	flag "github.com/spf13/pflag"
 )
@@ -67,6 +68,28 @@ func parseStruct(v reflect.Value, t reflect.Type, prefix string, flagSet *flag.F
 }
 
 func registerFlag(field reflect.Value, name, description, defaultValue string, flagSet *flag.FlagSet) error {
+	// Handle pointer types (nullable values) - always nil by default
+	if field.Kind() == reflect.Ptr {
+		nullable := &nullableFlag{field: field}
+		flagSet.Var(nullable, name, description)
+		return nil
+	}
+
+	// Handle time.Duration as a special case
+	if field.Type() == reflect.TypeOf(time.Duration(0)) {
+		def := time.Duration(0)
+		if defaultValue != "" {
+			var err error
+			def, err = time.ParseDuration(defaultValue)
+			if err != nil {
+				return fmt.Errorf("invalid default value for duration: %s", defaultValue)
+			}
+		}
+		ptr := field.Addr().Interface().(*time.Duration)
+		flagSet.DurationVar(ptr, name, def, description)
+		return nil
+	}
+
 	switch field.Kind() {
 	case reflect.String:
 		def := defaultValue
@@ -189,4 +212,49 @@ func (s *stringSliceFlag) Set(val string) error {
 
 func (s *stringSliceFlag) Type() string {
 	return "stringSlice"
+}
+
+// nullableFlag is a generic wrapper for pointer types
+type nullableFlag struct {
+	field reflect.Value
+}
+
+func (n *nullableFlag) String() string {
+	if n.field.IsNil() {
+		return ""
+	}
+	return fmt.Sprintf("%v", n.field.Elem().Interface())
+}
+
+func (n *nullableFlag) Set(s string) error {
+	if s == "" {
+		n.field.Set(reflect.Zero(n.field.Type()))
+		return nil
+	}
+
+	// Create new value of the element type
+	elemType := n.field.Type().Elem()
+	newVal := reflect.New(elemType).Elem()
+
+	// Parse the string value based on type
+	switch elemType.Kind() {
+	case reflect.Uint, reflect.Uint64:
+		val, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return err
+		}
+		newVal.SetUint(val)
+	default:
+		return fmt.Errorf("unsupported nullable type: %v", elemType.Kind())
+	}
+
+	// Set the field to point to the new value
+	ptr := reflect.New(elemType)
+	ptr.Elem().Set(newVal)
+	n.field.Set(ptr)
+	return nil
+}
+
+func (n *nullableFlag) Type() string {
+	return n.field.Type().Elem().Kind().String()
 }

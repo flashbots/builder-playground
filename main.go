@@ -14,9 +14,11 @@ import (
 	"github.com/fatih/color"
 	"github.com/flashbots/builder-playground/playground"
 	"github.com/flashbots/builder-playground/utils"
+	"github.com/flashbots/builder-playground/utils/flags"
 	"github.com/flashbots/builder-playground/utils/logging"
 	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/spf13/cobra"
+	flag "github.com/spf13/pflag"
 )
 
 var version = "dev"
@@ -281,8 +283,12 @@ func main() {
 				return runIt(recipe)
 			},
 		}
+
 		// add the flags from the recipe
-		recipeCmd.Flags().AddFlagSet(recipe.Flags())
+		recipeFlagSet := flag.NewFlagSet(recipe.Name(), flag.ContinueOnError)
+		flags.ParseFlags(recipe, recipeFlagSet)
+		recipeCmd.Flags().AddFlagSet(recipeFlagSet)
+
 		// add the common flags
 		recipeCmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
 		recipeCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
