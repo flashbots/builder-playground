@@ -12,12 +12,12 @@ func TestParseFlags_BasicTypes(t *testing.T) {
 	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
 
 	type Config struct {
-		Name            string        `flag:"name" description:"User name" default:"john"`
-		Age             int           `flag:"age" description:"User age" default:"25"`
-		Enabled         bool          `flag:"enabled" description:"Is enabled" default:"true"`
-		Score           float64       `flag:"score" description:"Score" default:"99.5"`
-		Timeout         time.Duration `flag:"timeout" description:"Request timeout" default:"30s"`
-		OptionalValue   *uint64       `flag:"optional" description:"Optional uint64 value"`
+		Name          string        `flag:"name" description:"User name" default:"john"`
+		Age           int           `flag:"age" description:"User age" default:"25"`
+		Enabled       bool          `flag:"enabled" description:"Is enabled" default:"true"`
+		Score         float64       `flag:"score" description:"Score" default:"99.5"`
+		Timeout       time.Duration `flag:"timeout" description:"Request timeout" default:"30s"`
+		OptionalValue *uint64       `flag:"optional" description:"Optional uint64 value"`
 	}
 
 	cfg := &Config{}
