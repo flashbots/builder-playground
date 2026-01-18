@@ -1,14 +1,14 @@
 package flags
 
 import (
-	"flag"
 	"testing"
 
+	flag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
 func TestParseFlags_BasicTypes(t *testing.T) {
-	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
 
 	type Config struct {
 		Name    string  `flag:"name" description:"User name" default:"john"`
@@ -18,7 +18,7 @@ func TestParseFlags_BasicTypes(t *testing.T) {
 	}
 
 	cfg := &Config{}
-	require.NoError(t, ParseFlags(cfg))
+	require.NoError(t, ParseFlags(cfg, flagSet))
 
 	require.Equal(t, "john", cfg.Name)
 	require.Equal(t, 25, cfg.Age)
@@ -27,7 +27,7 @@ func TestParseFlags_BasicTypes(t *testing.T) {
 }
 
 func TestParseFlags_ActualParsing(t *testing.T) {
-	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
 
 	type Config struct {
 		Host string `flag:"host" description:"Host address" default:"localhost"`
@@ -35,10 +35,10 @@ func TestParseFlags_ActualParsing(t *testing.T) {
 	}
 
 	cfg := &Config{}
-	require.NoError(t, ParseFlags(cfg))
+	require.NoError(t, ParseFlags(cfg, flagSet))
 
-	args := []string{"-host=example.com", "-port=9000"}
-	err := flag.CommandLine.Parse(args)
+	args := []string{"--host=example.com", "--port=9000"}
+	err := flagSet.Parse(args)
 	require.NoError(t, err)
 
 	require.Equal(t, "example.com", cfg.Host)
@@ -46,7 +46,7 @@ func TestParseFlags_ActualParsing(t *testing.T) {
 }
 
 func TestParseFlags_NestedStructs(t *testing.T) {
-	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
 
 	type Database struct {
 		Host string `flag:"host" description:"Database host" default:"localhost"`
@@ -60,10 +60,10 @@ func TestParseFlags_NestedStructs(t *testing.T) {
 	}
 
 	cfg := &Config{}
-	require.NoError(t, ParseFlags(cfg))
+	require.NoError(t, ParseFlags(cfg, flagSet))
 
-	args := []string{"-app=testapp", "-db.host=db.example.com", "-db.port=3306", "-host=flat.example.com", "-port=9999"}
-	require.NoError(t, flag.CommandLine.Parse(args))
+	args := []string{"--app=testapp", "--db.host=db.example.com", "--db.port=3306", "--host=flat.example.com", "--port=9999"}
+	require.NoError(t, flagSet.Parse(args))
 
 	require.Equal(t, "testapp", cfg.AppName)
 	require.Equal(t, "db.example.com", cfg.DB.Host)

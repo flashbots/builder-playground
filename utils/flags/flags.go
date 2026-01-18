@@ -1,17 +1,18 @@
 package flags
 
 import (
-	"flag"
 	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
+
+	flag "github.com/spf13/pflag"
 )
 
 // ParseFlags reads struct tags and automatically generates flags.
 // Supported tag format: `flag:"name" description:"desc" default:"value"`
 // The struct fields must be exported and of supported types (string, int, int64, bool, uint, uint64, float64).
-func ParseFlags(cfg interface{}) error {
+func ParseFlags(cfg interface{}, flagSet *flag.FlagSet) error {
 	v := reflect.ValueOf(cfg)
 	if v.Kind() != reflect.Ptr {
 		return fmt.Errorf("config must be a pointer to struct")
@@ -24,10 +25,10 @@ func ParseFlags(cfg interface{}) error {
 
 	t := v.Type()
 
-	return parseStruct(v, t, "")
+	return parseStruct(v, t, "", flagSet)
 }
 
-func parseStruct(v reflect.Value, t reflect.Type, prefix string) error {
+func parseStruct(v reflect.Value, t reflect.Type, prefix string, flagSet *flag.FlagSet) error {
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
 		fieldType := t.Field(i)
@@ -42,7 +43,7 @@ func parseStruct(v reflect.Value, t reflect.Type, prefix string) error {
 			if flagPrefix := fieldType.Tag.Get("flag"); flagPrefix != "" {
 				nestedPrefix = prefix + flagPrefix + "."
 			}
-			if err := parseStruct(field, field.Type(), nestedPrefix); err != nil {
+			if err := parseStruct(field, field.Type(), nestedPrefix, flagSet); err != nil {
 				return err
 			}
 			continue
@@ -57,7 +58,7 @@ func parseStruct(v reflect.Value, t reflect.Type, prefix string) error {
 		defaultValue := fieldType.Tag.Get("default")
 
 		fullFlagName := prefix + flagName
-		if err := registerFlag(field, fullFlagName, description, defaultValue); err != nil {
+		if err := registerFlag(field, fullFlagName, description, defaultValue, flagSet); err != nil {
 			return fmt.Errorf("failed to register flag %s: %w", fullFlagName, err)
 		}
 	}
@@ -65,12 +66,12 @@ func parseStruct(v reflect.Value, t reflect.Type, prefix string) error {
 	return nil
 }
 
-func registerFlag(field reflect.Value, name, description, defaultValue string) error {
+func registerFlag(field reflect.Value, name, description, defaultValue string, flagSet *flag.FlagSet) error {
 	switch field.Kind() {
 	case reflect.String:
 		def := defaultValue
 		ptr := field.Addr().Interface().(*string)
-		flag.StringVar(ptr, name, def, description)
+		flagSet.StringVar(ptr, name, def, description)
 
 	case reflect.Int:
 		def := 0
@@ -82,7 +83,7 @@ func registerFlag(field reflect.Value, name, description, defaultValue string) e
 			}
 		}
 		ptr := field.Addr().Interface().(*int)
-		flag.IntVar(ptr, name, def, description)
+		flagSet.IntVar(ptr, name, def, description)
 
 	case reflect.Int64:
 		def := int64(0)
@@ -94,7 +95,7 @@ func registerFlag(field reflect.Value, name, description, defaultValue string) e
 			}
 		}
 		ptr := field.Addr().Interface().(*int64)
-		flag.Int64Var(ptr, name, def, description)
+		flagSet.Int64Var(ptr, name, def, description)
 
 	case reflect.Bool:
 		def := false
@@ -106,7 +107,7 @@ func registerFlag(field reflect.Value, name, description, defaultValue string) e
 			}
 		}
 		ptr := field.Addr().Interface().(*bool)
-		flag.BoolVar(ptr, name, def, description)
+		flagSet.BoolVar(ptr, name, def, description)
 
 	case reflect.Uint:
 		def := uint(0)
@@ -118,7 +119,7 @@ func registerFlag(field reflect.Value, name, description, defaultValue string) e
 			def = uint(val)
 		}
 		ptr := field.Addr().Interface().(*uint)
-		flag.UintVar(ptr, name, def, description)
+		flagSet.UintVar(ptr, name, def, description)
 
 	case reflect.Uint64:
 		def := uint64(0)
@@ -130,7 +131,7 @@ func registerFlag(field reflect.Value, name, description, defaultValue string) e
 			}
 		}
 		ptr := field.Addr().Interface().(*uint64)
-		flag.Uint64Var(ptr, name, def, description)
+		flagSet.Uint64Var(ptr, name, def, description)
 
 	case reflect.Float64:
 		def := float64(0)
@@ -142,7 +143,7 @@ func registerFlag(field reflect.Value, name, description, defaultValue string) e
 			}
 		}
 		ptr := field.Addr().Interface().(*float64)
-		flag.Float64Var(ptr, name, def, description)
+		flagSet.Float64Var(ptr, name, def, description)
 
 	case reflect.Slice:
 		// Handle string slices
@@ -158,7 +159,7 @@ func registerFlag(field reflect.Value, name, description, defaultValue string) e
 				value:  def,
 			}
 			*sliceFlag.target = def
-			flag.Var(sliceFlag, name, description)
+			flagSet.Var(sliceFlag, name, description)
 		} else {
 			return fmt.Errorf("unsupported slice type: %v", field.Type())
 		}
@@ -170,7 +171,7 @@ func registerFlag(field reflect.Value, name, description, defaultValue string) e
 	return nil
 }
 
-// stringSliceFlag implements flag.Value for []string
+// stringSliceFlag implements pflag.Value for []string
 type stringSliceFlag struct {
 	target *[]string
 	value  []string
@@ -184,4 +185,8 @@ func (s *stringSliceFlag) Set(val string) error {
 	s.value = strings.Split(val, ",")
 	*s.target = s.value
 	return nil
+}
+
+func (s *stringSliceFlag) Type() string {
+	return "stringSlice"
 }
