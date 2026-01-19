@@ -173,7 +173,7 @@ func newTestFramework(t *testing.T) *testFramework {
 	return &testFramework{t: t}
 }
 
-func (tt *testFramework) test(component Component, args []string) *Manifest {
+func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 	t := tt.t
 
 	// use the name of the repo and the current timestamp to generate
@@ -186,16 +186,17 @@ func (tt *testFramework) test(component Component, args []string) *Manifest {
 		t.Fatal(err)
 	}
 
+	o := &output{
+		dst:     e2eTestDir,
+		homeDir: filepath.Join(e2eTestDir, "artifacts"),
+	}
+
 	exCtx := &ExContext{
+		Output:   o,
 		LogLevel: LevelDebug,
 		Contender: &ContenderContext{
 			Enabled: false,
 		},
-	}
-
-	o := &output{
-		dst:     e2eTestDir,
-		homeDir: filepath.Join(e2eTestDir, "artifacts"),
 	}
 
 	if recipe, ok := component.(Recipe); ok {
@@ -208,10 +209,10 @@ func (tt *testFramework) test(component Component, args []string) *Manifest {
 		require.NoError(t, err)
 	}
 
-	svcManager := NewManifest(exCtx, o)
-	component.Apply(svcManager)
+	components := component.Apply(exCtx)
+	svcManager := NewManifest("", components)
 
-	require.NoError(t, svcManager.Validate())
+	require.NoError(t, svcManager.Validate(o))
 
 	// Generate random network name with "testing-" prefix
 	networkName := fmt.Sprintf("testing-%d", rand.Int63())

@@ -17,13 +17,13 @@ func GenerateDocs(recipes []Recipe) error {
 	}
 
 	for _, recipe := range recipes {
-		output, err := NewOutput("/tmp/playground-docs")
+		out, err := NewOutput("/tmp/docs-output")
 		if err != nil {
 			return err
 		}
 
-		manifest := NewManifest(&ExContext{Contender: &ContenderContext{}}, output, "")
-		recipe.Apply(manifest)
+		components := recipe.Apply(&ExContext{Contender: &ContenderContext{}, Output: out})
+		manifest := NewManifest("", components)
 
 		// Generate markdown content
 		var md strings.Builder
