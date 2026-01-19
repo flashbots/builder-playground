@@ -16,4 +16,3 @@ slot_delta_to_start_bidding_ms = -20000
 name = "playground"
 url = "http://localhost:5555"
 mode = "full"
-max_bid_eth = "0.05"
