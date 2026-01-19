@@ -465,14 +465,14 @@ func (r *RethEL) Apply(manifest *Manifest) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
 
-	if r.UseNativeReth {
-		// When Reth runs in the host machine, if we enable ipc, the IPC path /data_reth/reth.ipc
-		// points to the artifact folder with an absolute path that is too long for an IPC path.
-		// https://discussions.apple.com/thread/250275651
-		svc.WithArgs("--ipcdisable")
-	} else {
-		svc.WithArgs("--ipcpath", "/data_reth/reth.ipc")
-	}
+		//if r.UseNativeReth {
+	// When Reth runs in the host machine, if we enable ipc, the IPC path /data_reth/reth.ipc
+	// points to the artifact folder with an absolute path that is too long for an IPC path.
+	// https://discussions.apple.com/thread/250275651
+	//	svc.WithArgs("--ipcdisable")
+	//} else {
+	svc.WithArgs("--ipcpath", "/data_reth/reth.ipc")
+	//}
 
 	UseHealthmon(manifest, svc, healthmonExecution)
 
