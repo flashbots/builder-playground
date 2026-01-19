@@ -171,6 +171,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	genesisTime := uint64(time.Now().Add(time.Duration(b.genesisDelay) * time.Second).Unix())
 	config := params.BeaconConfig()
+	config.ElectraForkEpoch = 0
 
 	gen := interop.GethTestnetGenesis(genesisTime, config)
 	// HACK: fix this in prysm?

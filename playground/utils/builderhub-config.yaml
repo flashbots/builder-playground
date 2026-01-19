@@ -11,6 +11,8 @@ rbuilder:
   extra_data: BuilderNet (playground)
   require_non_empty_blocklist: false
   root_hash_threads: 4
+  # BLS secret key for signing relay submissions (matches mev-boost-relay default)
+  relay_secret_key: "0x5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
   # 0 for debugging
   watchdog_timeout_sec: 0
   max_order_execution_duration_warning_us: 50000

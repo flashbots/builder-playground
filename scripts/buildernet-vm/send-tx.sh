@@ -18,7 +18,8 @@ TX_PAYLOAD=$(cast mktx \
 	--value 0.1ether --nonce "$NONCE" --gas-limit 21000 --gas-price 1gwei --chain "$CHAIN_ID")
 
 # Change this to set the target. 8545 for playground reth, 18645 for buildernet vm rbuilder.
-SEND_RESULT=$(curl -s --fail-with-body -X POST http://localhost:8545 \
+date +%H:%M:%S
+SEND_RESULT=$(curl -s --fail-with-body -X POST http://localhost:18645 \
 	-H "Content-Type: application/json" \
 	-d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_sendRawTransaction\",\"params\":[\"$TX_PAYLOAD\"],\"id\":1}")
 CURL_EXIT=$?
