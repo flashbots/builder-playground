@@ -2,15 +2,14 @@ configType = "custom"
 l1ChainID = 1337
 fundDevAccounts = false
 useInterop = false
-l1ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
-l2ContractsLocator = "https://storage.googleapis.com/oplabs-contract-artifacts/artifacts-v1-44f2b904c73df5d0e54ca6e51d081ada1e4d75ca5b136513b61ea1566459eaa5.tar.gz"
+useRevenueShare = false
+l1ContractsLocator = "embedded"
+l2ContractsLocator = "embedded"
 
 [superchainRoles]
-proxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
-protocolVersionsOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
-guardian = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 superchainProxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 superchainGuardian = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+protocolVersionsOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 challenger = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 
 [[chains]]
@@ -18,10 +17,17 @@ id = "0x000000000000000000000000000000000000000000000000000000000000000d"
 baseFeeVaultRecipient = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 l1FeeVaultRecipient = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 sequencerFeeVaultRecipient = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+operatorFeeVaultRecipient = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 gasLimit = 60000000
 eip1559DenominatorCanyon = 250
 eip1559Denominator = 50
 eip1559Elasticity = 6
+operatorFeeScalar = 0
+operatorFeeConstant = 0
+chainFeesRecipient = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+minBaseFee = 0
+daFootprintGasScalar = 0
+
 [chains.roles]
 l1ProxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 l2ProxyAdminOwner = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
@@ -30,4 +36,3 @@ unsafeBlockSigner = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc"
 batcher = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 proposer = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 challenger = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
-

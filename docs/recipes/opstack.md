@@ -8,7 +8,7 @@ Deploy an OP stack.
 - `batcher-max-channel-duration` (uint64): Maximum channel duration to use for the batcher. Default to '2'.
 - `block-time` (uint64): Block time to use for the rollup. Default to '2'.
 - `chain-monitor` (bool): Whether to enable chain-monitor. Default to 'false'.
-- `enable-latest-fork` (uint64): Enable latest fork isthmus (nil or empty = disabled, otherwise enabled at specified block). Default to 'nil'.
+- `enable-latest-fork` (uint64): Enable Jovian fork: 0 = at genesis, N > 0 = at block N (default: Isthmus only). Default to 'nil'.
 - `enable-websocket-proxy` (bool): Whether to enable websocket proxy. Default to 'false'.
 - `external-builder` (string): External builder URL. Default to ''.
 - `flashblocks` (bool): Whether to enable flashblocks. Default to 'false'.
