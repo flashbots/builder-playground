@@ -1,7 +1,7 @@
 bidding_service:
   config: |
-    slot_delta_to_start_bidding_ms = -1000
-    subsidy = "0.01"
+    slot_delta_to_start_bidding_ms = -20000
+    subsidy = "0"
 
 rbuilder:
   enabled: true
@@ -13,6 +13,8 @@ rbuilder:
   root_hash_threads: 4
   # BLS secret key for signing relay submissions (matches mev-boost-relay default)
   relay_secret_key: "0x5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
+  # Builder: 0x74085Fbe5108CF75F91951DDfD06d3f7d6890EF7
+  coinbase_secret_key: "0x6a4254d9cb2f348290f65002d4e45cb7a447f287ef03ac226a3710ee91c9bc80"
   # 0 for debugging
   watchdog_timeout_sec: 0
   max_order_execution_duration_warning_us: 50000

@@ -12,14 +12,15 @@ NONCE_HEX=$(curl -s -X POST http://localhost:8545 \
 	-d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getTransactionCount\",\"params\":[\"$FROM_ADDR\",\"pending\"],\"id\":1}" | jq -r '.result')
 NONCE=$((NONCE_HEX))
 
+# Tx: Send the builder 0x74085Fbe5108CF75F91951DDfD06d3f7d6890EF7 with 0.1 ether
 TX_PAYLOAD=$(cast mktx \
 	--private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-	0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
+	0x74085Fbe5108CF75F91951DDfD06d3f7d6890EF7 \
 	--value 0.1ether --nonce "$NONCE" --gas-limit 21000 --gas-price 1gwei --chain "$CHAIN_ID")
 
 # Change this to set the target. 8545 for playground reth, 18645 for buildernet vm rbuilder.
 date +%H:%M:%S
-SEND_RESULT=$(curl -s --fail-with-body -X POST http://localhost:18645 \
+SEND_RESULT=$(curl -s --fail-with-body -X POST http://localhost:8545 \
 	-H "Content-Type: application/json" \
 	-d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_sendRawTransaction\",\"params\":[\"$TX_PAYLOAD\"],\"id\":1}")
 CURL_EXIT=$?
