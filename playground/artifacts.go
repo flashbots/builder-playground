@@ -121,7 +121,7 @@ type ArtifactsBuilder struct {
 	l2Enabled            bool
 	applyLatestL2Fork    *uint64
 	opBlockTimeInSeconds uint64
-	predeployFile        string
+	predeploysFile       string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -169,15 +169,15 @@ func (b *ArtifactsBuilder) PrefundedAccounts(accounts []string) *ArtifactsBuilde
 }
 
 func (b *ArtifactsBuilder) PredeployFile(filePath string) *ArtifactsBuilder {
-	b.predeployFile = filePath
+	b.predeploysFile = filePath
 	return b
 }
 
 func (b *ArtifactsBuilder) loadPredeploys() (types.GenesisAlloc, error) {
-	if b.predeployFile == "" {
+	if b.predeploysFile == "" {
 		return types.GenesisAlloc{}, nil
 	}
-	data, err := os.ReadFile(b.predeployFile)
+	data, err := os.ReadFile(b.predeploysFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read predeploy file: %w", err)
 	}
@@ -335,7 +335,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		// while preserving the existing predeploys from the template
 		allocs := originalGenesis.Alloc
 
-		// Add predeployed contracts (after template predeploys, before prefunded accounts)
+		// Add custom predeploys, if any
 		predeploys, err := b.loadPredeploys()
 		if err != nil {
 			return err
