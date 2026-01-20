@@ -41,6 +41,10 @@ type OpRecipe struct {
 
 	// whether to enable chain-monitor
 	enableChainMonitor bool
+
+	// predeployFile is the path to a JSON file containing additional contracts
+	// to predeploy in the L2 genesis
+	predeployFile string
 }
 
 func (o *OpRecipe) Name() string {
@@ -62,6 +66,7 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.StringVar(&o.flashblocksBuilderURL, "flashblocks-builder", "", "External URL of builder flashblocks stream")
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
 	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
+	flags.StringVar(&o.predeployFile, "use-predeploys", "", "Path to JSON file with additional contracts to predeploy in L2 genesis")
 	return flags
 }
 
@@ -70,6 +75,7 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	builder.WithL2()
 	builder.ApplyLatestL2Fork(o.enableLatestFork)
 	builder.OpBlockTime(o.blockTime)
+	builder.PredeployFile(o.predeployFile)
 	return builder
 }
 

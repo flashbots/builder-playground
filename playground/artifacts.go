@@ -121,6 +121,7 @@ type ArtifactsBuilder struct {
 	l2Enabled            bool
 	applyLatestL2Fork    *uint64
 	opBlockTimeInSeconds uint64
+	predeployFile        string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -165,6 +166,26 @@ func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 func (b *ArtifactsBuilder) PrefundedAccounts(accounts []string) *ArtifactsBuilder {
 	b.prefundedAccounts = accounts
 	return b
+}
+
+func (b *ArtifactsBuilder) PredeployFile(filePath string) *ArtifactsBuilder {
+	b.predeployFile = filePath
+	return b
+}
+
+func (b *ArtifactsBuilder) loadPredeploys() (types.GenesisAlloc, error) {
+	if b.predeployFile == "" {
+		return types.GenesisAlloc{}, nil
+	}
+	data, err := os.ReadFile(b.predeployFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read predeploy file: %w", err)
+	}
+	var alloc types.GenesisAlloc
+	if err := json.Unmarshal(data, &alloc); err != nil {
+		return nil, fmt.Errorf("failed to parse predeploy JSON: %w", err)
+	}
+	return alloc, nil
 }
 
 var staticPrefundedAccounts = []string{
@@ -313,6 +334,14 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		// Update the allocs to include the same prefunded accounts as the L1 genesis,
 		// while preserving the existing predeploys from the template
 		allocs := originalGenesis.Alloc
+
+		// Add predeployed contracts (after template predeploys, before prefunded accounts)
+		predeploys, err := b.loadPredeploys()
+		if err != nil {
+			return err
+		}
+		maps.Copy(allocs, predeploys)
+
 		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
 			return err
 		}
