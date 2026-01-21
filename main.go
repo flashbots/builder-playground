@@ -44,6 +44,7 @@ var (
 	contenderTarget   string
 	detached          bool
 	prefundedAccounts []string
+	followFlag        bool
 )
 
 var rootCmd = &cobra.Command{
@@ -162,6 +163,7 @@ var logsCmd = &cobra.Command{
 	Short: "Show logs for a service",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := mainctx.Get()
+		follow := followFlag
 
 		switch len(args) {
 		case 1:
@@ -173,18 +175,13 @@ var logsCmd = &cobra.Command{
 				cmd.SilenceUsage = true
 				fmt.Println("multiple sessions found: please use 'list' to see all and provide like 'logs <session-name> <service-name>'")
 				return fmt.Errorf("invalid amount of args")
-			}
-			if len(sessions) == 1 {
-				if err := playground.Logs(ctx, "", args[0]); err != nil && !strings.Contains(err.Error(), "signal") {
+			} else {
+				if err := playground.Logs(ctx, "", args[0], follow); err != nil && !strings.Contains(err.Error(), "signal") {
 					return fmt.Errorf("failed to show logs: %w", err)
 				}
 			}
-			if err := playground.Logs(ctx, "", args[0]); err != nil && !strings.Contains(err.Error(), "signal") {
-				return fmt.Errorf("failed to show logs: %w", err)
-			}
-
 		case 2:
-			if err := playground.Logs(ctx, args[0], args[1]); err != nil && !strings.Contains(err.Error(), "signal") {
+			if err := playground.Logs(ctx, args[0], args[1], follow); err != nil && !strings.Contains(err.Error(), "signal") {
 				return fmt.Errorf("failed to show logs: %w", err)
 			}
 
@@ -251,6 +248,14 @@ var listCmd = &cobra.Command{
 	},
 }
 
+var generateDocsCmd = &cobra.Command{
+	Use:   "generate-docs",
+	Short: "Generate documentation for all recipes",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return playground.GenerateDocs(recipes)
+	},
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version",
@@ -306,6 +311,8 @@ func main() {
 
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(inspectCmd)
+
+	logsCmd.Flags().BoolVarP(&followFlag, "follow", "f", false, "Stream logs continuously instead of displaying and exiting")
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(versionCmd)
@@ -317,6 +324,7 @@ func main() {
 	debugCmd.AddCommand(probeCmd)
 	debugCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(debugCmd)
+	rootCmd.AddCommand(generateDocsCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -361,6 +369,7 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	exCtx := &playground.ExContext{
+		Output:   out,
 		LogLevel: logLevel,
 		// if contender.tps is set, assume contender is enabled
 		Contender: &playground.ContenderContext{
@@ -370,9 +379,8 @@ func runIt(recipe playground.Recipe) error {
 		},
 	}
 
-	svcManager := playground.NewManifest(exCtx, out, sessionID)
-
-	recipe.Apply(svcManager)
+	components := recipe.Apply(exCtx)
+	svcManager := playground.NewManifest(sessionID, components)
 
 	// generate the dot graph
 	slog.Debug("Generating dot graph...")
@@ -381,12 +389,12 @@ func runIt(recipe playground.Recipe) error {
 		return err
 	}
 
-	if err := svcManager.Validate(); err != nil {
+	if err := svcManager.Validate(out); err != nil {
 		return fmt.Errorf("failed to validate manifest: %w", err)
 	}
 
 	// save the manifest.json file
-	if err := svcManager.SaveJson(); err != nil {
+	if err := svcManager.SaveJson(out); err != nil {
 		return fmt.Errorf("failed to save manifest: %w", err)
 	}
 
@@ -447,15 +455,16 @@ func runIt(recipe playground.Recipe) error {
 				return ports[i].Name < ports[j].Name
 			})
 
-			var portsStr []any
+			var svcInfo []any
+			svcInfo = append(svcInfo, "image", ss.Image, "tag", ss.Tag)
 			for _, p := range ports {
 				protocol := ""
 				if p.Protocol == playground.ProtocolUDP {
 					protocol = "/udp"
 				}
-				portsStr = append(portsStr, p.Name, fmt.Sprintf("%d/%d%s", p.Port, p.HostPort, protocol))
+				svcInfo = append(svcInfo, p.Name, fmt.Sprintf("%d/%d%s", p.Port, p.HostPort, protocol))
 			}
-			slog.Info("• "+ss.Name, portsStr...)
+			slog.Info("• "+ss.Name, svcInfo...)
 		}
 		log.Println()
 	}
@@ -466,6 +475,12 @@ func runIt(recipe playground.Recipe) error {
 	if err := dockerRunner.WaitForReady(waitCtx); err != nil {
 		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
+	}
+
+	// run post hook operations
+	if err := svcManager.ExecutePostHookActions(); err != nil {
+		dockerRunner.Stop(keepFlag)
+		return fmt.Errorf("failed to execute post-hook operations: %w", err)
 	}
 
 	slog.Info("All services are healthy! Ready to accept transactions. 🚀", "session-id", svcManager.ID)

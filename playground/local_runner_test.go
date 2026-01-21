@@ -97,3 +97,23 @@ func TestWaitForReady_Success(t *testing.T) {
 	err = runner.WaitForReady(waitCtx)
 	require.NoError(t, err)
 }
+
+func TestCheckAndUpdateReadiness_MultipleCallsNoPanic(t *testing.T) {
+	manifest := &Manifest{
+		Services: []*Service{
+			{Name: "test-service"},
+		},
+	}
+
+	cfg := &RunnerConfig{
+		Manifest: manifest,
+	}
+	runner, err := NewLocalRunner(cfg)
+	require.NoError(t, err)
+
+	runner.updateTaskStatus("test-service", TaskStatusStarted)
+
+	require.NotPanics(t, func() {
+		runner.checkAndUpdateReadiness()
+	})
+}

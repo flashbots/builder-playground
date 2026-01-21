@@ -3,6 +3,7 @@ package playground
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,14 +24,13 @@ type Recipe interface {
 	Description() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
-	Apply(manifest *Manifest)
+	Apply(ctx *ExContext) *Component
 	Output(manifest *Manifest) map[string]interface{}
 }
 
 // Manifest describes a list of services and their dependencies
 type Manifest struct {
-	ctx *ExContext
-	ID  string `json:"session_id"`
+	ID string `json:"session_id"`
 
 	// list of Services
 	Services []*Service `json:"services"`
@@ -38,8 +38,47 @@ type Manifest struct {
 	// overrides is a map of service name to the path of the executable to run
 	// on the host machine instead of a container.
 	overrides map[string]string
+}
 
-	out *output
+func (s *Manifest) NewService(name string) *Service {
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	s.Services = append(s.Services, ss)
+	return ss
+}
+
+type Component struct {
+	Name     string
+	Services []*Service
+	Inner    []*Component
+}
+
+func NewComponent(name string) *Component {
+	return &Component{Name: name, Inner: []*Component{}}
+}
+
+func (p *Component) NewService(name string) *Service {
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	p.Services = append(p.Services, ss)
+	return ss
+}
+
+func (p *Component) AddComponent(ctx *ExContext, gen ComponentGen) {
+	p.Inner = append(p.Inner, gen.Apply(ctx))
+}
+
+func (p *Component) AddService(srv ComponentGen) {
+	p.Inner = append(p.Inner, srv.Apply(nil))
+}
+
+func componentToManifest(p *Component) []*Service {
+	services := p.Services
+
+	for _, innerComponent := range p.Inner {
+		innerServices := componentToManifest(innerComponent)
+		services = append(services, innerServices...)
+	}
+
+	return services
 }
 
 func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
@@ -72,15 +111,13 @@ func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
 	return nil
 }
 
-func NewManifest(ctx *ExContext, out *output, name ...string) *Manifest {
-	if len(name) == 0 {
-		name = []string{utils.GeneratePetName()}
+func NewManifest(name string, component *Component) *Manifest {
+	if name == "" {
+		name = utils.GeneratePetName()
 	}
-	ctx.Output = out
 	return &Manifest{
-		ID:        name[0],
-		ctx:       ctx,
-		out:       out,
+		ID:        name,
+		Services:  componentToManifest(component),
 		overrides: make(map[string]string),
 	}
 }
@@ -149,16 +186,12 @@ func (b *BootnodeRef) Connect() string {
 	return ConnectEnode(b.Service, b.ID)
 }
 
-type ServiceGen interface {
-	Apply(manifest *Manifest)
+type ComponentGen interface {
+	Apply(manifest *ExContext) *Component
 }
 
 type ServiceReady interface {
 	Ready(service *Service) error
-}
-
-func (s *Manifest) AddService(srv ServiceGen) {
-	srv.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -181,7 +214,7 @@ func (s *Manifest) GetService(name string) (*Service, bool) {
 // Validate validates the manifest
 // - checks if all the port dependencies are met from the service description
 // - downloads any local release artifacts for the services that require host execution
-func (s *Manifest) Validate() error {
+func (s *Manifest) Validate(out *output) error {
 	for _, ss := range s.Services {
 		// override ready checks that use the QueryURL feature
 		if ss.ReadyCheck != nil && ss.ReadyCheck.QueryURL != "" {
@@ -252,7 +285,7 @@ func (s *Manifest) Validate() error {
 	// validate that the mounts are correct
 	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
-			fileLoc := filepath.Join(s.out.dst, fileNameRef)
+			fileLoc := filepath.Join(out.dst, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
 				if os.IsNotExist(err) {
@@ -266,7 +299,7 @@ func (s *Manifest) Validate() error {
 	// validate that the mounts are correct
 	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
-			fileLoc := filepath.Join(s.out.dst, fileNameRef)
+			fileLoc := filepath.Join(out.dst, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
 				if os.IsNotExist(err) {
@@ -336,7 +369,8 @@ type Service struct {
 
 	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
-	release *release
+	postHook *postHook
+	release  *release
 }
 
 type DependsOnCondition string
@@ -392,12 +426,6 @@ func (s *Service) WithLabel(key, value string) *Service {
 	}
 	s.Labels[key] = value
 	return s
-}
-
-func (s *Manifest) NewService(name string) *Service {
-	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
-	s.Services = append(s.Services, ss)
-	return ss
 }
 
 func (s *Service) WithImage(image string) *Service {
@@ -488,6 +516,29 @@ func (s *Service) WithReady(check ReadyCheck) *Service {
 	return s
 }
 
+type postHook struct {
+	Name   string
+	Action func(s *Service) error
+}
+
+func (s *Service) WithPostHook(hook *postHook) *Service {
+	s.postHook = hook
+	return s
+}
+
+func (m *Manifest) ExecutePostHookActions() error {
+	for _, svc := range m.Services {
+		if svc.postHook != nil {
+			slog.Info("Executing post-hook operation", "name", svc.postHook.Name)
+			if err := svc.postHook.Action(svc); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 type ReadyCheck struct {
 	QueryURL    string        `json:"query_url"`
 	Test        []string      `json:"test"`
@@ -566,6 +617,55 @@ func applyTemplate(templateStr string) (string, []Port, []NodeRef) {
 	return res, portRef, nodeRef
 }
 
+func (s *Manifest) GenerateMermaidGraph() string {
+	var b strings.Builder
+	b.WriteString("graph LR\n")
+
+	// Add nodes (services) with their ports as labels
+	for _, ss := range s.Services {
+		var ports []string
+		for _, p := range ss.Ports {
+			ports = append(ports, fmt.Sprintf("%s:%d", p.Name, p.Port))
+		}
+		portLabel := ""
+		if len(ports) > 0 {
+			portLabel = "<br/>" + strings.Join(ports, "<br/>")
+		}
+		// Sanitize node name for Mermaid
+		nodeName := strings.ReplaceAll(ss.Name, "-", "_")
+		b.WriteString(fmt.Sprintf("  %s[\"%s%s\"]\n", nodeName, ss.Name, portLabel))
+	}
+
+	b.WriteString("\n")
+
+	// Add edges (connections between services)
+	for _, ss := range s.Services {
+		sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
+		for _, ref := range ss.NodeRefs {
+			targetNode := strings.ReplaceAll(ref.Service, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -->|%s| %s\n",
+				sourceNode,
+				ref.PortLabel,
+				targetNode,
+			))
+		}
+	}
+
+	// Add edges for depends_on
+	for _, ss := range s.Services {
+		for _, dep := range ss.DependsOn {
+			sourceNode := strings.ReplaceAll(ss.Name, "-", "_")
+			targetNode := strings.ReplaceAll(dep.Name, "-", "_")
+			b.WriteString(fmt.Sprintf("  %s -.->|depends_on| %s\n",
+				sourceNode,
+				targetNode,
+			))
+		}
+	}
+
+	return b.String()
+}
+
 func (s *Manifest) GenerateDotGraph() string {
 	var b strings.Builder
 	b.WriteString("digraph G {\n")
@@ -624,8 +724,8 @@ func (s *Manifest) GenerateDotGraph() string {
 	return b.String()
 }
 
-func (m *Manifest) SaveJson() error {
-	return m.out.WriteFile("manifest.json", m)
+func (m *Manifest) SaveJson(out *output) error {
+	return out.WriteFile("manifest.json", m)
 }
 
 func ReadManifest(outputFolder string) (*Manifest, error) {
@@ -646,14 +746,11 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 	}
 
 	// set the output folder
-	manifestData.out = &output{
-		dst: outputFolder,
-	}
 	return &manifestData, nil
 }
 
-func (svcManager *Manifest) RunContenderIfEnabled() {
-	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddService(svcManager.ctx.Contender.Contender())
+func (component *Component) RunContenderIfEnabled(ctx *ExContext) {
+	if ctx.Contender.Enabled {
+		component.AddService(ctx.Contender.Contender())
 	}
 }

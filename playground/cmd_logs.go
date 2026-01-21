@@ -9,7 +9,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 )
 
-func Logs(ctx context.Context, sessionName, serviceName string) error {
+func Logs(ctx context.Context, sessionName, serviceName string, follow bool) error {
 	client, err := newDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create docker client: %w", err)
@@ -28,7 +28,12 @@ func Logs(ctx context.Context, sessionName, serviceName string) error {
 		}
 		if container.Labels["playground"] == "true" &&
 			container.Labels["com.docker.compose.service"] == serviceName {
-			cmd := exec.CommandContext(ctx, "docker", "logs", "-f", "--tail", "50", container.ID)
+			args := []string{"logs"}
+			if follow {
+				args = append(args, "-f", "--tail", "50")
+			}
+			args = append(args, container.ID)
+			cmd := exec.CommandContext(ctx, "docker", args...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			return cmd.Run()

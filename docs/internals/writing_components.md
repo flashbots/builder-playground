@@ -2,7 +2,7 @@
 
 Components are the fundamental computational units in Builder Playground. Each component represents one or more Docker containers that work together as a single logical service.
 
-A component is defined as a Go struct that implements the `ServiceGen` interface by providing an `Apply` method:
+A component is defined as a Go struct that implements the `Component` interface by providing an `Apply` method:
 
 ```go
 type RethEL struct {

@@ -31,6 +31,10 @@ test: ## Run tests
 integration-test: ## Run integration tests
 	INTEGRATION_TESTS=true go test -v -count=1 ./playground/... -run TestRecipe
 
+.PHONY: generate-docs
+generate-docs: ## Auto-generate recipe docs
+	go run main.go generate-docs
+
 .PHONY: lint
 lint: ## Run linters
 	output=$$(gofmt -d -s .) && [ -z "$$output" ] || { echo "$$output"; exit 1; }

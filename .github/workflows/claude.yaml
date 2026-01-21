@@ -1,0 +1,48 @@
+name: Claude Assistant
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize]  # opened = new PR, synchronize = new commits pushed
+  issues:
+    types: [opened, assigned]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  # Interactive mode - responds to @claude mentions
+  claude-response:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --model opus
+
+  # Automation mode - auto-review new PRs
+  claude-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --model opus
+          prompt: |
+            Review this PR. Focus on:
+            - Correctness and potential bugs
+            - Code clarity and maintainability
+            - Any security concerns
+
+            Be concise. Only comment if you have substantive feedback.

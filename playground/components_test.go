@@ -47,6 +47,15 @@ func TestRecipeOpstackExternalBuilder(t *testing.T) {
 	})
 }
 
+func TestRecipeOpstackEnableForkAtGenesis(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&OpRecipe{}, []string{
+		"--enable-latest-fork", "0",
+	})
+}
+
 func TestRecipeOpstackEnableForkAfter(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
@@ -70,6 +79,14 @@ func TestRecipeL1Simple(t *testing.T) {
 
 func TestRecipeL1UseNativeReth(t *testing.T) {
 	tt := newTestFramework(t)
+
+	// When Reth runs in the host machine in a normal test, the output directory is in
+	// <repo>/e2e-test which might create an IPC path longer than the max limit.
+	// Thus, only for this test we output the artifacts to /tmp folder ensuring we do not
+	// pass that limit.
+	// https://discussions.apple.com/thread/250275651
+	tt.e2eRootDir = "/tmp"
+
 	defer tt.Close()
 
 	tt.test(&L1Recipe{}, []string{
@@ -153,8 +170,9 @@ func TestRecipeBuilderNet(t *testing.T) {
 }
 
 type testFramework struct {
-	t      *testing.T
-	runner *LocalRunner
+	t          *testing.T
+	runner     *LocalRunner
+	e2eRootDir string
 }
 
 func newTestFramework(t *testing.T) *testFramework {
@@ -164,7 +182,7 @@ func newTestFramework(t *testing.T) *testFramework {
 	return &testFramework{t: t}
 }
 
-func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
+func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 	t := tt.t
 
 	// use the name of the repo and the current timestamp to generate
@@ -172,16 +190,14 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 	testName := toSnakeCase(t.Name())
 	currentTime := time.Now().Format("2006-01-02-15-04")
 
-	e2eTestDir := filepath.Join("../e2e-test/" + currentTime + "_" + testName)
-	if err := os.MkdirAll(e2eTestDir, 0o755); err != nil {
-		t.Fatal(err)
+	e2eRootDir := tt.e2eRootDir
+	if e2eRootDir == "" {
+		e2eRootDir = "../e2e-test"
 	}
 
-	exCtx := &ExContext{
-		LogLevel: LevelDebug,
-		Contender: &ContenderContext{
-			Enabled: false,
-		},
+	e2eTestDir := filepath.Join(e2eRootDir, currentTime+"_"+testName)
+	if err := os.MkdirAll(e2eTestDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
 
 	o := &output{
@@ -189,7 +205,15 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 		homeDir: filepath.Join(e2eTestDir, "artifacts"),
 	}
 
-	if recipe, ok := s.(Recipe); ok {
+	exCtx := &ExContext{
+		Output:   o,
+		LogLevel: LevelDebug,
+		Contender: &ContenderContext{
+			Enabled: false,
+		},
+	}
+
+	if recipe, ok := component.(Recipe); ok {
 		// We have to parse the flags since they are used to set the
 		// default values for the recipe inputs
 		err := recipe.Flags().Parse(args)
@@ -199,10 +223,10 @@ func (tt *testFramework) test(s ServiceGen, args []string) *Manifest {
 		require.NoError(t, err)
 	}
 
-	svcManager := NewManifest(exCtx, o)
-	s.Apply(svcManager)
+	components := component.Apply(exCtx)
+	svcManager := NewManifest("", components)
 
-	require.NoError(t, svcManager.Validate())
+	require.NoError(t, svcManager.Validate(o))
 
 	// Generate random network name with "testing-" prefix
 	networkName := fmt.Sprintf("testing-%d", rand.Int63())

@@ -2,6 +2,7 @@ package playground
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -12,7 +13,10 @@ import (
 	"github.com/flashbots/go-boost-utils/utils"
 )
 
-var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
+var (
+	defaultJWTToken          = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
+	latestPlaygroundUtilsTag = "cc6f172493d7ef6b88a5b7895f4b8619806c99f9"
+)
 
 type RollupBoost struct {
 	ELNode  string
@@ -22,10 +26,12 @@ type RollupBoost struct {
 	FlashblocksBuilderURL string
 }
 
-func (r *RollupBoost) Apply(manifest *Manifest) {
-	service := manifest.NewService("rollup-boost").
+func (r *RollupBoost) Apply(ctx *ExContext) *Component {
+	component := NewComponent("rollup-boost")
+
+	service := component.NewService("rollup-boost").
 		WithImage("docker.io/flashbots/rollup-boost").
-		WithTag("v0.7.5").
+		WithTag("v0.7.12-rc1").
 		WithArgs(
 			"--rpc-host", "0.0.0.0",
 			"--rpc-port", `{{Port "authrpc" 8551}}`,
@@ -47,16 +53,20 @@ func (r *RollupBoost) Apply(manifest *Manifest) {
 			"--flashblocks-builder-url", r.FlashblocksBuilderURL,
 		)
 	}
+
+	return component
 }
 
 type OpRbuilder struct {
 	Flashblocks bool
 }
 
-func (o *OpRbuilder) Apply(manifest *Manifest) {
-	service := manifest.NewService("op-rbuilder").
+func (o *OpRbuilder) Apply(ctx *ExContext) *Component {
+	component := NewComponent("op-rbuilder")
+
+	service := component.NewService("op-rbuilder").
 		WithImage("ghcr.io/flashbots/op-rbuilder").
-		WithTag("v0.2.8").
+		WithTag("v0.2.13").
 		WithArgs(
 			"node",
 			"--authrpc.port", `{{Port "authrpc" 8551}}`,
@@ -85,8 +95,8 @@ func (o *OpRbuilder) Apply(manifest *Manifest) {
 			StartPeriod: 1 * time.Second,
 		})
 
-	if manifest.ctx.Bootnode != nil {
-		service.WithArgs("--bootnodes", manifest.ctx.Bootnode.Connect())
+	if ctx.Bootnode != nil {
+		service.WithArgs("--bootnodes", ctx.Bootnode.Connect())
 	}
 
 	if o.Flashblocks {
@@ -96,6 +106,8 @@ func (o *OpRbuilder) Apply(manifest *Manifest) {
 			"--flashblocks.port", `{{Port "flashblocks" 1112}}`,
 		)
 	}
+
+	return component
 }
 
 type FlashblocksRPC struct {
@@ -104,7 +116,9 @@ type FlashblocksRPC struct {
 	UseWebsocketProxy    bool // Whether to add /ws path for websocket proxy
 }
 
-func (f *FlashblocksRPC) Apply(manifest *Manifest) {
+func (f *FlashblocksRPC) Apply(ctx *ExContext) *Component {
+	component := NewComponent("flashblocks-rpc")
+
 	websocketURL := ConnectWs(f.FlashblocksWSService, "flashblocks")
 	if f.UseWebsocketProxy {
 		websocketURL += "/ws"
@@ -113,7 +127,7 @@ func (f *FlashblocksRPC) Apply(manifest *Manifest) {
 	var service *Service
 
 	if f.BaseOverlay {
-		service = manifest.NewService("flashblocks-rpc").
+		service = component.NewService("flashblocks-rpc").
 			WithImage("ghcr.io/base/node-reth-dev").
 			WithTag("main").
 			WithEntrypoint("/app/base-reth-node").
@@ -123,7 +137,7 @@ func (f *FlashblocksRPC) Apply(manifest *Manifest) {
 				"--enable-metering",
 			)
 	} else {
-		service = manifest.NewService("flashblocks-rpc").
+		service = component.NewService("flashblocks-rpc").
 			WithImage("flashbots/flashblocks-rpc").
 			WithTag("sha-7caffb9").
 			WithArgs(
@@ -150,11 +164,13 @@ func (f *FlashblocksRPC) Apply(manifest *Manifest) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_flashblocks_rpc")
 
-	if manifest.ctx.Bootnode != nil {
+	if ctx.Bootnode != nil {
 		service.WithArgs(
-			"--bootnodes", manifest.ctx.Bootnode.Connect(),
+			"--bootnodes", ctx.Bootnode.Connect(),
 		)
 	}
+
+	return component
 }
 
 type BProxy struct {
@@ -164,12 +180,14 @@ type BProxy struct {
 	FlashblocksBuilderURL string
 }
 
-func (f *BProxy) Apply(manifest *Manifest) {
+func (f *BProxy) Apply(ctx *ExContext) *Component {
+	component := NewComponent("bproxy")
+
 	peers := []string{}
 	for _, peer := range f.Peers {
 		peers = append(peers, Connect(peer, "authrpc"))
 	}
-	service := manifest.NewService("bproxy").
+	service := component.NewService("bproxy").
 		WithImage("ghcr.io/flashbots/bproxy").
 		WithTag("v0.1.2").
 		WithArgs(
@@ -199,14 +217,18 @@ func (f *BProxy) Apply(manifest *Manifest) {
 			"--flashblocks-log-messages",
 		)
 	}
+
+	return component
 }
 
 type WebsocketProxy struct {
 	Upstream string
 }
 
-func (w *WebsocketProxy) Apply(manifest *Manifest) {
-	manifest.NewService("websocket-proxy").
+func (w *WebsocketProxy) Apply(ctx *ExContext) *Component {
+	component := NewComponent("webproxy")
+
+	component.NewService("websocket-proxy").
 		WithImage("docker.io/mikawamp/websocket-rpc").
 		WithTag("latest").
 		WithArgs(
@@ -215,6 +237,8 @@ func (w *WebsocketProxy) Apply(manifest *Manifest) {
 			"--enable-compression",
 			"--client-ping-enabled",
 		)
+
+	return component
 }
 
 type ChainMonitor struct {
@@ -224,8 +248,10 @@ type ChainMonitor struct {
 	L2RPC            string
 }
 
-func (c *ChainMonitor) Apply(manifest *Manifest) {
-	manifest.NewService("chain-monitor").
+func (c *ChainMonitor) Apply(ctx *ExContext) *Component {
+	component := NewComponent("chain-monitor")
+
+	component.NewService("chain-monitor").
 		WithPort("metrics", 8080).
 		WithImage("ghcr.io/flashbots/chain-monitor").
 		WithTag("v0.0.54").
@@ -236,6 +262,8 @@ func (c *ChainMonitor) Apply(manifest *Manifest) {
 			"--l2-monitor-builder-address", c.L2BuilderAddress,
 			"--l2-rpc", Connect(c.L2RPC, "http"),
 		)
+
+	return component
 }
 
 type OpBatcher struct {
@@ -245,13 +273,15 @@ type OpBatcher struct {
 	MaxChannelDuration uint64
 }
 
-func (o *OpBatcher) Apply(manifest *Manifest) {
+func (o *OpBatcher) Apply(ctx *ExContext) *Component {
+	component := NewComponent("op-batcher")
+
 	if o.MaxChannelDuration == 0 {
 		o.MaxChannelDuration = 2
 	}
-	manifest.NewService("op-batcher").
+	component.NewService("op-batcher").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher").
-		WithTag("v1.12.0-rc.1").
+		WithTag("v1.16.3").
 		WithEntrypoint("op-batcher").
 		WithArgs(
 			"--l1-eth-rpc", Connect(o.L1Node, "http"),
@@ -263,6 +293,8 @@ func (o *OpBatcher) Apply(manifest *Manifest) {
 			"--num-confirmations=1",
 			"--private-key=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
 		)
+
+	return component
 }
 
 type OpNode struct {
@@ -271,10 +303,12 @@ type OpNode struct {
 	L2Node   string
 }
 
-func (o *OpNode) Apply(manifest *Manifest) {
-	manifest.NewService("op-node").
+func (o *OpNode) Apply(ctx *ExContext) *Component {
+	component := NewComponent("op-node")
+
+	component.NewService("op-node").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node").
-		WithTag("v1.13.0-rc.1").
+		WithTag("v1.16.3").
 		WithEntrypoint("op-node").
 		WithEnv("A", "B"). // this is just a placeholder to make sure env works since we e2e test with the recipes
 		WithArgs(
@@ -292,6 +326,7 @@ func (o *OpNode) Apply(manifest *Manifest) {
 			"--verifier.l1-confs", "0",
 			"--p2p.sequencer.key", "8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
 			"--rollup.config", "/data/rollup.json",
+			"--rollup.l1-chain-config", "/data/genesis.json",
 			"--rpc.addr", "0.0.0.0",
 			"--rpc.port", `{{Port "http" 8549}}`,
 			"--p2p.listen.ip", "0.0.0.0",
@@ -305,7 +340,10 @@ func (o *OpNode) Apply(manifest *Manifest) {
 		).
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/rollup.json", "rollup.json").
+		WithArtifact("/data/genesis.json", "genesis.json").
 		WithVolume("data", "/data_db")
+
+	return component
 }
 
 type OpGeth struct {
@@ -330,17 +368,18 @@ func logLevelToGethVerbosity(logLevel LogLevel) string {
 	}
 }
 
-func (o *OpGeth) Apply(manifest *Manifest) {
-	o.Enode = manifest.ctx.Output.GetEnodeAddr()
+func (o *OpGeth) Apply(ctx *ExContext) *Component {
+	component := NewComponent("op-geth")
+	o.Enode = ctx.Output.GetEnodeAddr()
 
 	var trustedPeers string
-	if manifest.ctx.Bootnode != nil {
-		trustedPeers = fmt.Sprintf("--bootnodes %s ", manifest.ctx.Bootnode.Connect())
+	if ctx.Bootnode != nil {
+		trustedPeers = fmt.Sprintf("--bootnodes %s ", ctx.Bootnode.Connect())
 	}
 
-	svc := manifest.NewService("op-geth").
+	svc := component.NewService("op-geth").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
-		WithTag("v1.101503.2-rc.5").
+		WithTag("v1.101604.0").
 		WithEntrypoint("/bin/sh").
 		WithLabel("metrics_path", "/debug/metrics/prometheus").
 		WithArgs(
@@ -348,7 +387,7 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 			"geth init --datadir /data_opgeth --state.scheme hash /data/l2-genesis.json && "+
 				"exec geth "+
 				"--datadir /data_opgeth "+
-				"--verbosity "+logLevelToGethVerbosity(manifest.ctx.LogLevel)+" "+
+				"--verbosity "+logLevelToGethVerbosity(ctx.LogLevel)+" "+
 				"--http "+
 				"--http.corsdomain \"*\" "+
 				"--http.vhosts \"*\" "+
@@ -382,7 +421,9 @@ func (o *OpGeth) Apply(manifest *Manifest) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/p2p_key.txt", o.Enode.Artifact)
 
-	UseHealthmon(manifest, svc, healthmonExecution)
+	UseHealthmon(component, svc, healthmonExecution)
+
+	return component
 }
 
 type RethEL struct {
@@ -393,7 +434,7 @@ type RethEL struct {
 var rethELRelease = &release{
 	Name:    "reth",
 	Org:     "paradigmxyz",
-	Version: "v1.4.8",
+	Version: "v1.9.3",
 	Arch: func(goos, goarch string) string {
 		if goos == "linux" {
 			return "x86_64-unknown-linux-gnu"
@@ -423,11 +464,13 @@ func logLevelToRethVerbosity(logLevel LogLevel) string {
 	}
 }
 
-func (r *RethEL) Apply(manifest *Manifest) {
+func (r *RethEL) Apply(ctx *ExContext) *Component {
+	component := NewComponent("reth")
+
 	// start the reth el client
-	svc := manifest.NewService("el").
+	svc := component.NewService("el").
 		WithImage("ghcr.io/paradigmxyz/reth").
-		WithTag("v1.8.2").
+		WithTag("v1.9.3").
 		WithEntrypoint("/usr/local/bin/reth").
 		WithArgs(
 			"node",
@@ -437,6 +480,7 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
 			// "--disable-discovery",
+			"--ipcpath", "/data_reth/reth.ipc",
 			// http config
 			"--http",
 			"--http.addr", "0.0.0.0",
@@ -454,28 +498,21 @@ func (r *RethEL) Apply(manifest *Manifest) {
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			// For reth version 1.2.0 the "legacy" engine was removed, so we now require these arguments:
 			"--engine.persistence-threshold", "0", "--engine.memory-block-buffer-target", "0",
-			logLevelToRethVerbosity(manifest.ctx.LogLevel),
+			logLevelToRethVerbosity(ctx.LogLevel),
 		).
 		WithRelease(rethELRelease).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
 
-	if r.UseNativeReth {
-		// When Reth runs in the host machine, if we enable ipc, the IPC path /data_reth/reth.ipc
-		// points to the artifact folder with an absolute path that is too long for an IPC path.
-		// https://discussions.apple.com/thread/250275651
-		svc.WithArgs("--ipcdisable")
-	} else {
-		svc.WithArgs("--ipcpath", "/data_reth/reth.ipc")
-	}
-
-	UseHealthmon(manifest, svc, healthmonExecution)
+	UseHealthmon(component, svc, healthmonExecution)
 
 	if r.UseNativeReth {
 		// we need to use this otherwise the db cannot be binded
 		svc.UseHostExecution()
 	}
+
+	return component
 }
 
 type LighthouseBeaconNode struct {
@@ -483,8 +520,10 @@ type LighthouseBeaconNode struct {
 	MevBoostNode  string
 }
 
-func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
-	svc := manifest.NewService("beacon").
+func (l *LighthouseBeaconNode) Apply(ctx *ExContext) *Component {
+	component := NewComponent("lighthouse-beacon-node")
+
+	svc := component.NewService("beacon").
 		WithImage("sigp/lighthouse").
 		WithTag("v8.0.0-rc.2").
 		WithEntrypoint("lighthouse").
@@ -517,7 +556,7 @@ func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_beacon")
 
-	UseHealthmon(manifest, svc, healthmonBeacon)
+	UseHealthmon(component, svc, healthmonBeacon)
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(
@@ -526,15 +565,19 @@ func (l *LighthouseBeaconNode) Apply(manifest *Manifest) {
 			"--builder-fallback-disable-checks",
 		)
 	}
+
+	return component
 }
 
 type LighthouseValidator struct {
 	BeaconNode string
 }
 
-func (l *LighthouseValidator) Apply(manifest *Manifest) {
+func (l *LighthouseValidator) Apply(ctx *ExContext) *Component {
+	component := NewComponent("lighthouse-validator-node")
+
 	// start validator client
-	manifest.NewService("validator").
+	component.NewService("validator").
 		WithImage("sigp/lighthouse").
 		WithTag("v8.0.0-rc.2").
 		WithEntrypoint("lighthouse").
@@ -552,6 +595,8 @@ func (l *LighthouseValidator) Apply(manifest *Manifest) {
 		WithArtifact("/data/testnet-dir", "testnet").
 		// HACK: Mount a Docker-managed volume to avoid permission issues with removing logs.
 		WithVolume("validator-logs", "/data/validator/validators/logs")
+
+	return component
 }
 
 type ClProxy struct {
@@ -559,16 +604,20 @@ type ClProxy struct {
 	SecondaryBuilder string
 }
 
-func (c *ClProxy) Apply(manifest *Manifest) {
-	manifest.NewService("cl-proxy").
+func (c *ClProxy) Apply(ctx *ExContext) *Component {
+	component := NewComponent("cl-proxy")
+
+	component.NewService("cl-proxy").
 		WithImage("docker.io/flashbots/playground-utils").
-		WithTag("latest").
+		WithTag(latestPlaygroundUtilsTag).
 		WithEntrypoint("cl-proxy").
 		WithArgs(
 			"--primary-builder", Connect(c.PrimaryBuilder, "authrpc"),
 			"--secondary-builder", c.SecondaryBuilder,
 			"--port", `{{Port "authrpc" 5656}}`,
 		)
+
+	return component
 }
 
 type MevBoostRelay struct {
@@ -576,10 +625,12 @@ type MevBoostRelay struct {
 	ValidationServer string
 }
 
-func (m *MevBoostRelay) Apply(manifest *Manifest) {
-	service := manifest.NewService("mev-boost-relay").
+func (m *MevBoostRelay) Apply(ctx *ExContext) *Component {
+	component := NewComponent("mev-boost-relay")
+
+	service := component.NewService("mev-boost-relay").
 		WithImage("docker.io/flashbots/playground-utils").
-		WithTag("latest").
+		WithTag(latestPlaygroundUtilsTag).
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
 		WithEntrypoint("mev-boost-relay").
 		DependsOnHealthy(m.BeaconClient).
@@ -592,6 +643,8 @@ func (m *MevBoostRelay) Apply(manifest *Manifest) {
 	if m.ValidationServer != "" {
 		service.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
 	}
+
+	return component
 }
 
 type OpReth struct{}
@@ -600,7 +653,7 @@ var opRethRelease = &release{
 	Name:    "op-reth",
 	Repo:    "reth",
 	Org:     "paradigmxyz",
-	Version: "v1.3.12",
+	Version: "v1.9.3",
 	Arch: func(goos, goarch string) string {
 		if goos == "linux" {
 			return "x86_64-unknown-linux-gnu"
@@ -613,10 +666,12 @@ var opRethRelease = &release{
 	},
 }
 
-func (o *OpReth) Apply(manifest *Manifest) {
-	svc := manifest.NewService("op-reth").
+func (o *OpReth) Apply(ctx *ExContext) *Component {
+	component := NewComponent("op-reth")
+
+	svc := component.NewService("op-reth").
 		WithImage("ghcr.io/paradigmxyz/op-reth").
-		WithTag("nightly").
+		WithTag("v1.9.3").
 		WithEntrypoint("op-reth").
 		WithArgs(
 			"node",
@@ -638,14 +693,18 @@ func (o *OpReth) Apply(manifest *Manifest) {
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
 
-	UseHealthmon(manifest, svc, healthmonExecution)
+	UseHealthmon(component, svc, healthmonExecution)
+
+	return component
 }
 
 type MevBoost struct {
 	RelayEndpoints []string
 }
 
-func (m *MevBoost) Apply(manifest *Manifest) {
+func (m *MevBoost) Apply(ctx *ExContext) *Component {
+	component := NewComponent("mev-boost")
+
 	args := []string{
 		"--addr", "0.0.0.0:" + `{{Port "http" 18550}}`,
 		"--loglevel", "info",
@@ -678,16 +737,19 @@ func (m *MevBoost) Apply(manifest *Manifest) {
 		}
 	}
 
-	manifest.NewService("mev-boost").
+	component.NewService("mev-boost").
 		WithImage("flashbots/mev-boost").
 		WithTag("latest").
 		WithArgs(args...).
 		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
+
+	return component
 }
 
 type nullService struct{}
 
-func (n *nullService) Apply(manifest *Manifest) {
+func (n *nullService) Apply(ctx *ExContext) *Component {
+	return nil
 }
 
 type Contender struct {
@@ -731,7 +793,7 @@ func indexWS(s string) int {
 	return -1
 }
 
-func (c *Contender) Apply(manifest *Manifest) {
+func (c *Contender) Apply(ctx *ExContext) *Component {
 	type opt struct {
 		name   string
 		val    string
@@ -744,7 +806,8 @@ func (c *Contender) Apply(manifest *Manifest) {
 	}
 
 	defaults := []opt{
-		{name: "-l"},
+		{name: "--forever"},
+		{name: "--optimistic-nonces"},
 		{name: "--min-balance", val: "10 ether", hasVal: true},
 		{name: "-r", val: Connect(targetChain, "http"), hasVal: true},
 		{name: "--tps", val: "20", hasVal: true},
@@ -769,15 +832,15 @@ func (c *Contender) Apply(manifest *Manifest) {
 		seen[name] = true
 	}
 
-	// Minimal conflict example: --loops overrides default "-l"
+	// Minimal conflict example: -r overrides default -r
 	conflict := func(flag string) bool {
 		if seen[flag] {
 			return true
 		}
-		if flag == "-l" && seen["--loops"] {
+		if (flag == "--infinite" || flag == "--indefinite" || flag == "--indefinitely") && seen["--forever"] {
 			return true
 		}
-		if flag == "-r" && seen["--rpc-url"] {
+		if (flag == "-r" && seen["--rpc-url"]) || (flag == "--rpc-url" && seen["-r"]) {
 			return true
 		}
 		if (flag == "--tpb" || flag == "--txs-per-second" || flag == "--tps" || flag == "--txs-per-block") &&
@@ -813,22 +876,30 @@ func (c *Contender) Apply(manifest *Manifest) {
 		}
 	}
 
-	service := manifest.NewService("contender").
+	component := NewComponent("contender")
+	service := component.NewService("contender").
 		WithImage("flashbots/contender").
-		WithTag("latest").
+		WithTag("0.7.2").
 		WithArgs(args...).
 		DependsOnHealthy("beacon")
 
 	if c.TargetChain == "op-geth" {
 		service.DependsOnRunning("op-node")
 	}
+
+	return component
 }
 
-type BuilderHub struct{}
+type BuilderHub struct {
+	BuilderIP     string
+	BuilderConfig string
+}
 
-func (b *BuilderHub) Apply(manifest *Manifest) {
+func (b *BuilderHub) Apply(ctx *ExContext) *Component {
+	component := NewComponent("builder-hub")
+
 	// Database service
-	manifest.NewService("builder-hub-db").
+	component.NewService("builder-hub-db").
 		WithImage("docker.io/flashbots/builder-hub-db").
 		WithTag("0.3.1-alpha1").
 		WithPort("postgres", 5432).
@@ -845,7 +916,7 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 		})
 
 	// API service
-	manifest.NewService("builder-hub-api").
+	apiSrv := component.NewService("builder-hub-api").
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("0.3.1-alpha1").
 		DependsOnHealthy("builder-hub-db").
@@ -869,8 +940,15 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			StartPeriod: 1 * time.Second,
 		})
 
+	apiSrv.WithPostHook(&postHook{
+		Name: "register-builder",
+		Action: func(s *Service) error {
+			return registerBuilderHook(ctx, s, b)
+		},
+	})
+
 	// Proxy service
-	manifest.NewService("builder-hub-proxy").
+	component.NewService("builder-hub-proxy").
 		WithImage("docker.io/flashbots/builder-hub-mock-proxy").
 		WithTag("0.3.1-alpha1").
 		WithPort("http", 8888).
@@ -883,6 +961,46 @@ func (b *BuilderHub) Apply(manifest *Manifest) {
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
 		})
+
+	return component
+}
+
+func registerBuilderHook(ctx *ExContext, s *Service, b *BuilderHub) error {
+	genesis, err := ctx.Output.Read("genesis.json")
+	if err != nil {
+		return err
+	}
+
+	configYaml, err := os.ReadFile(b.BuilderConfig)
+	if err != nil {
+		return err
+	}
+
+	// we need to convert the config to JSON because it is what the API server accepts
+	configJSON, err := yamlToJson([]byte(configYaml))
+	if err != nil {
+		return err
+	}
+
+	overrideConfig := map[string]interface{}{
+		"genesis": genesis,
+	}
+	if configJSON, err = overrideJSON(configJSON, overrideConfig); err != nil {
+		return err
+	}
+
+	endpoint := fmt.Sprintf("http://localhost:%d", s.MustGetPort("admin").HostPort)
+	input := &builderHubRegisterBuilderInput{
+		BuilderID:     "builder",
+		BuilderIP:     b.BuilderIP,
+		MeasurementID: "test",
+		Network:       "playground",
+		Config:        string(configJSON),
+	}
+	if err := registerBuilder(endpoint, input); err != nil {
+		return err
+	}
+	return nil
 }
 
 type BootnodeProtocol string
@@ -896,10 +1014,11 @@ type Bootnode struct {
 	Enode    *EnodeAddr
 }
 
-func (b *Bootnode) Apply(manifest *Manifest) {
-	b.Enode = manifest.ctx.Output.GetEnodeAddr()
+func (b *Bootnode) Apply(ctx *ExContext) *Component {
+	component := NewComponent("bootnode")
 
-	svc := manifest.NewService("bootnode").
+	b.Enode = ctx.Output.GetEnodeAddr()
+	svc := component.NewService("bootnode").
 		WithImage("ghcr.io/paradigmxyz/reth").
 		WithTag("v1.9.3").
 		WithEntrypoint("/usr/local/bin/reth").
@@ -915,6 +1034,8 @@ func (b *Bootnode) Apply(manifest *Manifest) {
 	if b.Protocol == BootnodeProtocolV5 {
 		svc.WithArgs("--v5")
 	}
+
+	return component
 }
 
 const (
@@ -922,13 +1043,13 @@ const (
 	healthmonExecution = "execution"
 )
 
-func UseHealthmon(m *Manifest, s *Service, chain string) {
+func UseHealthmon(component *Component, s *Service, chain string) {
 	healthmonName := s.Name + "_healthmon"
 
 	s.WithLabel(healthCheckSidecarLabel, healthmonName)
-	m.NewService(healthmonName).
+	component.NewService(healthmonName).
 		WithImage("docker.io/flashbots/playground-utils").
-		WithTag("latest").
+		WithTag(latestPlaygroundUtilsTag).
 		WithEntrypoint("healthmon").
 		WithArgs("--chain", chain, "--url", Connect(s.Name, "http")).
 		WithReady(ReadyCheck{
