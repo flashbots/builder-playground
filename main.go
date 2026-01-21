@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"fmt"
 	"log"
 	"log/slog"
@@ -18,6 +18,9 @@ import (
 	"github.com/flashbots/builder-playground/utils/mainctx"
 	"github.com/spf13/cobra"
 )
+
+//go:embed templates/*
+var templatesFS embed.FS
 
 var version = "dev"
 
@@ -45,6 +48,7 @@ var (
 	detached          bool
 	prefundedAccounts []string
 	followFlag        bool
+	generateForce     bool
 )
 
 var rootCmd = &cobra.Command{
@@ -59,11 +63,21 @@ var startCmd = &cobra.Command{
 	Short:   "Start a recipe",
 	Aliases: []string{"cook"},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Check if the first argument is a YAML recipe file
+		if len(args) > 0 && playground.IsYAMLRecipeFile(args[0]) {
+			yamlRecipe, err := playground.ParseYAMLRecipe(args[0], recipes)
+			if err != nil {
+				return fmt.Errorf("failed to parse YAML recipe: %w", err)
+			}
+			cmd.SilenceUsage = true
+			return runIt(yamlRecipe)
+		}
+
 		recipeNames := []string{}
 		for _, recipe := range recipes {
 			recipeNames = append(recipeNames, recipe.Name())
 		}
-		return fmt.Errorf("please specify a recipe to cook. Available recipes: %s", recipeNames)
+		return fmt.Errorf("please specify a recipe to cook. Available recipes: %s, or provide a YAML recipe file path", recipeNames)
 	},
 }
 
@@ -256,11 +270,84 @@ var generateDocsCmd = &cobra.Command{
 	},
 }
 
+var generateCmd = &cobra.Command{
+	Use:   "generate <recipe>",
+	Short: "Generate a playground.yaml file from a recipe (e.g. l1) or template (e.g. template:rbuilder/release)",
+	Long:  "Generate a playground.yaml file that represents the full configuration of a recipe",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("please specify a recipe or template. Run 'playground recipes' to see available options")
+		}
+
+		name := args[0]
+
+		// Check if it's a template
+		if strings.HasPrefix(name, "template:") {
+			templateName := strings.TrimPrefix(name, "template:")
+			return playground.GenerateFromTemplate(templateName, generateForce)
+		}
+
+		// Otherwise, it's a recipe
+		var recipe playground.Recipe
+		for _, r := range recipes {
+			if r.Name() == name {
+				recipe = r
+				break
+			}
+		}
+		if recipe == nil {
+			return fmt.Errorf("recipe '%s' not found. Run 'playground recipes' to see available options", name)
+		}
+
+		yaml, err := playground.RecipeToYAML(recipe)
+		if err != nil {
+			return fmt.Errorf("failed to convert recipe to YAML: %w", err)
+		}
+
+		fmt.Println(yaml)
+		return nil
+	},
+}
+
+var recipesCmd = &cobra.Command{
+	Use:   "recipes",
+	Short: "List all available recipes and templates",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		templates, err := playground.GetEmbeddedTemplates()
+		if err != nil {
+			return fmt.Errorf("failed to list templates: %w", err)
+		}
+		for _, recipe := range recipes {
+			fmt.Println(recipe.Name())
+		}
+		for _, t := range templates {
+			fmt.Printf("template:%s\n", t)
+		}
+		return nil
+	},
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("playground %s\n", version)
+	},
+}
+
+var testRPCURL string
+
+var testCmd = &cobra.Command{
+	Use:   "test",
+	Short: "Send a test transaction to the local EL node",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		ctx := mainctx.Get()
+		cfg := playground.DefaultTestTxConfig()
+		if testRPCURL != "" {
+			cfg.RPCURL = testRPCURL
+		}
+		return playground.SendTestTransaction(ctx, cfg)
 	},
 }
 
@@ -271,6 +358,32 @@ var recipes = []playground.Recipe{
 }
 
 func main() {
+	// Set the embedded templates filesystem for the playground package
+	playground.TemplatesFS = templatesFS
+
+	// Add common flags to startCmd for YAML recipe files
+	startCmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
+	startCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+	startCmd.Flags().BoolVar(&watchdog, "watchdog", false, "enable watchdog")
+	startCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
+	startCmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
+	startCmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
+	startCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
+	startCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
+	startCmd.Flags().DurationVar(&timeout, "timeout", 0, "")
+	startCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
+	startCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
+	startCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
+	startCmd.Flags().StringVar(&networkName, "network", "", "network name")
+	startCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
+	startCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
+	startCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
+	startCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
+	startCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
+	startCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
+	startCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+	startCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
+
 	for _, recipe := range recipes {
 		recipeCmd := &cobra.Command{
 			Use:   recipe.Name(),
@@ -325,6 +438,11 @@ func main() {
 	debugCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(generateDocsCmd)
+	generateCmd.Flags().BoolVar(&generateForce, "force", false, "overwrite existing files")
+	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(recipesCmd)
+	testCmd.Flags().StringVar(&testRPCURL, "rpc", "", "RPC URL (default: http://localhost:8545)")
+	rootCmd.AddCommand(testCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -456,7 +574,11 @@ func runIt(recipe playground.Recipe) error {
 			})
 
 			var svcInfo []any
-			svcInfo = append(svcInfo, "image", ss.Image, "tag", ss.Tag)
+			if ss.HostPath != "" {
+				svcInfo = append(svcInfo, "host_path", ss.HostPath)
+			} else {
+				svcInfo = append(svcInfo, "image", ss.Image, "tag", ss.Tag)
+			}
 			for _, p := range ports {
 				protocol := ""
 				if p.Protocol == playground.ProtocolUDP {
