@@ -340,7 +340,9 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		if err != nil {
 			return err
 		}
-		maps.Copy(allocs, predeploys)
+		if err := appendPredeploysToAlloc(&allocs, predeploys); err != nil {
+			return err
+		}
 
 		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
 			return err
@@ -795,6 +797,16 @@ func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []strin
 			Balance: prefundedBalance,
 			Nonce:   1,
 		}
+	}
+	return nil
+}
+
+func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.GenesisAlloc) error {
+	for addr, account := range predeploys {
+		if _, exists := (*allocs)[addr]; exists {
+			return fmt.Errorf("custom predeploy address %s conflicts with existing alloc entry in template genesis", addr.Hex())
+		}
+		(*allocs)[addr] = account
 	}
 	return nil
 }
