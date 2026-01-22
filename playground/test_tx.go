@@ -62,7 +62,6 @@ func stripHexPrefix(s string) string {
 
 // SendTestTransaction sends a test transaction and waits for the receipt
 func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
-
 	// Connect to the RPC endpoint
 	client, err := ethclient.Dial(cfg.RPCURL)
 	if err != nil {

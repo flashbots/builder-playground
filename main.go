@@ -24,12 +24,14 @@ var customRecipesFS embed.FS
 
 var version = "dev"
 
-var greenColor = color.New(color.FgGreen)
-var whiteTitleColor = color.New(color.FgHiWhite, color.Bold)
-var recipesColor = color.RGB(0, 206, 209)        // Dark Turquoise
-var customRecipesColor = color.RGB(255, 127, 80) // Coral
-var descriptionColor = color.RGB(169, 169, 169)  // Faded gray, bold for descriptions
-var componentsColor = color.RGB(128, 128, 128)   // Faded gray for components
+var (
+	greenColor         = color.New(color.FgGreen)
+	whiteTitleColor    = color.New(color.FgHiWhite, color.Bold)
+	recipesColor       = color.RGB(0, 206, 209)   // Dark Turquoise
+	customRecipesColor = color.RGB(255, 127, 80)  // Coral
+	descriptionColor   = color.RGB(169, 169, 169) // Faded gray, bold for descriptions
+	componentsColor    = color.RGB(128, 128, 128) // Faded gray for components
+)
 
 var (
 	keepFlag          bool

@@ -256,7 +256,7 @@ func GenerateFromCustomRecipe(customRecipeName string, force bool) error {
 		}
 
 		// Write the file
-		if err := os.WriteFile(outPath, content, 0644); err != nil {
+		if err := os.WriteFile(outPath, content, 0o644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", outPath, err)
 		}
 		fmt.Printf("Created %s\n", outPath)

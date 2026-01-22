@@ -282,7 +282,7 @@ func TestIsYAMLRecipeFile(t *testing.T) {
 	otherFile := filepath.Join(tmpDir, "recipe.txt")
 
 	for _, f := range []string{yamlFile, ymlFile, otherFile} {
-		require.NoError(t, os.WriteFile(f, []byte("test"), 0644))
+		require.NoError(t, os.WriteFile(f, []byte("test"), 0o644))
 	}
 
 	tests := []struct {
@@ -484,7 +484,7 @@ recipe:
         tag: v1.0.0
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -508,7 +508,7 @@ func TestParseYAMLRecipe_MissingBase(t *testing.T) {
         image: test-image
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -527,7 +527,7 @@ func TestParseYAMLRecipe_UnknownBase(t *testing.T) {
 recipe: {}
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -554,7 +554,7 @@ func TestYAMLRecipe_Methods(t *testing.T) {
 recipe: {}
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -578,7 +578,7 @@ recipe:
         tag: v2.0.0
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -609,7 +609,7 @@ recipe:
     remove: true
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -643,7 +643,7 @@ recipe:
         remove: true
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -678,7 +678,7 @@ recipe:
         tag: v1.0.0
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -759,7 +759,7 @@ func TestYAMLRecipe_Output(t *testing.T) {
 recipe: {}
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
@@ -777,7 +777,7 @@ func TestYAMLRecipe_Artifacts_WithExtraFiles(t *testing.T) {
 
 	// Create a local file to reference
 	localFile := filepath.Join(tmpDir, "config.toml")
-	require.NoError(t, os.WriteFile(localFile, []byte("test config"), 0644))
+	require.NoError(t, os.WriteFile(localFile, []byte("test config"), 0o644))
 
 	yamlContent := `base: l1
 recipe:
@@ -789,7 +789,7 @@ recipe:
           "/app/config.toml": "config.toml"
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
-	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
 	baseRecipes := []Recipe{&L1Recipe{}}
 
