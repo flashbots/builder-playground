@@ -19,13 +19,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-//go:embed templates/*
-var templatesFS embed.FS
+//go:embed custom-recipes/*
+var customRecipesFS embed.FS
 
 var version = "dev"
 
 var greenColor = color.New(color.FgGreen)
 var whiteTitleColor = color.New(color.FgHiWhite, color.Bold)
+var recipesColor = color.RGB(0, 206, 209)        // Dark Turquoise
+var customRecipesColor = color.RGB(255, 127, 80) // Coral
+var descriptionColor = color.RGB(169, 169, 169)  // Faded gray, bold for descriptions
+var componentsColor = color.RGB(128, 128, 128)   // Faded gray for components
 
 var (
 	keepFlag          bool
@@ -273,11 +277,11 @@ var generateDocsCmd = &cobra.Command{
 
 var generateCmd = &cobra.Command{
 	Use:   "generate <recipe>",
-	Short: "Generate a playground.yaml file from a recipe (e.g. l1) or template (e.g. rbuilder/release)",
+	Short: "Generate a playground.yaml file from a recipe (e.g. l1) or custom recipe (e.g. rbuilder/release)",
 	Long:  "Generate a playground.yaml file that represents the full configuration of a recipe",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("please specify a recipe or template. Run 'playground recipes' to see available options")
+			return fmt.Errorf("please specify a recipe or custom recipe. Run 'playground recipes' to see available options")
 		}
 
 		name := args[0]
@@ -294,37 +298,61 @@ var generateCmd = &cobra.Command{
 			}
 		}
 
-		// Check if it's a template
-		templates, err := playground.GetEmbeddedTemplates()
+		// Check if it's a custom recipe
+		customRecipes, err := playground.GetEmbeddedCustomRecipes()
 		if err != nil {
-			return fmt.Errorf("failed to list templates: %w", err)
+			return fmt.Errorf("failed to list custom recipes: %w", err)
 		}
-		for _, t := range templates {
-			if t == name {
-				return playground.GenerateFromTemplate(name, generateForce)
+		for _, cr := range customRecipes {
+			if cr == name {
+				return playground.GenerateFromCustomRecipe(name, generateForce)
 			}
 		}
 
-		return fmt.Errorf("recipe or template '%s' not found. Run 'playground recipes' to see available options", name)
+		return fmt.Errorf("recipe or custom recipe '%s' not found. Run 'playground recipes' to see available options", name)
 	},
 }
 
 var recipesCmd = &cobra.Command{
 	Use:   "recipes",
-	Short: "List all available recipes and templates",
+	Short: "List all available recipes and custom recipes",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		templates, err := playground.GetEmbeddedTemplates()
+		customRecipes, err := playground.GetEmbeddedCustomRecipes()
 		if err != nil {
-			return fmt.Errorf("failed to list templates: %w", err)
+			return fmt.Errorf("failed to list custom recipes: %w", err)
 		}
-		whiteTitleColor.Println("Recipes:")
+		whiteTitleColor.Println("Base Recipes:")
 		for _, recipe := range recipes {
-			fmt.Println("  " + recipe.Name())
+			fmt.Println("  " + recipesColor.Sprint(recipe.Name()))
+			descriptionColor.Add(color.Bold).Printf("    %s\n", recipe.Description())
+			componentsStr := playground.GetRecipeComponentsFormatted(recipe)
+			if componentsStr != "" {
+				componentsColor.Printf("    %s\n", componentsStr)
+			}
+			fmt.Println()
 		}
-		fmt.Println()
-		whiteTitleColor.Println("Templates:")
-		for _, t := range templates {
-			fmt.Println("  " + t)
+		whiteTitleColor.Println("Custom Recipes:")
+		for _, cr := range customRecipes {
+			fmt.Println("  " + customRecipesColor.Sprint(cr))
+			info, err := playground.GetCustomRecipeInfo(cr, recipes)
+			if err == nil {
+				if info.Description != "" {
+					descriptionColor.Add(color.Bold).Printf("    %s\n", info.Description)
+				}
+				// Show base + modified/new components
+				var parts []string
+				parts = append(parts, info.Base)
+				if len(info.ModifiedComponents) > 0 {
+					parts = append(parts, "modified "+strings.Join(info.ModifiedComponents, ", "))
+				}
+				if len(info.NewComponents) > 0 {
+					parts = append(parts, "new "+strings.Join(info.NewComponents, ", "))
+				}
+				if len(parts) > 1 {
+					componentsColor.Printf("    %s\n", strings.Join(parts, " + "))
+				}
+			}
+			fmt.Println()
 		}
 		return nil
 	},
@@ -361,8 +389,8 @@ var recipes = []playground.Recipe{
 }
 
 func main() {
-	// Set the embedded templates filesystem for the playground package
-	playground.TemplatesFS = templatesFS
+	// Set the embedded custom recipes filesystem for the playground package
+	playground.CustomRecipesFS = customRecipesFS
 
 	// Add common flags to startCmd for YAML recipe files
 	startCmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")

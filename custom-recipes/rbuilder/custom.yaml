@@ -1,4 +1,5 @@
 base: l1
+description: Use custom local reth and rbuilder binaries
 
 recipe:
   reth:

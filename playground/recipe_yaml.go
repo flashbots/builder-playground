@@ -15,6 +15,9 @@ type YAMLRecipeConfig struct {
 	// Base is the name of the base recipe (l1, opstack, buildernet)
 	Base string `yaml:"base"`
 
+	// Description is an optional description of the recipe
+	Description string `yaml:"description,omitempty"`
+
 	// Recipe contains the component/service hierarchy to apply as overrides or additions
 	Recipe map[string]*YAMLComponentConfig `yaml:"recipe"`
 }

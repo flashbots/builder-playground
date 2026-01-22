@@ -1,4 +1,5 @@
 base: l1
+description: Use reth and rbuilder from GitHub releases
 
 recipe:
   reth:
