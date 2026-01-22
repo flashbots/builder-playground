@@ -158,6 +158,72 @@ func collectComponentNames(c *Component) []string {
 	return names
 }
 
+// GenerateCustomRecipeToDir extracts a custom recipe and its dependencies to the specified directory
+// Returns the path to the generated playground.yaml file
+func GenerateCustomRecipeToDir(customRecipeName string, targetDir string) (string, error) {
+	// Parse the custom recipe name (format: dir/filename)
+	parts := strings.SplitN(customRecipeName, "/", 2)
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid custom recipe name '%s', expected format 'dir/name'. Run 'playground recipes' to see available options", customRecipeName)
+	}
+	recipeDir := parts[0]
+	baseName := parts[1]
+
+	// Check if the yaml file exists
+	yamlFile := baseName + ".yaml"
+	yamlPath := filepath.Join("custom-recipes", recipeDir, yamlFile)
+	if _, err := CustomRecipesFS.ReadFile(yamlPath); err != nil {
+		// Try .yml extension
+		yamlFile = baseName + ".yml"
+		yamlPath = filepath.Join("custom-recipes", recipeDir, yamlFile)
+		if _, err := CustomRecipesFS.ReadFile(yamlPath); err != nil {
+			return "", fmt.Errorf("custom recipe '%s' not found. Run 'playground recipes' to see available options", customRecipeName)
+		}
+	}
+
+	// Extract files to target directory
+	recipePath := filepath.Join("custom-recipes", recipeDir)
+	err := fs.WalkDir(CustomRecipesFS, recipePath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		fileName := filepath.Base(path)
+
+		// Skip other yaml files that aren't the selected custom recipe
+		if (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
+			return nil
+		}
+
+		// Read the file content
+		content, err := CustomRecipesFS.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", path, err)
+		}
+
+		// Determine output filename
+		outPath := fileName
+		if fileName == yamlFile {
+			outPath = "playground.yaml"
+		}
+
+		// Write the file to target directory
+		fullPath := filepath.Join(targetDir, outPath)
+		if err := os.WriteFile(fullPath, content, 0o644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", fullPath, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to extract custom recipe: %w", err)
+	}
+
+	return filepath.Join(targetDir, "playground.yaml"), nil
+}
+
 // GenerateFromCustomRecipe extracts a custom recipe and its dependencies to current directory
 // customRecipeName should be in the format "dir/filename" (e.g., "rbuilder/custom")
 // If force is false, it will error if any files already exist
