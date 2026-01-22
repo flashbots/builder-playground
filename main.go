@@ -25,6 +25,7 @@ var templatesFS embed.FS
 var version = "dev"
 
 var greenColor = color.New(color.FgGreen)
+var whiteTitleColor = color.New(color.FgHiWhite, color.Bold)
 
 var (
 	keepFlag          bool
@@ -272,7 +273,7 @@ var generateDocsCmd = &cobra.Command{
 
 var generateCmd = &cobra.Command{
 	Use:   "generate <recipe>",
-	Short: "Generate a playground.yaml file from a recipe (e.g. l1) or template (e.g. template:rbuilder/release)",
+	Short: "Generate a playground.yaml file from a recipe (e.g. l1) or template (e.g. rbuilder/release)",
 	Long:  "Generate a playground.yaml file that represents the full configuration of a recipe",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -281,31 +282,30 @@ var generateCmd = &cobra.Command{
 
 		name := args[0]
 
-		// Check if it's a template
-		if strings.HasPrefix(name, "template:") {
-			templateName := strings.TrimPrefix(name, "template:")
-			return playground.GenerateFromTemplate(templateName, generateForce)
-		}
-
-		// Otherwise, it's a recipe
-		var recipe playground.Recipe
+		// First check if it's a recipe
 		for _, r := range recipes {
 			if r.Name() == name {
-				recipe = r
-				break
+				yaml, err := playground.RecipeToYAML(r)
+				if err != nil {
+					return fmt.Errorf("failed to convert recipe to YAML: %w", err)
+				}
+				fmt.Println(yaml)
+				return nil
 			}
 		}
-		if recipe == nil {
-			return fmt.Errorf("recipe '%s' not found. Run 'playground recipes' to see available options", name)
-		}
 
-		yaml, err := playground.RecipeToYAML(recipe)
+		// Check if it's a template
+		templates, err := playground.GetEmbeddedTemplates()
 		if err != nil {
-			return fmt.Errorf("failed to convert recipe to YAML: %w", err)
+			return fmt.Errorf("failed to list templates: %w", err)
+		}
+		for _, t := range templates {
+			if t == name {
+				return playground.GenerateFromTemplate(name, generateForce)
+			}
 		}
 
-		fmt.Println(yaml)
-		return nil
+		return fmt.Errorf("recipe or template '%s' not found. Run 'playground recipes' to see available options", name)
 	},
 }
 
@@ -317,11 +317,14 @@ var recipesCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to list templates: %w", err)
 		}
+		whiteTitleColor.Println("Recipes:")
 		for _, recipe := range recipes {
-			fmt.Println(recipe.Name())
+			fmt.Println("  " + recipe.Name())
 		}
+		fmt.Println()
+		whiteTitleColor.Println("Templates:")
 		for _, t := range templates {
-			fmt.Printf("template:%s\n", t)
+			fmt.Println("  " + t)
 		}
 		return nil
 	},
