@@ -160,7 +160,7 @@ func collectComponentNames(c *Component) []string {
 
 // GenerateCustomRecipeToDir extracts a custom recipe and its dependencies to the specified directory
 // Returns the path to the generated playground.yaml file
-func GenerateCustomRecipeToDir(customRecipeName string, targetDir string) (string, error) {
+func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, error) {
 	// Parse the custom recipe name (format: dir/filename)
 	parts := strings.SplitN(customRecipeName, "/", 2)
 	if len(parts) != 2 {

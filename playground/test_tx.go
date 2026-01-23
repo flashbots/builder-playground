@@ -15,7 +15,8 @@ import (
 
 // TestTxConfig holds configuration for the test transaction
 type TestTxConfig struct {
-	RPCURL     string
+	RPCURL     string // Target RPC URL for sending transactions (e.g., rbuilder)
+	ELRPCURL   string // EL RPC URL for chain queries (e.g., reth). If empty, uses RPCURL
 	PrivateKey string
 	ToAddress  string
 	Value      *big.Int
@@ -44,7 +45,6 @@ func DefaultTestTxConfig() *TestTxConfig {
 	toAddress := crypto.PubkeyToAddress(firstPrivKey.PublicKey)
 
 	return &TestTxConfig{
-		RPCURL:     "http://localhost:8545",
 		PrivateKey: privateKey,
 		ToAddress:  toAddress.Hex(),
 		Value:      value,
@@ -62,12 +62,30 @@ func stripHexPrefix(s string) string {
 
 // SendTestTransaction sends a test transaction and waits for the receipt
 func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
-	// Connect to the RPC endpoint
-	client, err := ethclient.Dial(cfg.RPCURL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to RPC: %w", err)
+	// Determine EL RPC URL (for chain queries)
+	elRPCURL := cfg.ELRPCURL
+	if elRPCURL == "" {
+		elRPCURL = cfg.RPCURL
 	}
-	defer client.Close()
+
+	// Connect to the EL RPC endpoint (for chain queries)
+	elClient, err := ethclient.Dial(elRPCURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to EL RPC: %w", err)
+	}
+	defer elClient.Close()
+
+	// Connect to the target RPC endpoint (for sending transactions)
+	var targetClient *ethclient.Client
+	if cfg.RPCURL != elRPCURL {
+		targetClient, err = ethclient.Dial(cfg.RPCURL)
+		if err != nil {
+			return fmt.Errorf("failed to connect to target RPC: %w", err)
+		}
+		defer targetClient.Close()
+	} else {
+		targetClient = elClient
+	}
 
 	// Parse private key
 	privateKey, err := crypto.HexToECDSA(cfg.PrivateKey)
@@ -82,15 +100,15 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 	}
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	// Get chain ID
-	chainID, err := client.ChainID(ctx)
+	// Get chain ID (from EL)
+	chainID, err := elClient.ChainID(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get chain ID: %w", err)
 	}
 	fmt.Printf("Chain ID: %d\n", chainID)
 
-	// Get nonce
-	nonce, err := client.PendingNonceAt(ctx, fromAddress)
+	// Get nonce (from EL)
+	nonce, err := elClient.PendingNonceAt(ctx, fromAddress)
 	if err != nil {
 		return fmt.Errorf("failed to get nonce: %w", err)
 	}
@@ -115,9 +133,9 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 		return fmt.Errorf("failed to sign transaction: %w", err)
 	}
 
-	// Send transaction
+	// Send transaction (to target RPC)
 	fmt.Printf("Sending transaction at %s\n", time.Now().Format("15:04:05"))
-	err = client.SendTransaction(ctx, signedTx)
+	err = targetClient.SendTransaction(ctx, signedTx)
 	if err != nil {
 		return fmt.Errorf("failed to send transaction: %w", err)
 	}
@@ -134,7 +152,7 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 		default:
 		}
 
-		receipt, err := client.TransactionReceipt(ctx, txHash)
+		receipt, err := elClient.TransactionReceipt(ctx, txHash)
 		if err == nil && receipt != nil {
 			fmt.Printf("Receipt received!\n")
 			fmt.Printf("  Block Number: %d\n", receipt.BlockNumber)
@@ -142,7 +160,7 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 			fmt.Printf("  Status: %d\n", receipt.Status)
 
 			// Get block to show extra data (builder name)
-			block, err := client.BlockByNumber(ctx, receipt.BlockNumber)
+			block, err := elClient.BlockByNumber(ctx, receipt.BlockNumber)
 			if err == nil && block != nil {
 				fmt.Printf("  Extra Data: %s\n", string(block.Extra()))
 			}

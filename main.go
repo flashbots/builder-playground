@@ -56,6 +56,8 @@ var (
 	prefundedAccounts []string
 	followFlag        bool
 	generateForce     bool
+	testRPCURL        string
+	testELRPCURL      string
 )
 
 var rootCmd = &cobra.Command{
@@ -396,8 +398,6 @@ var versionCmd = &cobra.Command{
 	},
 }
 
-var testRPCURL string
-
 var testCmd = &cobra.Command{
 	Use:   "test",
 	Short: "Send a test transaction to the local EL node",
@@ -405,9 +405,8 @@ var testCmd = &cobra.Command{
 		cmd.SilenceUsage = true
 		ctx := mainctx.Get()
 		cfg := playground.DefaultTestTxConfig()
-		if testRPCURL != "" {
-			cfg.RPCURL = testRPCURL
-		}
+		cfg.RPCURL = testRPCURL
+		cfg.ELRPCURL = testELRPCURL
 		return playground.SendTestTransaction(ctx, cfg)
 	},
 }
@@ -502,7 +501,8 @@ func main() {
 	generateCmd.Flags().BoolVar(&generateForce, "force", false, "overwrite existing files")
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(recipesCmd)
-	testCmd.Flags().StringVar(&testRPCURL, "rpc", "", "RPC URL (default: http://localhost:8545)")
+	testCmd.Flags().StringVar(&testRPCURL, "rpc", "http://localhost:8545", "Target RPC URL for sending transactions")
+	testCmd.Flags().StringVar(&testELRPCURL, "el-rpc", "", "EL RPC URL for chain queries (default: same as --rpc)")
 	rootCmd.AddCommand(testCmd)
 
 	if err := rootCmd.Execute(); err != nil {
