@@ -88,13 +88,7 @@ func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 	externalBuilderRef := o.externalBuilder
 	peers := []string{}
 
-	bootnode := &Bootnode{}
-	component.AddService(ctx, bootnode)
-
-	ctx.Bootnode = &BootnodeRef{
-		Service: "bootnode",
-		ID:      bootnode.Enode.NodeID(),
-	}
+	component.AddService(ctx, ctx.UseBootnode())
 
 	if o.externalBuilder == "op-reth" {
 		// Add a new op-reth service and connect it to Rollup-boost

@@ -177,6 +177,17 @@ type ExContext struct {
 	Contender *ContenderContext
 }
 
+func (e *ExContext) UseBootnode() ComponentGen {
+	bootnode := &Bootnode{}
+
+	e.Bootnode = &BootnodeRef{
+		Service: "bootnode",
+		ID:      bootnode.Enode.NodeID(),
+	}
+
+	return bootnode
+}
+
 type BootnodeRef struct {
 	Service string
 	ID      string

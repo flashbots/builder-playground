@@ -427,7 +427,6 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 }
 
 type RethEL struct {
-	Name                 string
 	UseRethForValidation bool
 	UseNativeReth        bool
 }
@@ -468,13 +467,8 @@ func logLevelToRethVerbosity(logLevel LogLevel) string {
 func (r *RethEL) Apply(ctx *ExContext) *Component {
 	component := NewComponent("reth")
 
-	name := "el"
-	if r.Name != "" {
-		name = r.Name
-	}
-
 	// start the reth el client
-	svc := component.NewService(name).
+	svc := component.NewService("el").
 		WithImage("ghcr.io/paradigmxyz/reth").
 		WithTag("v1.9.3").
 		WithEntrypoint("/usr/local/bin/reth").
