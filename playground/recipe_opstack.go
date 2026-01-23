@@ -89,7 +89,7 @@ func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 	peers := []string{}
 
 	bootnode := &Bootnode{}
-	component.AddService(bootnode)
+	component.AddService(ctx, bootnode)
 
 	ctx.Bootnode = &BootnodeRef{
 		Service: "bootnode",
@@ -170,7 +170,7 @@ func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 		})
 	}
 
-	component.AddService(&OpGeth{})
+	component.AddService(ctx, &OpGeth{})
 	component.AddComponent(ctx, &OpNode{
 		L1Node:   "el",
 		L1Beacon: "beacon",

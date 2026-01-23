@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	flag "github.com/spf13/pflag"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -169,6 +171,90 @@ func TestRecipeBuilderNet(t *testing.T) {
 	tt.test(&BuilderNetRecipe{}, []string{})
 }
 
+type mockRecipe struct {
+}
+
+func (m *mockRecipe) Name() string {
+	return ""
+}
+
+func (m *mockRecipe) Description() string {
+	return ""
+}
+
+func (m *mockRecipe) Flags() *flag.FlagSet {
+	return flag.NewFlagSet("", 0)
+}
+
+func (m *mockRecipe) Artifacts() *ArtifactsBuilder {
+	return nil
+}
+
+func (m *mockRecipe) Apply(ctx *ExContext) *Component {
+	return nil
+}
+
+func (m *mockRecipe) Output(manifest *Manifest) map[string]interface{} {
+	return map[string]interface{}{}
+}
+
+var _ Recipe = &testBootnodeComponent{}
+
+type testBootnodeComponent struct {
+	mockRecipe
+}
+
+func (t *testBootnodeComponent) Artifacts() *ArtifactsBuilder {
+	builder := NewArtifactsBuilder()
+	builder.L1BlockTime(12)
+	return builder
+}
+
+func (t *testBootnodeComponent) Apply(ctx *ExContext) *Component {
+	c := NewComponent("bootnode-test")
+
+	bootnode := &Bootnode{}
+	c.AddService(ctx, bootnode)
+
+	ctx.Bootnode = &BootnodeRef{
+		Service: "bootnode",
+		ID:      bootnode.Enode.NodeID(),
+	}
+
+	// run one beacon node client which uses cl-proxy
+	// to connect to two Reth EL nodes
+	// which use the bootnode to connect to each other.
+	c.AddComponent(ctx, &LighthouseBeaconNode{
+		ExecutionNode: "cl-proxy",
+	})
+	c.AddComponent(ctx, &LighthouseValidator{
+		BeaconNode: "beacon",
+	})
+	c.AddComponent(ctx, &ClProxy{
+		PrimaryBuilder:   "el",
+		SecondaryBuilder: "el2",
+	})
+
+	// run the builders
+	c.AddComponent(ctx, &RethEL{
+		Name: "el",
+	})
+	c.AddComponent(ctx, &RethEL{
+		Name: "el2",
+	})
+
+	return c
+}
+
+func TestBootnode(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&testBootnodeComponent{}, []string{})
+
+	time.Sleep(5 * time.Second)
+}
+
 type testFramework struct {
 	t          *testing.T
 	runner     *LocalRunner
@@ -207,7 +293,7 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 
 	exCtx := &ExContext{
 		Output:   o,
-		LogLevel: LevelDebug,
+		LogLevel: LevelTrace,
 		Contender: &ContenderContext{
 			Enabled: false,
 		},

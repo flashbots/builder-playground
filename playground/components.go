@@ -427,6 +427,7 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 }
 
 type RethEL struct {
+	Name                 string
 	UseRethForValidation bool
 	UseNativeReth        bool
 }
@@ -467,8 +468,13 @@ func logLevelToRethVerbosity(logLevel LogLevel) string {
 func (r *RethEL) Apply(ctx *ExContext) *Component {
 	component := NewComponent("reth")
 
+	name := "el"
+	if r.Name != "" {
+		name = r.Name
+	}
+
 	// start the reth el client
-	svc := component.NewService("el").
+	svc := component.NewService(name).
 		WithImage("ghcr.io/paradigmxyz/reth").
 		WithTag("v1.9.3").
 		WithEntrypoint("/usr/local/bin/reth").
@@ -504,6 +510,10 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
+
+	if ctx.Bootnode != nil {
+		svc.WithArgs("--bootnodes", ctx.Bootnode.Connect())
+	}
 
 	UseHealthmon(component, svc, healthmonExecution)
 
