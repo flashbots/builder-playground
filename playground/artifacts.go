@@ -483,6 +483,10 @@ func NewOutput(dst string) (*output, error) {
 	return out, nil
 }
 
+func (o *output) Dst() string {
+	return o.dst
+}
+
 func (o *output) Read(path string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(o.dst, path))
 	if err != nil {
@@ -663,13 +667,17 @@ type sszObject interface {
 }
 
 func GetHomeDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("error getting user home directory: %w", err)
+	var err error
+
+	homeDir := os.Getenv("XDG_STATE_HOME")
+	if homeDir == "" {
+		if homeDir, err = os.UserHomeDir(); err != nil {
+			return "", fmt.Errorf("error getting user home directory: %w", err)
+		}
 	}
 
 	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(homeDir, ".playground")
+	customHomeDir := filepath.Join(homeDir, ".builder-playground")
 
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {

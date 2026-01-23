@@ -341,8 +341,15 @@ func runIt(recipe playground.Recipe) error {
 	}
 	logging.ConfigureSlog(logLevelFlag)
 	sessionID := utils.GeneratePetName()
+
+	out, err := playground.NewOutput(outputFlag)
+	if err != nil {
+		return err
+	}
+
 	slog.Info("Welcome to Builder Playground! ⚡️🤖")
 	slog.Info("Session ID: "+greenColor.Sprint(sessionID), "log-level", logLevel)
+	slog.Info("Output folder: " + out.Dst())
 	slog.Info("")
 
 	// parse the overrides
@@ -353,11 +360,6 @@ func runIt(recipe playground.Recipe) error {
 			return fmt.Errorf("invalid override format: %s, expected service=val", val)
 		}
 		overrides[parts[0]] = parts[1]
-	}
-
-	out, err := playground.NewOutput(outputFlag)
-	if err != nil {
-		return err
 	}
 
 	slog.Debug("Building artifacts...")
