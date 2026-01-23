@@ -89,21 +89,11 @@ var startCmd = &cobra.Command{
 			if err == nil {
 				for _, cr := range customRecipes {
 					if cr == args[0] {
-						// Generate custom recipe to a temp directory
-						tmpDir, err := os.MkdirTemp("", "playground-custom-recipe-")
+						yamlRecipe, cleanup, err := playground.LoadCustomRecipe(args[0], recipes)
 						if err != nil {
-							return fmt.Errorf("failed to create temp directory: %w", err)
+							return err
 						}
-						yamlPath, err := playground.GenerateCustomRecipeToDir(args[0], tmpDir)
-						if err != nil {
-							os.RemoveAll(tmpDir)
-							return fmt.Errorf("failed to generate custom recipe: %w", err)
-						}
-						yamlRecipe, err := playground.ParseYAMLRecipe(yamlPath, recipes)
-						if err != nil {
-							os.RemoveAll(tmpDir)
-							return fmt.Errorf("failed to parse custom recipe: %w", err)
-						}
+						defer cleanup()
 						cmd.SilenceUsage = true
 						return runIt(yamlRecipe)
 					}

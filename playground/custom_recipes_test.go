@@ -271,6 +271,33 @@ func TestGenerateFromCustomRecipe_ExistingFile(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestLoadCustomRecipe(t *testing.T) {
+	cleanup := setupTestCustomRecipesFS(t)
+	defer cleanup()
+
+	mockRecipes := []Recipe{
+		&mockRecipe{name: "l1", components: []string{"reth", "lighthouse"}},
+	}
+
+	recipe, cleanupTmp, err := LoadCustomRecipe("testdir/sample", mockRecipes)
+	require.NoError(t, err)
+	require.NotNil(t, recipe)
+	require.NotNil(t, cleanupTmp)
+	defer cleanupTmp()
+
+	// Verify the recipe was parsed correctly
+	require.Contains(t, recipe.Name(), "playground.yaml")
+}
+
+func TestLoadCustomRecipe_NotFound(t *testing.T) {
+	cleanup := setupTestCustomRecipesFS(t)
+	defer cleanup()
+
+	_, cleanupTmp, err := LoadCustomRecipe("nonexistent", nil)
+	require.Error(t, err)
+	require.Nil(t, cleanupTmp)
+}
+
 func TestGetRecipeComponents(t *testing.T) {
 	recipe := &mockRecipe{
 		name:       "test",

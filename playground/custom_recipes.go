@@ -213,7 +213,7 @@ func parseCustomRecipeName(customRecipeName string) (recipeDir, yamlFile, recipe
 		return "", "", "", fmt.Errorf("custom recipe '%s' not found. Run 'playground recipes' to see available options", customRecipeName)
 	}
 
-	return
+	return recipeDir, yamlFile, recipePath, nil
 }
 
 // GenerateCustomRecipeToDir extracts a custom recipe and its dependencies to the specified directory
@@ -299,6 +299,30 @@ func GenerateFromCustomRecipe(customRecipeName string, force bool) error {
 		fmt.Printf("Created %s\n", f)
 	}
 	return nil
+}
+
+// LoadCustomRecipe generates a custom recipe to a temp directory and parses it.
+// Returns the parsed recipe and a cleanup function to remove the temp directory.
+func LoadCustomRecipe(customRecipeName string, baseRecipes []Recipe) (Recipe, func(), error) {
+	tmpDir, err := os.MkdirTemp("", "playground-custom-recipe-")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	cleanup := func() { os.RemoveAll(tmpDir) }
+
+	yamlPath, err := GenerateCustomRecipeToDir(customRecipeName, tmpDir)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to generate custom recipe: %w", err)
+	}
+
+	recipe, err := ParseYAMLRecipe(yamlPath, baseRecipes)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to parse custom recipe: %w", err)
+	}
+
+	return recipe, cleanup, nil
 }
 
 // listCustomRecipeFiles returns the list of output files that would be created for a custom recipe
