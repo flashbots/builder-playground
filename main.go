@@ -321,11 +321,20 @@ var generateCmd = &cobra.Command{
 		// First check if it's a recipe
 		for _, r := range recipes {
 			if r.Name() == name {
-				yaml, err := playground.RecipeToYAML(r)
+				yamlContent, err := playground.RecipeToYAML(r)
 				if err != nil {
 					return fmt.Errorf("failed to convert recipe to YAML: %w", err)
 				}
-				fmt.Println(yaml)
+				outFile := "playground.yaml"
+				if !generateForce {
+					if _, err := os.Stat(outFile); err == nil {
+						return fmt.Errorf("file %s already exists. Use --force to overwrite", outFile)
+					}
+				}
+				if err := os.WriteFile(outFile, []byte(yamlContent), 0o644); err != nil {
+					return fmt.Errorf("failed to write %s: %w", outFile, err)
+				}
+				fmt.Printf("Created %s\n", outFile)
 				return nil
 			}
 		}

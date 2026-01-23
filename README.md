@@ -22,13 +22,48 @@ builder-playground start l1
 builder-playground start opstack --external-builder http://localhost:4444
 ```
 
+## Installation
+
+```
+$ go install github.com/flashbots/builder-playground@latest
+```
+
+or clone the repository and do:
+
+```
+$ go install .
+```
+
+or do `go build .` and run from the repository like `./builder-playground`.
+
 ## Getting started
 
-Clone the repository and use the `start` command to deploy a specific recipe:
+See the available recipes from the `recipes` command:
+
+```
+Base Recipes:
+  l1
+    Deploy a full L1 stack with mev-boost
+    reth, lighthouse-beacon-node, lighthouse-validator-node, mev-boost-relay
+
+... (more base and custom recipes available in the original output)
+```
+
+Use the `start` command to deploy a specific recipe:
 
 ```bash
-$ builder-playground start <recipe>
+$ builder-playground start l1
 ```
+
+and you can send a test transaction from prefunded accounts by using:
+
+```bash
+$ builder-playground test
+```
+
+If you need to modify a recipe or build your own, make sure to check out the [custom recipes](docs/custom_recipes.md) documentation!
+
+Base recipes are also runnable with some flags and you can check out the documentation [here](docs/recipes) do find out.
 
 Currently available recipes:
 

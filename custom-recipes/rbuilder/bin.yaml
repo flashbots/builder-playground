@@ -1,5 +1,5 @@
 base: l1
-description: Use reth and rbuilder from GitHub releases
+description: Use reth and rbuilder binaries from GitHub releases
 
 recipe:
   reth:
