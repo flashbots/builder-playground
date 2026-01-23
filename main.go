@@ -58,6 +58,7 @@ var (
 	generateForce     bool
 	testRPCURL        string
 	testELRPCURL      string
+	testTimeout       time.Duration
 )
 
 var rootCmd = &cobra.Command{
@@ -416,6 +417,7 @@ var testCmd = &cobra.Command{
 		cfg := playground.DefaultTestTxConfig()
 		cfg.RPCURL = testRPCURL
 		cfg.ELRPCURL = testELRPCURL
+		cfg.Timeout = testTimeout
 		return playground.SendTestTransaction(ctx, cfg)
 	},
 }
@@ -512,6 +514,7 @@ func main() {
 	rootCmd.AddCommand(recipesCmd)
 	testCmd.Flags().StringVar(&testRPCURL, "rpc", "http://localhost:8545", "Target RPC URL for sending transactions")
 	testCmd.Flags().StringVar(&testELRPCURL, "el-rpc", "", "EL RPC URL for chain queries (default: same as --rpc)")
+	testCmd.Flags().DurationVar(&testTimeout, "timeout", 2*time.Minute, "Timeout for waiting for transaction receipt")
 	rootCmd.AddCommand(testCmd)
 
 	if err := rootCmd.Execute(); err != nil {

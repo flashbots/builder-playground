@@ -22,6 +22,7 @@ type TestTxConfig struct {
 	Value      *big.Int
 	GasLimit   uint64
 	GasPrice   *big.Int
+	Timeout    time.Duration // Timeout for waiting for receipt. If 0, defaults to 2 minutes
 }
 
 // DefaultTestTxConfig returns the default test transaction configuration
@@ -143,34 +144,40 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 	txHash := signedTx.Hash()
 	fmt.Printf("TX Hash: %s\n", txHash.Hex())
 
-	// Wait for receipt
+	// Wait for receipt with timeout
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	fmt.Println("Waiting for receipt...")
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		receipt, err := elClient.TransactionReceipt(ctx, txHash)
-		if err == nil && receipt != nil {
-			fmt.Printf("Receipt received!\n")
-			fmt.Printf("  Block Number: %d\n", receipt.BlockNumber)
-			fmt.Printf("  Gas Used: %d\n", receipt.GasUsed)
-			fmt.Printf("  Status: %d\n", receipt.Status)
-
-			// Get block to show extra data (builder name)
-			block, err := elClient.BlockByNumber(ctx, receipt.BlockNumber)
-			if err == nil && block != nil {
-				fmt.Printf("  Extra Data: %s\n", string(block.Extra()))
+			if ctx.Err() == context.DeadlineExceeded {
+				return fmt.Errorf("timeout waiting for transaction receipt after %s", timeout)
 			}
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(1 * time.Second):
+		case <-ticker.C:
+			receipt, err := elClient.TransactionReceipt(ctx, txHash)
+			if err == nil && receipt != nil {
+				fmt.Printf("Receipt received!\n")
+				fmt.Printf("  Block Number: %d\n", receipt.BlockNumber)
+				fmt.Printf("  Gas Used: %d\n", receipt.GasUsed)
+				fmt.Printf("  Status: %d\n", receipt.Status)
+
+				// Get block to show extra data (builder name)
+				block, err := elClient.BlockByNumber(ctx, receipt.BlockNumber)
+				if err == nil && block != nil {
+					fmt.Printf("  Extra Data: %s\n", string(block.Extra()))
+				}
+				return nil
+			}
 		}
 	}
 }
