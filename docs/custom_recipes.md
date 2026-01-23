@@ -70,7 +70,7 @@ playground recipes
 This shows:
 
 - **Base Recipes**: Core recipes like `l1`, `opstack`, `buildernet`
-- **Custom Recipes**: Pre-built configurations like `rbuilder/bin` and `rbuilder/bin`
+- **Custom Recipes**: Pre-built configurations like `rbuilder/bin` and `rbuilder/custom`
 
 Each recipe displays a description and the components it includes.
 
@@ -82,7 +82,7 @@ You can run any custom recipe directly by name:
 playground start rbuilder/bin
 ```
 
-This is equivalent to generating the custom recipe files and running them, but without cluttering your working directory.
+This is equivalent to generating the custom recipe files and running them when you don't need to modify the recipe.
 
 ## Generating a Custom Recipe
 
