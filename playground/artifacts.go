@@ -667,17 +667,17 @@ type sszObject interface {
 }
 
 func GetHomeDir() (string, error) {
-	var err error
-
-	homeDir := os.Getenv("XDG_STATE_HOME")
-	if homeDir == "" {
-		if homeDir, err = os.UserHomeDir(); err != nil {
+	stateHomeDir := os.Getenv("XDG_STATE_HOME")
+	if stateHomeDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
 			return "", fmt.Errorf("error getting user home directory: %w", err)
 		}
+		stateHomeDir = filepath.Join(homeDir, "/.local/state")
 	}
 
 	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(homeDir, ".builder-playground")
+	customHomeDir := filepath.Join(stateHomeDir, ".builder-playground")
 
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
