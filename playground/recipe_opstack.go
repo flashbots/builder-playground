@@ -1,6 +1,8 @@
 package playground
 
 import (
+	"fmt"
+
 	flag "github.com/spf13/pflag"
 )
 
@@ -45,6 +47,12 @@ type OpRecipe struct {
 	// predeploysFile is the path to a JSON file containing additional contracts
 	// to predeploy in the L2 genesis
 	predeploysFile string
+
+	// enableProxyd enables proxyd for routing transactions to ingress RPC
+	enableProxyd bool
+
+	// ingressRPC is the service name for the ingress RPC endpoint
+	ingressRPC string
 }
 
 func (o *OpRecipe) Name() string {
@@ -67,6 +75,8 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
 	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
 	flags.StringVar(&o.predeploysFile, "use-predeploys", "", "Path to JSON file with additional contracts to predeploy in L2 genesis")
+	flags.BoolVar(&o.enableProxyd, "proxyd", false, "Enable proxyd for routing eth_sendRawTransaction to ingress RPC")
+	flags.StringVar(&o.ingressRPC, "ingress-rpc", "ingress-rpc", "Service name for ingress RPC endpoint")
 	return flags
 }
 
@@ -76,6 +86,15 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	builder.ApplyLatestL2Fork(o.enableLatestFork)
 	builder.OpBlockTime(o.blockTime)
 	builder.PredeployFile(o.predeploysFile)
+
+	// Generate proxyd config if proxyd is enabled
+	if o.enableProxyd {
+		// Use Docker service names for internal DNS resolution
+		ingressURL := fmt.Sprintf("http://%s:8080", o.ingressRPC)
+		standardELURL := "http://op-geth:8545"
+		builder.WithProxyd(ingressURL, standardELURL)
+	}
+
 	return builder
 }
 
@@ -198,6 +217,19 @@ func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 		})
 	}
 
+	// If proxyd is enabled, add it
+	if o.enableProxyd {
+		elNode := "op-geth"
+		if o.externalBuilder != "" {
+			elNode = "rollup-boost"
+		}
+
+		component.AddComponent(ctx, &Proxyd{
+			IngressRPC: o.ingressRPC,
+			StandardEL: elNode,
+		})
+	}
+
 	if ctx.Contender.TargetChain == "" {
 		ctx.Contender.TargetChain = "op-geth"
 	}
@@ -207,14 +239,21 @@ func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 }
 
 func (o *OpRecipe) Output(manifest *Manifest) map[string]interface{} {
+	output := map[string]interface{}{}
+
+	if o.enableProxyd {
+		proxydService := manifest.MustGetService("proxyd")
+		httpPort := proxydService.MustGetPort("http")
+		output["proxyd-rpc"] = fmt.Sprintf("http://localhost:%d", httpPort.HostPort)
+	}
+
 	/*
 		opGeth := manifest.MustGetService("op-geth").component.(*OpGeth)
 		if opGeth.Enode != "" {
 			// Only output if enode was set
-			return map[string]interface{}{
-				"op-geth-enode": opGeth.Enode,
-			}
+			output["op-geth-enode"] = opGeth.Enode
 		}
 	*/
-	return map[string]interface{}{}
+
+	return output
 }

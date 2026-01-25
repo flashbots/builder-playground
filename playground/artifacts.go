@@ -122,6 +122,11 @@ type ArtifactsBuilder struct {
 	applyLatestL2Fork    *uint64
 	opBlockTimeInSeconds uint64
 	predeploysFile       string
+
+	// Proxyd options
+	proxydEnabled     bool
+	proxydIngressURL  string
+	proxydStandardURL string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -170,6 +175,13 @@ func (b *ArtifactsBuilder) PrefundedAccounts(accounts []string) *ArtifactsBuilde
 
 func (b *ArtifactsBuilder) PredeployFile(filePath string) *ArtifactsBuilder {
 	b.predeploysFile = filePath
+	return b
+}
+
+func (b *ArtifactsBuilder) WithProxyd(ingressURL, standardURL string) *ArtifactsBuilder {
+	b.proxydEnabled = true
+	b.proxydIngressURL = ingressURL
+	b.proxydStandardURL = standardURL
 	return b
 }
 
@@ -405,6 +417,13 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 			return err
 		}
 		if err := out.WriteFile("rollup.json", newOpRollup); err != nil {
+			return err
+		}
+	}
+
+	// Generate proxyd config if enabled
+	if b.proxydEnabled {
+		if err := b.GenerateProxydConfig(out, b.proxydIngressURL, b.proxydStandardURL); err != nil {
 			return err
 		}
 	}
@@ -809,4 +828,38 @@ func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.Genesi
 		(*allocs)[addr] = account
 	}
 	return nil
+}
+
+// GenerateProxydConfig generates proxyd TOML configuration for routing RPC methods
+func (b *ArtifactsBuilder) GenerateProxydConfig(out *output, ingressURL, standardELURL string) error {
+	config := fmt.Sprintf(`[server]
+rpc_host = "0.0.0.0"
+rpc_port = 8545
+
+[backend]
+response_timeout_seconds = 30
+max_response_size_bytes = 5242880
+
+[backends]
+[backends.ingress]
+rpc_url = "%s"
+
+[backends.standard]
+rpc_url = "%s"
+
+[backend_groups]
+[backend_groups.ingress]
+backends = ["ingress"]
+
+[backend_groups.standard]
+backends = ["standard"]
+
+[rpc_method_mappings]
+eth_sendRawTransaction = "ingress"
+eth_sendBundle = "ingress"
+eth_sendBackrunBundle = "ingress"
+base_meterBundle = "ingress"
+`, ingressURL, standardELURL)
+
+	return out.WriteFile("proxyd-config.toml", config)
 }
