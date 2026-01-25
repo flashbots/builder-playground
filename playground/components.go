@@ -631,7 +631,7 @@ func (p *Proxyd) Apply(ctx *ExContext) *Component {
 	component := NewComponent("proxyd")
 
 	component.NewService("proxyd").
-		WithImage("docker.io/base/proxyd").
+		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/proxyd").
 		WithTag("latest").
 		WithArgs(
 			"/bin/proxyd",
