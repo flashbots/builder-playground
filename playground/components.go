@@ -622,6 +622,27 @@ func (c *ClProxy) Apply(ctx *ExContext) *Component {
 	return component
 }
 
+type Proxyd struct {
+	IngressRPC string // Service name for ingress RPC (e.g., "ingress-rpc")
+	StandardEL string // Service name for standard EL (e.g., "op-geth")
+}
+
+func (p *Proxyd) Apply(ctx *ExContext) *Component {
+	component := NewComponent("proxyd")
+
+	component.NewService("proxyd").
+		WithImage("docker.io/base/proxyd").
+		WithTag("latest").
+		WithArgs(
+			"/bin/proxyd",
+			"/config/proxyd.toml",
+		).
+		WithArtifact("/config/proxyd.toml", "proxyd-config.toml").
+		WithPort("http", 8545)
+
+	return component
+}
+
 type MevBoostRelay struct {
 	BeaconClient     string
 	ValidationServer string
