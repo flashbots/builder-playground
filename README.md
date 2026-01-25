@@ -110,7 +110,7 @@ docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
 
 ## Common Options
 
-- `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.local/state/.builder-playground/devnet`
+- `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.local/state/builder-playground/devnet`
 - `--detached` (bool): Run the recipes in the background. Defaults to `false`.
 - `--genesis-delay` (int): The delay in seconds before the genesis block is created. Defaults to `10` seconds
 - `--watchdog` (bool): Enable the watchdog service to monitor the specific chain

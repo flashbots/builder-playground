@@ -677,7 +677,7 @@ func GetHomeDir() (string, error) {
 	}
 
 	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(stateHomeDir, ".builder-playground")
+	customHomeDir := filepath.Join(stateHomeDir, "builder-playground")
 
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
