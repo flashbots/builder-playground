@@ -673,7 +673,7 @@ func GetHomeDir() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("error getting user home directory: %w", err)
 		}
-		stateHomeDir = filepath.Join(homeDir, "/.local/state")
+		stateHomeDir = filepath.Join(homeDir, ".local", "state")
 	}
 
 	// Define the path for our custom home directory
