@@ -72,6 +72,38 @@ func readGenesis(t *testing.T, o *output, genesisName string) *core.Genesis {
 	return &genesis
 }
 
+func TestPredeploys_Custom(t *testing.T) {
+	o := newTestOutput(t)
+
+	// Create a temporary predeploys JSON file
+	predeployAddr := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
+	predeployCode := []byte{0x60, 0x80, 0x60, 0x40} // Simple bytecode
+	predeploysJSON := `{
+		"0x1234567890abcdef1234567890abcdef12345678": {
+			"balance": "0x0",
+			"code": "0x60806040"
+		}
+	}`
+
+	tmpFile, err := os.CreateTemp("", "predeploys-*.json")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.WriteString(predeploysJSON)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	b := NewArtifactsBuilder().WithL2().PredeployFile(tmpFile.Name())
+	require.NoError(t, b.Build(o))
+
+	l2Genesis := readGenesis(t, o, "l2-genesis.json")
+
+	// Verify the predeploy is in L2 genesis
+	alloc, ok := l2Genesis.Alloc[predeployAddr]
+	require.True(t, ok, "predeploy address should be in L2 genesis")
+	require.Equal(t, predeployCode, alloc.Code, "predeploy code should match")
+}
+
 func newTestOutput(t *testing.T) *output {
 	dir, err := os.MkdirTemp("/tmp", "test-output")
 	if err != nil {

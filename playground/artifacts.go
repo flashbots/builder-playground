@@ -123,7 +123,8 @@ type ArtifactsBuilder struct {
 	opBlockTimeInSeconds uint64
 
 	// Extra files to copy to artifacts (artifactName -> sourcePath)
-	extraFiles map[string]string
+	extraFiles     map[string]string
+	predeploysFile string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -176,6 +177,26 @@ func (b *ArtifactsBuilder) WithExtraFile(artifactName, sourcePath string) *Artif
 	}
 	b.extraFiles[artifactName] = sourcePath
 	return b
+}
+
+func (b *ArtifactsBuilder) PredeployFile(filePath string) *ArtifactsBuilder {
+	b.predeploysFile = filePath
+	return b
+}
+
+func (b *ArtifactsBuilder) loadPredeploys() (types.GenesisAlloc, error) {
+	if b.predeploysFile == "" {
+		return types.GenesisAlloc{}, nil
+	}
+	data, err := os.ReadFile(b.predeploysFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read predeploy file: %w", err)
+	}
+	var alloc types.GenesisAlloc
+	if err := json.Unmarshal(data, &alloc); err != nil {
+		return nil, fmt.Errorf("failed to parse predeploy JSON: %w", err)
+	}
+	return alloc, nil
 }
 
 var staticPrefundedAccounts = []string{
@@ -324,6 +345,16 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		// Update the allocs to include the same prefunded accounts as the L1 genesis,
 		// while preserving the existing predeploys from the template
 		allocs := originalGenesis.Alloc
+
+		// Add custom predeploys, if any
+		predeploys, err := b.loadPredeploys()
+		if err != nil {
+			return err
+		}
+		if err := appendPredeploysToAlloc(&allocs, predeploys); err != nil {
+			return err
+		}
+
 		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
 			return err
 		}
@@ -788,6 +819,16 @@ func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []strin
 			Balance: prefundedBalance,
 			Nonce:   1,
 		}
+	}
+	return nil
+}
+
+func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.GenesisAlloc) error {
+	for addr, account := range predeploys {
+		if _, exists := (*allocs)[addr]; exists {
+			return fmt.Errorf("custom predeploy address %s conflicts with existing alloc entry in template genesis", addr.Hex())
+		}
+		(*allocs)[addr] = account
 	}
 	return nil
 }

@@ -79,6 +79,14 @@ func TestRecipeL1Simple(t *testing.T) {
 
 func TestRecipeL1UseNativeReth(t *testing.T) {
 	tt := newTestFramework(t)
+
+	// When Reth runs in the host machine in a normal test, the output directory is in
+	// <repo>/e2e-test which might create an IPC path longer than the max limit.
+	// Thus, only for this test we output the artifacts to /tmp folder ensuring we do not
+	// pass that limit.
+	// https://discussions.apple.com/thread/250275651
+	tt.e2eRootDir = "/tmp"
+
 	defer tt.Close()
 
 	tt.test(&L1Recipe{}, []string{
@@ -162,8 +170,9 @@ func TestRecipeBuilderNet(t *testing.T) {
 }
 
 type testFramework struct {
-	t      *testing.T
-	runner *LocalRunner
+	t          *testing.T
+	runner     *LocalRunner
+	e2eRootDir string
 }
 
 func newTestFramework(t *testing.T) *testFramework {
@@ -181,7 +190,12 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 	testName := toSnakeCase(t.Name())
 	currentTime := time.Now().Format("2006-01-02-15-04")
 
-	e2eTestDir := filepath.Join("../e2e-test/" + currentTime + "_" + testName)
+	e2eRootDir := tt.e2eRootDir
+	if e2eRootDir == "" {
+		e2eRootDir = "../e2e-test"
+	}
+
+	e2eTestDir := filepath.Join(e2eRootDir, currentTime+"_"+testName)
 	if err := os.MkdirAll(e2eTestDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

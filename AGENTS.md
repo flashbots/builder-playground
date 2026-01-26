@@ -1,34 +1,93 @@
-# Repository Guidelines
+This file provides guidance to LLMs when working with code in this repository.
 
-## Project Structure & Module Organization
-- `main.go` exposes the `builder-playground` CLI; Go packages sit alongside it with Go modules declared in `go.mod`.
-- `playground/` owns orchestration code: recipe definitions (`recipe_l1.go`, `recipe_opstack.go`), manifest/artifact builders, and helper utilities. Tests sit next to the source, with shared fixtures under `playground/testcases/`.
-- `docs/` provides reference material (`architecture.md`, `internals/`, `recipes/`), while `examples/` documents opinionated run books.
-- Supporting assets live in dedicated folders: `assertoor/`, `cl-proxy/`, `mev-boost-relay/`, `healthmon/`, `scripts/`, and `tools/`.
+## Project Overview
 
-## Build, Test, and Development Commands
-- `make build` → compile the CLI with version metadata and drop `./builder-playground`.
-- `go run main.go start <recipe>` → launch a stack directly (e.g., `go run main.go start l1 --latest-fork`).
-- `make test` → run `go test -v ./...`; `make integration-test` → run recipe-level e2e tests in `playground/` with `INTEGRATION_TESTS=true`.
-- `make lint` → `gofmt`, `gofumpt -extra`, `go vet`, `staticcheck`; `make fmt` → formatting pass plus `gci write .` and `go mod tidy`.
-- `make generate-docs` → rebuild `docs/recipes/*.md` after touching flags, manifests, or templates.
+Builder Playground is a CLI tool for spinning up self-contained Ethereum development networks optimized for block building and MEV testing. It uses Go to generate artifacts and orchestrate Docker Compose deployments.
 
-## Coding Style & Naming Conventions
-- Target Go 1.25.1 with gofmt-style tabs and mixedCaps identifiers; exported symbols need doc comments.
-- Keep filenames consistent: `recipe_<name>.go`, `cmd_<feature>.go`, `_test.go` for tests, `.tmpl` for config templates.
-- Let the provided tooling manage imports (`gci`) and formatting (`gofmt` + `gofumpt`); avoid manual fixes that fight the linters.
+## Commands
 
-## Testing Guidelines
-- New logic requires companion `_test.go` files near the code. Favor table-driven tests and store reusable fixtures under `playground/testcases/`.
-- Fast feedback: `go test ./playground/... -run TestRecipe` or `go test ./... -run TestComponent`. Seed randomness for deterministic Docker interactions.
-- Extend `make integration-test` coverage when recipes, flags, or container wiring changes; document any prerequisites in `docs/recipes/`.
+```bash
+# Build
+make build                    # Build CLI binary
 
-## Commit & Pull Request Guidelines
-- Follow the existing imperative subject style with optional issue references, e.g., `Fix updateTaskStatus panic (#316)`.
-- Each PR should explain scope, validation commands (`make test`, `builder-playground start opstack`, etc.), and linked docs/examples updates. Provide logs or screenshots when behavior changes.
-- Keep commits focused (code, generated docs, manifests as separate commits).
+# Testing
+make test                     # Run unit tests (go test -v ./...)
+make integration-test         # Run integration tests with INTEGRATION_TESTS=true
 
-## Environment & Configuration Tips
-- Ensure Docker Desktop (or compatible) is running before launching recipes.
-- Default manifests live in `playground/config.yaml.tmpl`. Copy and adapt this template for new recipes, then document knobs in `docs/recipes/<recipe>.md`.
-- Use the prefunded keys listed in `README.md` for testing; avoid committing custom secrets—pass overrides via CLI flags like `--prefunded-accounts`.
+# Code Quality
+make lint                     # Run gofmt, gofumpt, go vet, staticcheck
+make fmt                      # Format code with gofmt, gci, gofumpt, go mod tidy
+
+# Documentation
+make generate-docs            # Auto-generate recipe documentation (run after adding/modifying recipes)
+```
+
+## Architecture
+
+The system operates in three phases: **Artifact Generation → Topology/Manifest Generation → Docker Execution**
+
+### Layer 1: Components (`playground/components.go`, `playground/manifest.go`)
+
+Components represent individual compute resources (execution clients, consensus clients, sidecars). Each implements the `ComponentGen` interface:
+
+```go
+type ComponentGen interface {
+    Apply(ctx *ExContext) *Component
+}
+```
+
+Components use template syntax for dynamic values:
+- `{{Port "name" defaultPort}}` - Port declarations
+- `{{Service "name" "port"}}` - Service connections
+
+### Layer 2: Recipes (`playground/recipe_*.go`)
+
+Recipes orchestrate multiple components into complete environments. Key methods:
+- `Name()`, `Description()` - Metadata
+- `Flags()` - CLI flag definitions
+- `Artifacts()` - Generates genesis configs, keys, etc.
+- `Apply(ctx *ExContext)` - Assembles components
+- `Output(manifest *Manifest)` - User-facing output
+
+Available recipes: L1 (`recipe_l1.go`), OpStack (`recipe_opstack.go`), BuilderNet (`recipe_buildernet.go`)
+
+### Layer 3: Manifest & Execution (`playground/manifest.go`, `playground/local_runner.go`)
+
+- **Manifest**: Describes complete environment topology (services, ports, volumes, artifacts)
+- **LocalRunner**: Executes manifest via Docker Compose, manages health checks
+
+### Key Files
+
+- `main.go` - CLI entry point (Cobra commands)
+- `playground/artifacts.go` - L1/L2 genesis state, validator keystores, JWT secrets
+- `playground/interactive.go` - TUI interface
+- `playground/local_runner.go` - Docker execution engine
+
+## Adding New Components
+
+1. Create struct implementing `ComponentGen` interface
+2. Implement `Apply(ctx *ExContext) *Component`
+3. Use `component.NewService(name)` to add services
+4. Use template syntax for ports/connections
+5. Add health checks with `WithReady()`
+
+## Adding New Recipes
+
+1. Create struct implementing `Recipe` interface
+2. Implement: Name, Description, Flags, Artifacts, Apply, Output
+3. Register in `main.go` recipes slice
+4. Run `make generate-docs` to update documentation
+
+
+## Implementation Workflow
+
+IMPORTANT: When asked to implement something, always follow through completely:
+1.. Create a feature branch
+- based on the latest `main` branch
+- use descriptive branch names like `claude/issue-123-add-feature`
+2. Make the code changes
+3. Commit the changes
+4. Push the branch
+5. Create the PR with `gh pr create --title "..." --body "..."` and reference the issue number in the PR description (e.g., "Closes #123")
+
+Do NOT stop at providing links — complete the entire workflow automatically.
