@@ -214,6 +214,26 @@ $ builder-playground inspect op-geth authrpc
 
 This command starts a `tcpflow` container in the same network interface as the service and captures the traffic to the specified port.
 
+## Port
+
+Look up the host port for a service:
+
+```bash
+$ builder-playground port el http
+8545
+```
+
+Use `--list` to show all available ports:
+
+```bash
+$ builder-playground port el --list
+authrpc: 8551
+http: 8545
+metrics: 9091
+rpc: 30303
+ws: 8546
+```
+
 ## Stop
 
 Stop local playground sessions and keep all Docker resources (containers/volumes/networks):

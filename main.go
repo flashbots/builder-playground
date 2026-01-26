@@ -59,6 +59,7 @@ var (
 	testRPCURL        string
 	testELRPCURL      string
 	testTimeout       time.Duration
+	portListFlag      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -290,6 +291,58 @@ var listCmd = &cobra.Command{
 	},
 }
 
+var portCmd = &cobra.Command{
+	Use:   "port [session] <service> <port-name>",
+	Short: "Get the host port for a service",
+	Long: `Get the host port for a service's named port.
+
+If only one session is running, the session name can be omitted:
+  playground port <service> <port-name>
+
+With multiple sessions, specify the session:
+  playground port <session> <service> <port-name>
+
+Use --list to show all available ports for a service:
+  playground port <service> --list`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var session, serviceName, portName string
+
+		if portListFlag {
+			switch len(args) {
+			case 1:
+				serviceName = args[0]
+			case 2:
+				session = args[0]
+				serviceName = args[1]
+			default:
+				return fmt.Errorf("expected 1 or 2 arguments with --list")
+			}
+		} else {
+			switch len(args) {
+			case 2:
+				serviceName = args[0]
+				portName = args[1]
+			case 3:
+				session = args[0]
+				serviceName = args[1]
+				portName = args[2]
+			default:
+				return fmt.Errorf("expected 2 or 3 arguments")
+			}
+		}
+
+		cmd.SilenceUsage = true
+
+		result, err := playground.GetServicePort(session, serviceName, portName)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(result)
+		return nil
+	},
+}
+
 var generateDocsCmd = &cobra.Command{
 	Use:   "generate-docs",
 	Short: "Generate documentation for all recipes",
@@ -489,6 +542,8 @@ func main() {
 	logsCmd.Flags().BoolVarP(&followFlag, "follow", "f", false, "Stream logs continuously instead of displaying and exiting")
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(listCmd)
+	portCmd.Flags().BoolVarP(&portListFlag, "list", "l", false, "List all available ports for the service")
+	rootCmd.AddCommand(portCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(cleanCmd)
 
