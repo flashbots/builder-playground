@@ -107,10 +107,10 @@ func (r *rbuilderRecipe) Artifacts() *ArtifactsBuilder {
 func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
 	c := NewComponent("rbuilder-test-recipe")
 
-	c.AddService(r.l1)
+	c.AddService(ctx, r.l1)
 	c.AddComponent(ctx, &Rbuilder{})
 
-	return nil
+	return c
 }
 
 func TestComponentRbuilder(t *testing.T) {

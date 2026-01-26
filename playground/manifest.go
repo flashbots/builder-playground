@@ -66,8 +66,8 @@ func (p *Component) AddComponent(ctx *ExContext, gen ComponentGen) {
 	p.Inner = append(p.Inner, gen.Apply(ctx))
 }
 
-func (p *Component) AddService(srv ComponentGen) {
-	p.Inner = append(p.Inner, srv.Apply(nil))
+func (p *Component) AddService(ctx *ExContext, srv ComponentGen) {
+	p.Inner = append(p.Inner, srv.Apply(ctx))
 }
 
 func componentToManifest(p *Component) []*Service {
@@ -751,6 +751,6 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 
 func (component *Component) RunContenderIfEnabled(ctx *ExContext) {
 	if ctx.Contender.Enabled {
-		component.AddService(ctx.Contender.Contender())
+		component.AddService(ctx, ctx.Contender.Contender())
 	}
 }
