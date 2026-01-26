@@ -75,6 +75,7 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 
 func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 	component := NewComponent("op-recipe")
+	component.AddService(ctx, ctx.UseBootnode())
 
 	component.AddComponent(ctx, &RethEL{})
 	component.AddComponent(ctx, &LighthouseBeaconNode{
@@ -87,8 +88,6 @@ func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 	flashblocksBuilderURLRef := o.flashblocksBuilderURL
 	externalBuilderRef := o.externalBuilder
 	peers := []string{}
-
-	component.AddService(ctx, ctx.UseBootnode())
 
 	if o.externalBuilder == "op-reth" {
 		// Add a new op-reth service and connect it to Rollup-boost
