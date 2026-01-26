@@ -179,6 +179,7 @@ type ExContext struct {
 
 func (e *ExContext) UseBootnode() ComponentGen {
 	bootnode := &Bootnode{}
+	bootnode.Enode = e.Output.GetEnodeAddr()
 
 	e.Bootnode = &BootnodeRef{
 		Service: "bootnode",
