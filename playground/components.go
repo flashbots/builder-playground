@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	_ "embed"
+
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-boost-utils/bls"
@@ -742,6 +744,29 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 		WithTag("latest").
 		WithArgs(args...).
 		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
+
+	return component
+}
+
+//go:embed utils/rbuilder-config.toml.tmpl
+var rbuilderConfigToml string
+
+type Rbuilder struct {
+}
+
+func (r *Rbuilder) Apply(ctx *ExContext) *Component {
+	component := NewComponent("rbuilder")
+
+	// TODO: Handle error
+	ctx.Output.WriteFile("rbuilder-config.toml", rbuilderConfigToml)
+
+	component.NewService("component").
+		WithImage("ghcr.io/flashbots/rbuilder").
+		WithTag("1.3.5").
+		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
+		WithArgs(
+			"run", "/data/rbuilder-config.toml",
+		)
 
 	return component
 }

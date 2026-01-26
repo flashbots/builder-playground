@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	flag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,6 +93,38 @@ func TestRecipeL1UseNativeReth(t *testing.T) {
 	tt.test(&L1Recipe{}, []string{
 		"--use-native-reth",
 	})
+}
+
+type rbuilderRecipe struct {
+	*mockService
+	l1 *L1Recipe
+}
+
+func (r *rbuilderRecipe) Artifacts() *ArtifactsBuilder {
+	return r.l1.Artifacts()
+}
+
+func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
+	c := NewComponent("rbuilder-test-recipe")
+
+	c.AddService(r.l1)
+	c.AddComponent(ctx, &Rbuilder{})
+
+	return nil
+}
+
+func TestComponentRbuilder(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	recipe := &rbuilderRecipe{
+		l1: &L1Recipe{
+			blockTime: 12 * time.Second,
+		},
+	}
+	tt.test(recipe, nil)
+
+	time.Sleep(10 * time.Second)
 }
 
 func TestRecipeBuilderHub(t *testing.T) {
@@ -297,4 +330,31 @@ func waitForBlock(elURL string, targetBlock uint64, timeout time.Duration) error
 			}
 		}
 	}
+}
+
+type mockService struct {
+}
+
+func (m *mockService) Name() string {
+	return ""
+}
+
+func (m *mockService) Description() string {
+	return ""
+}
+
+func (m *mockService) Flags() *flag.FlagSet {
+	return flag.NewFlagSet("", 0)
+}
+
+func (m *mockService) Artifacts() *ArtifactsBuilder {
+	return nil
+}
+
+func (m *mockService) Apply(ctx *ExContext) *Component {
+	return nil
+}
+
+func (m *mockService) Output(manifest *Manifest) map[string]interface{} {
+	return nil
 }
