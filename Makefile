@@ -63,8 +63,8 @@ ci-release:
 		--rm \
 		-e CGO_ENABLED=1 \
 		-e GITHUB_TOKEN="$(GITHUB_TOKEN)" \
-		-v `pwd`:/go/src/github.com/flashbots/builder-playground \
-		-w /go/src/github.com/flashbots/builder-playground \
+		-v `pwd`:/workspace \
+		-w /workspace \
 		ghcr.io/goreleaser/goreleaser-cross:v1.21.12 \
 		release --clean --auto-snapshot
 
