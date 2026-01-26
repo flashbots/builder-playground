@@ -667,12 +667,18 @@ type sszObject interface {
 }
 
 func GetHomeDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("error getting user home directory: %w", err)
+	}
+
+	// if legacy .playground dir is present, remove it
+	if err := os.RemoveAll(filepath.Join(homeDir, ".playground")); err != nil {
+		return "", err
+	}
+
 	stateHomeDir := os.Getenv("XDG_STATE_HOME")
 	if stateHomeDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("error getting user home directory: %w", err)
-		}
 		stateHomeDir = filepath.Join(homeDir, ".local", "state")
 	}
 
