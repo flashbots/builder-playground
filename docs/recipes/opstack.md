@@ -18,17 +18,18 @@ Deploy an OP stack.
 
 ```mermaid
 graph LR
+  bootnode["bootnode<br/>rpc:30303"]
   el["el<br/>rpc:30303<br/>http:8545<br/>ws:8546<br/>authrpc:8551<br/>metrics:9090"]
   el_healthmon["el_healthmon"]
   beacon["beacon<br/>p2p:9000<br/>p2p:9000<br/>quic-p2p:9100<br/>http:3500"]
   beacon_healthmon["beacon_healthmon"]
   validator["validator"]
-  bootnode["bootnode<br/>rpc:30303"]
   op_geth["op-geth<br/>http:8545<br/>ws:8546<br/>authrpc:8551<br/>rpc:30303<br/>metrics:6061"]
   op_geth_healthmon["op-geth_healthmon"]
   op_node["op-node<br/>metrics:7300<br/>http:8549<br/>p2p:9003<br/>p2p:9003"]
   op_batcher["op-batcher"]
 
+  el -->|rpc| bootnode
   el_healthmon -->|http| el
   beacon -->|authrpc| el
   beacon_healthmon -->|http| beacon
