@@ -110,7 +110,7 @@ docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
 
 ## Common Options
 
-- `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.playground/devnet`
+- `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.local/state/builder-playground/devnet`
 - `--detached` (bool): Run the recipes in the background. Defaults to `false`.
 - `--genesis-delay` (int): The delay in seconds before the genesis block is created. Defaults to `10` seconds
 - `--watchdog` (bool): Enable the watchdog service to monitor the specific chain
@@ -121,7 +121,7 @@ docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
 - `--prefunded-accounts` (string, repeated): Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present).
 - `--contender` (bool): Enable [contender](https://github.com/flashbots/contender) spammer. Required to use other contender flags.
   - `--contender.arg` (string): Pass custom args to the contender CLI.
-  Example: `--contender.arg "--tpb 20"`
+    Example: `--contender.arg "--tpb 20"`
   - `--contender.target` (string): Change the default target node to spam. On the `l1` recipe, the default is "el", and on `opstack` it's "op-geth".
 - `--with-prometheus` (bool); Whether to deploy a Prometheus server and gather metrics. Defaults to `false`.
 
@@ -158,6 +158,7 @@ $ builder-playground logs validator
 With single session running, the commands are straightforward.
 
 With multiple sessions running, it's easy to navigate:
+
 - listing: `list` -> pick session `major-hornet` -> `list major-hornet` -> see service list
 - viewing logs: see service `validator` with `logs major-hornet validator`
 
@@ -223,6 +224,7 @@ WithArgs("--metrics", `0.0.0.0:{{Port "metrics" 9090}}`)
 By default, Prometheus scrapes the `/metrics` path, but services can override this by specifying a custom path with `WithLabel("metrics_path", "/custom/path")`. All configured services are automatically registered as scrape targets.
 
 ### Usage
+
 Enable Prometheus for any recipe:
 
 ```bash

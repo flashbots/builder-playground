@@ -514,6 +514,10 @@ func NewOutput(dst string) (*output, error) {
 	return out, nil
 }
 
+func (o *output) Dst() string {
+	return o.dst
+}
+
 func (o *output) Read(path string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(o.dst, path))
 	if err != nil {
@@ -699,8 +703,18 @@ func GetHomeDir() (string, error) {
 		return "", fmt.Errorf("error getting user home directory: %w", err)
 	}
 
+	// if legacy .playground dir is present, remove it
+	if err := os.RemoveAll(filepath.Join(homeDir, ".playground")); err != nil {
+		return "", err
+	}
+
+	stateHomeDir := os.Getenv("XDG_STATE_HOME")
+	if stateHomeDir == "" {
+		stateHomeDir = filepath.Join(homeDir, ".local", "state")
+	}
+
 	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(homeDir, ".playground")
+	customHomeDir := filepath.Join(stateHomeDir, "builder-playground")
 
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
