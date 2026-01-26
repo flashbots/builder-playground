@@ -127,9 +127,11 @@ type ArtifactsBuilder struct {
 	predeploysFile string
 
 	// Proxyd options
-	proxydEnabled     bool
-	proxydIngressURL  string
-	proxydStandardURL string
+	proxydEnabled         bool
+	proxydIngressURL      string
+	proxydStandardURL     string
+	proxydIngressMethods  []string
+	proxydStandardMethods []string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -193,6 +195,16 @@ func (b *ArtifactsBuilder) WithProxyd(ingressURL, standardURL string) *Artifacts
 	b.proxydEnabled = true
 	b.proxydIngressURL = ingressURL
 	b.proxydStandardURL = standardURL
+	return b
+}
+
+func (b *ArtifactsBuilder) ProxydIngressMethods(methods []string) *ArtifactsBuilder {
+	b.proxydIngressMethods = methods
+	return b
+}
+
+func (b *ArtifactsBuilder) ProxydStandardMethods(methods []string) *ArtifactsBuilder {
+	b.proxydStandardMethods = methods
 	return b
 }
 
@@ -868,6 +880,15 @@ func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.Genesi
 
 // GenerateProxydConfig generates proxyd TOML configuration for routing RPC methods
 func (b *ArtifactsBuilder) GenerateProxydConfig(out *output, ingressURL, standardELURL string) error {
+	// Build additional method mappings
+	var additionalMappings string
+	for _, method := range b.proxydIngressMethods {
+		additionalMappings += fmt.Sprintf("%s = \"ingress\"\n", method)
+	}
+	for _, method := range b.proxydStandardMethods {
+		additionalMappings += fmt.Sprintf("%s = \"standard\"\n", method)
+	}
+
 	config := fmt.Sprintf(`[server]
 rpc_host = "0.0.0.0"
 rpc_port = 8545
@@ -947,7 +968,16 @@ debug_getRawBlock = "standard"
 debug_getRawTransaction = "standard"
 debug_getRawReceipts = "standard"
 debug_getBadBlocks = "standard"
-`, ingressURL, standardELURL)
+
+# Base-specific RPC methods
+base_transactionStatus = "standard"
+base_meterBundle = "standard"
+base_meterBlockByHash = "standard"
+base_meterBlockByNumber = "standard"
+base_meteredPriorityFeePerGas = "standard"
+
+# Additional custom method mappings
+%s`, ingressURL, standardELURL, additionalMappings)
 
 	return out.WriteFile("proxyd-config.toml", config)
 }
