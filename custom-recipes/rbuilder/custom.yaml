@@ -1,0 +1,22 @@
+base: l1
+description: Use custom local reth and rbuilder binaries
+
+recipe:
+  reth:
+    services:
+      el:
+        # Use a custom local reth binary - specify relative or absolute path
+        host_path: "reth"
+
+  builder:
+    services:
+      rbuilder:
+        # Use a custom local rbuilder binary - specify relative or absolute path
+        host_path: "rbuilder"
+        args:
+          - "run"
+          - "rbuilder.toml"
+        files:
+          "rbuilder.toml": "rbuilder.toml"
+        depends_on:
+          - "el:healthy"

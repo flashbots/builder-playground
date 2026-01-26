@@ -121,7 +121,10 @@ type ArtifactsBuilder struct {
 	l2Enabled            bool
 	applyLatestL2Fork    *uint64
 	opBlockTimeInSeconds uint64
-	predeploysFile       string
+
+	// Extra files to copy to artifacts (artifactName -> sourcePath)
+	extraFiles     map[string]string
+	predeploysFile string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -165,6 +168,14 @@ func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 
 func (b *ArtifactsBuilder) PrefundedAccounts(accounts []string) *ArtifactsBuilder {
 	b.prefundedAccounts = accounts
+	return b
+}
+
+func (b *ArtifactsBuilder) WithExtraFile(artifactName, sourcePath string) *ArtifactsBuilder {
+	if b.extraFiles == nil {
+		b.extraFiles = make(map[string]string)
+	}
+	b.extraFiles[artifactName] = sourcePath
 	return b
 }
 
@@ -406,6 +417,17 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		}
 		if err := out.WriteFile("rollup.json", newOpRollup); err != nil {
 			return err
+		}
+	}
+
+	// Copy extra files from recipe directory
+	for artifactName, sourcePath := range b.extraFiles {
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			return fmt.Errorf("failed to read extra file %s: %w", sourcePath, err)
+		}
+		if err := out.WriteFile(artifactName, data); err != nil {
+			return fmt.Errorf("failed to write extra file %s: %w", artifactName, err)
 		}
 	}
 
