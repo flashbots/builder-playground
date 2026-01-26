@@ -760,10 +760,13 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 	// TODO: Handle error
 	ctx.Output.WriteFile("rbuilder-config.toml", rbuilderConfigToml)
 
-	component.NewService("component").
+	component.NewService("rbuilder").
 		WithImage("ghcr.io/flashbots/rbuilder").
 		WithTag("1.3.5").
 		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
+		WithArtifact("/data/genesis.json", "genesis.json").
+		WithPlatform("linux/amd64").      // TODO
+		WithVolume("data", "/data_reth"). // TODO
 		WithArgs(
 			"run", "/data/rbuilder-config.toml",
 		)
