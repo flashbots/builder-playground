@@ -53,6 +53,12 @@ type OpRecipe struct {
 
 	// ingressRPC is the service name for the ingress RPC endpoint
 	ingressRPC string
+
+	// proxydIngressMethods are additional RPC methods to route to ingress
+	proxydIngressMethods []string
+
+	// proxydStandardMethods are additional RPC methods to route to standard EL
+	proxydStandardMethods []string
 }
 
 func (o *OpRecipe) Name() string {
@@ -77,6 +83,8 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.StringVar(&o.predeploysFile, "use-predeploys", "", "Path to JSON file with additional contracts to predeploy in L2 genesis")
 	flags.BoolVar(&o.enableProxyd, "proxyd", false, "Enable proxyd for routing eth_sendRawTransaction to ingress RPC")
 	flags.StringVar(&o.ingressRPC, "ingress-rpc", "ingress-rpc", "Service name for ingress RPC endpoint")
+	flags.StringSliceVar(&o.proxydIngressMethods, "proxyd-ingress-methods", nil, "Additional RPC methods to route to ingress (comma-separated)")
+	flags.StringSliceVar(&o.proxydStandardMethods, "proxyd-standard-methods", nil, "Additional RPC methods to route to standard EL (comma-separated)")
 	return flags
 }
 
@@ -91,8 +99,20 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	if o.enableProxyd {
 		// Use Docker service names for internal DNS resolution
 		ingressURL := fmt.Sprintf("http://%s:8080", o.ingressRPC)
+		// When flashblocks is enabled, use flashblocks-rpc as standard backend
+		// (it handles both standard RPC methods and base_meter* methods)
+		// Otherwise use op-geth
 		standardELURL := "http://op-geth:8545"
+		if o.flashblocks {
+			standardELURL = "http://flashblocks-rpc:8545"
+		}
 		builder.WithProxyd(ingressURL, standardELURL)
+		if len(o.proxydIngressMethods) > 0 {
+			builder.ProxydIngressMethods(o.proxydIngressMethods)
+		}
+		if len(o.proxydStandardMethods) > 0 {
+			builder.ProxydStandardMethods(o.proxydStandardMethods)
+		}
 	}
 
 	return builder
