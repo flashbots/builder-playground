@@ -66,8 +66,8 @@ func (p *Component) AddComponent(ctx *ExContext, gen ComponentGen) {
 	p.Inner = append(p.Inner, gen.Apply(ctx))
 }
 
-func (p *Component) AddService(srv ComponentGen) {
-	p.Inner = append(p.Inner, srv.Apply(nil))
+func (p *Component) AddService(ctx *ExContext, srv ComponentGen) {
+	p.Inner = append(p.Inner, srv.Apply(ctx))
 }
 
 func componentToManifest(p *Component) []*Service {
@@ -367,7 +367,8 @@ type Service struct {
 	Entrypoint string `json:"entrypoint,omitempty"`
 	HostPath   string `json:"host_path,omitempty"`
 
-	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
+	UngracefulShutdown bool   `json:"ungraceful_shutdown,omitempty"`
+	Platform           string `json:"platform,omitempty"`
 
 	postHook *postHook
 	release  *release
@@ -440,6 +441,11 @@ func (s *Service) WithEntrypoint(entrypoint string) *Service {
 
 func (s *Service) WithTag(tag string) *Service {
 	s.Tag = tag
+	return s
+}
+
+func (s *Service) WithPlatform(platform string) *Service {
+	s.Platform = platform
 	return s
 }
 
@@ -751,6 +757,6 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 
 func (component *Component) RunContenderIfEnabled(ctx *ExContext) {
 	if ctx.Contender.Enabled {
-		component.AddService(ctx.Contender.Contender())
+		component.AddService(ctx, ctx.Contender.Contender())
 	}
 }
