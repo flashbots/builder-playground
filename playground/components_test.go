@@ -207,7 +207,7 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 
 	exCtx := &ExContext{
 		Output:   o,
-		LogLevel: LevelDebug,
+		LogLevel: LevelTrace,
 		Contender: &ContenderContext{
 			Enabled: false,
 		},

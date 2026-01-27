@@ -96,7 +96,7 @@ func (o *OpRbuilder) Apply(ctx *ExContext) *Component {
 		})
 
 	if ctx.Bootnode != nil {
-		service.WithArgs("--trusted-peers", ctx.Bootnode.Connect())
+		service.WithArgs("--bootnodes", ctx.Bootnode.Connect())
 	}
 
 	if o.Flashblocks {
@@ -166,7 +166,7 @@ func (f *FlashblocksRPC) Apply(ctx *ExContext) *Component {
 
 	if ctx.Bootnode != nil {
 		service.WithArgs(
-			"--trusted-peers", ctx.Bootnode.Connect(),
+			"--bootnodes", ctx.Bootnode.Connect(),
 		)
 	}
 
@@ -504,6 +504,10 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_reth")
+
+	if ctx.Bootnode != nil {
+		svc.WithArgs("--bootnodes", ctx.Bootnode.Connect())
+	}
 
 	UseHealthmon(component, svc, healthmonExecution)
 
@@ -1001,6 +1005,41 @@ func registerBuilderHook(ctx *ExContext, s *Service, b *BuilderHub) error {
 		return err
 	}
 	return nil
+}
+
+type BootnodeProtocol string
+
+const (
+	BootnodeProtocolV5 BootnodeProtocol = "v5"
+)
+
+type Bootnode struct {
+	Protocol BootnodeProtocol
+	Enode    *EnodeAddr
+}
+
+func (b *Bootnode) Apply(ctx *ExContext) *Component {
+	component := NewComponent("bootnode")
+
+	b.Enode = ctx.Output.GetEnodeAddr()
+	svc := component.NewService("bootnode").
+		WithImage("ghcr.io/paradigmxyz/reth").
+		WithTag("v1.9.3").
+		WithEntrypoint("/usr/local/bin/reth").
+		WithArgs(
+			"p2p", "bootnode",
+			"--addr", `0.0.0.0:{{Port "rpc" 30303}}`,
+			"--p2p-secret-key", "/data/p2p_key.txt",
+			"-vvvv",
+			"--color", "never",
+		).
+		WithArtifact("/data/p2p_key.txt", b.Enode.Artifact)
+
+	if b.Protocol == BootnodeProtocolV5 {
+		svc.WithArgs("--v5")
+	}
+
+	return component
 }
 
 const (
