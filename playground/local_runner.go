@@ -61,6 +61,9 @@ type LocalRunner struct {
 	tasksMtx        sync.Mutex
 	tasks           map[string]*task
 	allTasksReadyCh chan struct{}
+
+	// skipImageValidation skips Docker image validation (used for dry-run mode)
+	skipImageValidation bool
 }
 
 type task struct {
@@ -202,6 +205,25 @@ func (d *LocalRunner) checkAndUpdateReadiness() {
 		// Channel is not closed yet, close it
 		close(d.allTasksReadyCh)
 	}
+}
+
+// GenerateDockerComposeFile generates and writes the docker-compose.yaml file to the output directory.
+// This can be called independently of Run() to support dry-run mode.
+func (d *LocalRunner) GenerateDockerComposeFile() error {
+	// Skip image validation when generating for dry-run
+	d.skipImageValidation = true
+	defer func() { d.skipImageValidation = false }()
+
+	yamlData, err := d.generateDockerCompose()
+	if err != nil {
+		return fmt.Errorf("failed to generate docker-compose.yaml: %w", err)
+	}
+
+	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
+		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
+	}
+
+	return nil
 }
 
 func (d *LocalRunner) WaitForReady(ctx context.Context) error {
@@ -502,10 +524,12 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		return nil, nil, fmt.Errorf("failed to get absolute path for output folder: %w", err)
 	}
 
-	// Validate that the image exists
+	// Validate that the image exists (skip during dry-run)
 	imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
-	if err := d.validateImageExists(imageName); err != nil {
-		return nil, nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
+	if !d.skipImageValidation {
+		if err := d.validateImageExists(imageName); err != nil {
+			return nil, nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
+		}
 	}
 
 	labels := map[string]string{
@@ -1040,15 +1064,6 @@ func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
 
 func (d *LocalRunner) Run(ctx context.Context) error {
 	go d.trackContainerStatusAndLogs()
-
-	yamlData, err := d.generateDockerCompose()
-	if err != nil {
-		return fmt.Errorf("failed to generate docker-compose.yaml: %w", err)
-	}
-
-	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
-		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
-	}
 
 	// Pull all required images in parallel
 	if err := d.pullNotAvailableImages(ctx); err != nil {

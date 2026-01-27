@@ -642,10 +642,6 @@ func runIt(recipe playground.Recipe) error {
 		}
 	}
 
-	if dryRun {
-		return nil
-	}
-
 	if err := svcManager.ApplyOverrides(overrides); err != nil {
 		return err
 	}
@@ -673,6 +669,15 @@ func runIt(recipe playground.Recipe) error {
 	dockerRunner, err := playground.NewLocalRunner(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
+	}
+
+	// Generate docker-compose.yaml file (needed for both dry-run and normal execution)
+	if err := dockerRunner.GenerateDockerComposeFile(); err != nil {
+		return fmt.Errorf("failed to generate docker-compose file: %w", err)
+	}
+
+	if dryRun {
+		return nil
 	}
 
 	ctx := mainctx.Get()
