@@ -2,7 +2,6 @@ package playground
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -138,7 +137,7 @@ func TestHostServiceDependency_WithHealthCheck(t *testing.T) {
 		t.Skip("python3 not found, skipping test")
 	}
 
-	tmpDir := os.TempDir()
+	tmpDir := t.TempDir()
 	out := &output{dst: tmpDir, homeDir: tmpDir}
 
 	// Service A: Host HTTP server on port 18080
