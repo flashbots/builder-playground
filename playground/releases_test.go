@@ -45,6 +45,6 @@ func TestReleases(t *testing.T) {
 		// Verify the binary is executable
 		info, err := os.Stat(binPath)
 		require.NoError(t, err)
-		require.NotZero(t, info.Mode()&0111, "binary should be executable")
+		require.NotZero(t, info.Mode()&0o111, "binary should be executable")
 	}
 }
