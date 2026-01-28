@@ -119,7 +119,8 @@ func TestComponentRbuilder(t *testing.T) {
 
 	recipe := &rbuilderRecipe{
 		l1: &L1Recipe{
-			blockTime: 12 * time.Second,
+			blockTime:     12 * time.Second,
+			useNativeReth: true,
 		},
 	}
 	tt.test(recipe, nil)
@@ -233,9 +234,12 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 		t.Fatal(err)
 	}
 
+	homeDir, err := GetHomeDir()
+	require.NoError(t, err)
+
 	o := &output{
 		dst:     e2eTestDir,
-		homeDir: filepath.Join(e2eTestDir, "artifacts"),
+		homeDir: homeDir,
 	}
 
 	exCtx := &ExContext{
