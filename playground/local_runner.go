@@ -51,7 +51,8 @@ type LocalRunner struct {
 
 	// handles stores the references to the processes that are running on host machine
 	// they are executed sequentially so we do not need to lock the handles
-	handles []*exec.Cmd
+	handlesLock sync.Mutex
+	handles     []*exec.Cmd
 
 	// exitError signals when one of the services fails
 	exitErr chan error
@@ -843,7 +844,10 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 	// created during manifest validation (e.g., *_readycheck sidecars that use host.docker.internal)
 
 	// we do not need to lock this array because we run the host services sequentially
+	d.handlesLock.Lock()
 	d.handles = append(d.handles, cmd)
+	d.handlesLock.Unlock()
+
 	return nil
 }
 
