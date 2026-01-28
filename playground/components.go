@@ -623,8 +623,8 @@ func (c *ClProxy) Apply(ctx *ExContext) *Component {
 }
 
 type Proxyd struct {
-	IngressRPC string // Service name for ingress RPC (e.g., "ingress-rpc")
-	StandardEL string // Service name for standard EL (e.g., "op-geth")
+	IngressRPC string // URL for ingress RPC (e.g., "http://ingress-rpc:8080")
+	StandardEL string // URL for standard EL (e.g., "http://op-geth:8545")
 }
 
 func (p *Proxyd) Apply(ctx *ExContext) *Component {
