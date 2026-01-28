@@ -20,6 +20,8 @@ type release struct {
 	Org     string
 	Version string
 	Arch    func(string, string) string
+	// Format specifies the download format: "tar.gz" (default) or "binary"
+	Format string
 }
 
 func DownloadRelease(outputFolder string, artifact *release) (string, error) {
@@ -41,7 +43,20 @@ func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 	}
 
 	archVersion := artifact.Arch(goos, goarch)
-	if archVersion == "" {
+
+	// Handle binary format (raw binary download)
+	if artifact.Format == "binary" {
+		repo := artifact.Repo
+		if repo == "" {
+			repo = artifact.Name
+		}
+		releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", artifact.Org, repo, artifact.Version, artifact.Name)
+		log.Printf("Downloading binary %s: %s\n", outPath, releasesURL)
+
+		if err := downloadBinary(releasesURL, outPath); err != nil {
+			return "", fmt.Errorf("error downloading binary: %v", err)
+		}
+	} else if archVersion == "" {
 		// Case 2. The architecture is not supported.
 		log.Printf("unsupported OS/Arch: %s/%s\n", goos, goarch)
 		if _, err := exec.LookPath(artifact.Name); err != nil {
@@ -51,7 +66,7 @@ func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 			log.Printf("Using %s from PATH\n", artifact.Name)
 		}
 	} else {
-		// Case 3. Download the binary from the release page
+		// Case 3. Download the binary from the release page (tar.gz format)
 		repo := artifact.Repo
 		if repo == "" {
 			repo = artifact.Name
@@ -123,5 +138,34 @@ func downloadArtifact(url, expectedFile, outPath string) error {
 	if !found {
 		return fmt.Errorf("file not found in archive: %s", expectedFile)
 	}
+	return nil
+}
+
+func downloadBinary(url, outPath string) error {
+	slog.Info("downloading binary", "url", url, "outPath", outPath)
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("error downloading file: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		return fmt.Errorf("error creating output file: %v", err)
+	}
+	defer outFile.Close()
+
+	if _, err := io.Copy(outFile, resp.Body); err != nil {
+		return fmt.Errorf("error writing output file: %v", err)
+	}
+
+	if err := os.Chmod(outPath, 0o755); err != nil {
+		return fmt.Errorf("error changing permissions: %v", err)
+	}
+
 	return nil
 }

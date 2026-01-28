@@ -22,13 +22,48 @@ builder-playground start l1
 builder-playground start opstack --external-builder http://localhost:4444
 ```
 
+## Installation
+
+```
+$ go install github.com/flashbots/builder-playground@latest
+```
+
+or clone the repository and do:
+
+```
+$ go install .
+```
+
+or do `go build .` and run from the repository like `./builder-playground`.
+
 ## Getting started
 
-Clone the repository and use the `start` command to deploy a specific recipe:
+See the available recipes from the `recipes` command:
+
+```
+Base Recipes:
+  l1
+    Deploy a full L1 stack with mev-boost
+    reth, lighthouse-beacon-node, lighthouse-validator-node, mev-boost-relay
+
+... (more base and custom recipes available in the original output)
+```
+
+Use the `start` command to deploy a specific recipe:
 
 ```bash
-$ builder-playground start <recipe>
+$ builder-playground start l1
 ```
+
+and you can send a test transaction from prefunded accounts by using:
+
+```bash
+$ builder-playground test
+```
+
+If you need to modify a recipe or build your own, make sure to check out the [custom recipes](docs/custom_recipes.md) documentation!
+
+Base recipes are also runnable with some flags and you can check out the documentation [here](docs/recipes) do find out.
 
 Currently available recipes:
 
@@ -110,7 +145,7 @@ docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
 
 ## Common Options
 
-- `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.playground/devnet`
+- `--output` (string): The directory where the chain data and artifacts are stored. Defaults to `$HOME/.local/state/builder-playground/devnet`
 - `--detached` (bool): Run the recipes in the background. Defaults to `false`.
 - `--genesis-delay` (int): The delay in seconds before the genesis block is created. Defaults to `10` seconds
 - `--watchdog` (bool): Enable the watchdog service to monitor the specific chain
@@ -121,7 +156,7 @@ docker logs -f $(docker ps | grep contender | cut -d' ' -f1)
 - `--prefunded-accounts` (string, repeated): Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present).
 - `--contender` (bool): Enable [contender](https://github.com/flashbots/contender) spammer. Required to use other contender flags.
   - `--contender.arg` (string): Pass custom args to the contender CLI.
-  Example: `--contender.arg "--tpb 20"`
+    Example: `--contender.arg "--tpb 20"`
   - `--contender.target` (string): Change the default target node to spam. On the `l1` recipe, the default is "el", and on `opstack` it's "op-geth".
 - `--with-prometheus` (bool); Whether to deploy a Prometheus server and gather metrics. Defaults to `false`.
 
@@ -158,6 +193,7 @@ $ builder-playground logs validator
 With single session running, the commands are straightforward.
 
 With multiple sessions running, it's easy to navigate:
+
 - listing: `list` -> pick session `major-hornet` -> `list major-hornet` -> see service list
 - viewing logs: see service `validator` with `logs major-hornet validator`
 
@@ -177,6 +213,26 @@ $ builder-playground inspect op-geth authrpc
 ```
 
 This command starts a `tcpflow` container in the same network interface as the service and captures the traffic to the specified port.
+
+## Port
+
+Look up the host port for a service:
+
+```bash
+$ builder-playground port el http
+8545
+```
+
+Use `--list` to show all available ports:
+
+```bash
+$ builder-playground port el --list
+authrpc: 8551
+http: 8545
+metrics: 9091
+rpc: 30303
+ws: 8546
+```
 
 ## Stop
 
@@ -223,6 +279,7 @@ WithArgs("--metrics", `0.0.0.0:{{Port "metrics" 9090}}`)
 By default, Prometheus scrapes the `/metrics` path, but services can override this by specifying a custom path with `WithLabel("metrics_path", "/custom/path")`. All configured services are automatically registered as scrape targets.
 
 ### Usage
+
 Enable Prometheus for any recipe:
 
 ```bash

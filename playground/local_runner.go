@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"maps"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
@@ -116,11 +118,14 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	// TODO: it feels a bit weird to have all this logic on the new command. We should split it later on.
 	for _, service := range cfg.Manifest.Services {
 		if service.Labels[useHostExecutionLabel] == "true" {
-			// If the service wants to run on the host, it must implement the ReleaseService interface
-			// which provides functions to download the release artifact.
+			// If HostPath is already set, use it directly (user-provided binary path)
+			if service.HostPath != "" {
+				continue
+			}
+			// Otherwise, download the release artifact
 			releaseArtifact := service.release
 			if releaseArtifact == nil {
-				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", service.Name)
+				return nil, fmt.Errorf("service '%s' requires either host_path or release configuration", service.Name)
 			}
 			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
 			if err != nil {
@@ -691,20 +696,112 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 }
 
 func (d *LocalRunner) createVolumeName(service, volumeName string) string {
+	// Check if this is a shared volume (prefixed with "shared:")
+	if strings.HasPrefix(volumeName, "shared:") {
+		// Shared volumes don't include service name prefix
+		return fmt.Sprintf("volume-%s", strings.TrimPrefix(volumeName, "shared:"))
+	}
 	return fmt.Sprintf("volume-%s-%s", service, volumeName)
 }
 
 func (d *LocalRunner) createVolumeDir(service, volumeName string) (string, error) {
 	// create the volume in the output folder
-	volumeDirAbsPath, err := d.out.CreateDir(fmt.Sprintf("volume-%s-%s", service, volumeName))
+	var dirName string
+	if strings.HasPrefix(volumeName, "shared:") {
+		dirName = fmt.Sprintf("volume-%s", strings.TrimPrefix(volumeName, "shared:"))
+	} else {
+		dirName = fmt.Sprintf("volume-%s-%s", service, volumeName)
+	}
+	volumeDirAbsPath, err := d.out.CreateDir(dirName)
 	if err != nil {
 		return "", fmt.Errorf("failed to create volume dir %s: %w", volumeName, err)
 	}
 	return volumeDirAbsPath, nil
 }
 
+// waitForDependencies waits for all dependencies of a host service to be healthy
+func (d *LocalRunner) waitForDependencies(ss *Service) error {
+	if len(ss.DependsOn) == 0 {
+		return nil
+	}
+
+	for _, dep := range ss.DependsOn {
+		if dep.Condition != DependsOnConditionHealthy {
+			continue
+		}
+
+		// The dependency name might be a healthmon sidecar (e.g., "el_healthmon")
+		// We need to check the original service name
+		depName := dep.Name
+		originalName := strings.TrimSuffix(depName, "_healthmon")
+
+		// Check if the original service is a host service
+		if d.isHostService(originalName) {
+			depSvc := d.manifest.MustGetService(originalName)
+
+			// Poll until the dependency is healthy
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			slog.Info("Waiting for dependency", "service", ss.Name, "dependency", originalName)
+
+			for {
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("timeout waiting for %s to be healthy", originalName)
+				default:
+				}
+
+				// For host services, check HTTP endpoint directly
+				httpPort := depSvc.MustGetPort("http")
+				url := fmt.Sprintf("http://localhost:%d", httpPort.HostPort)
+				client := &http.Client{Timeout: 2 * time.Second}
+				resp, err := client.Get(url)
+				if err == nil {
+					resp.Body.Close()
+					if resp.StatusCode < 500 {
+						slog.Info("Dependency is healthy", "service", ss.Name, "dependency", originalName)
+						break
+					}
+				}
+
+				time.Sleep(1 * time.Second)
+			}
+		} else {
+			// For Docker services, check the healthmon container
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			slog.Info("Waiting for dependency", "service", ss.Name, "dependency", depName)
+
+			for {
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("timeout waiting for %s to be healthy", depName)
+				default:
+				}
+
+				resp, err := ExecuteHealthCheckManually(depName)
+				if err == nil && resp.ExitCode == 0 {
+					slog.Info("Dependency is healthy", "service", ss.Name, "dependency", depName)
+					break
+				}
+
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}
+
+	return nil
+}
+
 // runOnHost runs the service on the host machine
 func (d *LocalRunner) runOnHost(ss *Service) error {
+	// Wait for dependencies to be healthy before starting
+	if err := d.waitForDependencies(ss); err != nil {
+		return fmt.Errorf("failed waiting for dependencies: %w", err)
+	}
+
 	// TODO: Use env vars in host processes
 	args, _, err := d.applyTemplate(ss)
 	if err != nil {
@@ -741,6 +838,7 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 
 	execPath := ss.HostPath
 	cmd := exec.Command(execPath, args...)
+	cmd.Dir = d.out.dst // Run from artifacts directory so relative paths work
 
 	logOutput, err := d.out.LogOutput(ss.Name)
 	if err != nil {
@@ -989,9 +1087,11 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	}
 
 	// Second, start the services that are running on the host machine
+	// Start them in parallel - each will wait for its own dependencies
 	g := new(errgroup.Group)
 	for _, svc := range d.manifest.Services {
 		if d.isHostService(svc.Name) {
+			svc := svc // capture loop variable
 			g.Go(func() error {
 				return d.runOnHost(svc)
 			})

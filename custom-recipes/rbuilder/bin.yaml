@@ -1,0 +1,27 @@
+base: l1
+description: Use reth and rbuilder binaries from GitHub releases
+
+recipe:
+  reth:
+    services:
+      el:
+        release:
+          name: "reth"
+          org: "paradigmxyz"
+          version: "v1.10.1"
+
+  builder:
+    services:
+      rbuilder:
+        release:
+          name: "rbuilder"
+          org: "flashbots"
+          version: "v1.3.4"
+          format: "binary"
+        args:
+          - "run"
+          - "rbuilder.toml"
+        files:
+          "rbuilder.toml": "rbuilder.toml"
+        depends_on:
+          - "el:healthy"

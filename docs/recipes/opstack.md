@@ -13,6 +13,7 @@ Deploy an OP stack.
 - `external-builder` (string): External builder URL. Default to ''.
 - `flashblocks` (bool): Whether to enable flashblocks. Default to 'false'.
 - `flashblocks-builder` (string): External URL of builder flashblocks stream. Default to ''.
+- `use-predeploys` (string): Path to JSON file with additional contracts to predeploy in L2 genesis. Default to ''.
 
 ## Architecture Diagram
 

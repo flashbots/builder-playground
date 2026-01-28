@@ -121,6 +121,10 @@ type ArtifactsBuilder struct {
 	l2Enabled            bool
 	applyLatestL2Fork    *uint64
 	opBlockTimeInSeconds uint64
+
+	// Extra files to copy to artifacts (artifactName -> sourcePath)
+	extraFiles     map[string]string
+	predeploysFile string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -165,6 +169,34 @@ func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 func (b *ArtifactsBuilder) PrefundedAccounts(accounts []string) *ArtifactsBuilder {
 	b.prefundedAccounts = accounts
 	return b
+}
+
+func (b *ArtifactsBuilder) WithExtraFile(artifactName, sourcePath string) *ArtifactsBuilder {
+	if b.extraFiles == nil {
+		b.extraFiles = make(map[string]string)
+	}
+	b.extraFiles[artifactName] = sourcePath
+	return b
+}
+
+func (b *ArtifactsBuilder) PredeployFile(filePath string) *ArtifactsBuilder {
+	b.predeploysFile = filePath
+	return b
+}
+
+func (b *ArtifactsBuilder) loadPredeploys() (types.GenesisAlloc, error) {
+	if b.predeploysFile == "" {
+		return types.GenesisAlloc{}, nil
+	}
+	data, err := os.ReadFile(b.predeploysFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read predeploy file: %w", err)
+	}
+	var alloc types.GenesisAlloc
+	if err := json.Unmarshal(data, &alloc); err != nil {
+		return nil, fmt.Errorf("failed to parse predeploy JSON: %w", err)
+	}
+	return alloc, nil
 }
 
 var staticPrefundedAccounts = []string{
@@ -313,6 +345,16 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		// Update the allocs to include the same prefunded accounts as the L1 genesis,
 		// while preserving the existing predeploys from the template
 		allocs := originalGenesis.Alloc
+
+		// Add custom predeploys, if any
+		predeploys, err := b.loadPredeploys()
+		if err != nil {
+			return err
+		}
+		if err := appendPredeploysToAlloc(&allocs, predeploys); err != nil {
+			return err
+		}
+
 		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
 			return err
 		}
@@ -375,6 +417,17 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		}
 		if err := out.WriteFile("rollup.json", newOpRollup); err != nil {
 			return err
+		}
+	}
+
+	// Copy extra files from recipe directory
+	for artifactName, sourcePath := range b.extraFiles {
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			return fmt.Errorf("failed to read extra file %s: %w", sourcePath, err)
+		}
+		if err := out.WriteFile(artifactName, data); err != nil {
+			return fmt.Errorf("failed to write extra file %s: %w", artifactName, err)
 		}
 	}
 
@@ -481,6 +534,10 @@ func NewOutput(dst string) (*output, error) {
 	}
 
 	return out, nil
+}
+
+func (o *output) Dst() string {
+	return o.dst
 }
 
 func (o *output) Read(path string) (string, error) {
@@ -668,8 +725,18 @@ func GetHomeDir() (string, error) {
 		return "", fmt.Errorf("error getting user home directory: %w", err)
 	}
 
+	// if legacy .playground dir is present, remove it
+	if err := os.RemoveAll(filepath.Join(homeDir, ".playground")); err != nil {
+		return "", err
+	}
+
+	stateHomeDir := os.Getenv("XDG_STATE_HOME")
+	if stateHomeDir == "" {
+		stateHomeDir = filepath.Join(homeDir, ".local", "state")
+	}
+
 	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(homeDir, ".playground")
+	customHomeDir := filepath.Join(stateHomeDir, "builder-playground")
 
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
@@ -766,6 +833,16 @@ func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []strin
 			Balance: prefundedBalance,
 			Nonce:   1,
 		}
+	}
+	return nil
+}
+
+func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.GenesisAlloc) error {
+	for addr, account := range predeploys {
+		if _, exists := (*allocs)[addr]; exists {
+			return fmt.Errorf("custom predeploy address %s conflicts with existing alloc entry in template genesis", addr.Hex())
+		}
+		(*allocs)[addr] = account
 	}
 	return nil
 }

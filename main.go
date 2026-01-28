@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"fmt"
 	"log"
 	"log/slog"
@@ -19,9 +19,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+//go:embed custom-recipes/*
+var customRecipesFS embed.FS
+
 var version = "dev"
 
-var greenColor = color.New(color.FgGreen)
+var (
+	greenColor         = color.New(color.FgGreen)
+	whiteTitleColor    = color.New(color.FgHiWhite, color.Bold)
+	recipesColor       = color.RGB(0, 206, 209)   // Dark Turquoise
+	customRecipesColor = color.RGB(255, 127, 80)  // Coral
+	descriptionColor   = color.RGB(169, 169, 169) // Faded gray, bold for descriptions
+	componentsColor    = color.RGB(128, 128, 128) // Faded gray for components
+)
 
 var (
 	keepFlag          bool
@@ -45,6 +55,11 @@ var (
 	detached          bool
 	prefundedAccounts []string
 	followFlag        bool
+	generateForce     bool
+	testRPCURL        string
+	testELRPCURL      string
+	testTimeout       time.Duration
+	portListFlag      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -59,11 +74,39 @@ var startCmd = &cobra.Command{
 	Short:   "Start a recipe",
 	Aliases: []string{"cook"},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Check if the first argument is a YAML recipe file
+		if len(args) > 0 && playground.IsYAMLRecipeFile(args[0]) {
+			yamlRecipe, err := playground.ParseYAMLRecipe(args[0], recipes)
+			if err != nil {
+				return fmt.Errorf("failed to parse YAML recipe: %w", err)
+			}
+			cmd.SilenceUsage = true
+			return runIt(yamlRecipe)
+		}
+
+		// Check if the first argument is a custom recipe name
+		if len(args) > 0 {
+			customRecipes, err := playground.GetEmbeddedCustomRecipes()
+			if err == nil {
+				for _, cr := range customRecipes {
+					if cr == args[0] {
+						yamlRecipe, cleanup, err := playground.LoadCustomRecipe(args[0], recipes)
+						if err != nil {
+							return err
+						}
+						defer cleanup()
+						cmd.SilenceUsage = true
+						return runIt(yamlRecipe)
+					}
+				}
+			}
+		}
+
 		recipeNames := []string{}
 		for _, recipe := range recipes {
 			recipeNames = append(recipeNames, recipe.Name())
 		}
-		return fmt.Errorf("please specify a recipe to cook. Available recipes: %s", recipeNames)
+		return fmt.Errorf("please specify a recipe to cook. Available recipes: %s, or provide a YAML recipe file path", recipeNames)
 	},
 }
 
@@ -248,11 +291,155 @@ var listCmd = &cobra.Command{
 	},
 }
 
+var portCmd = &cobra.Command{
+	Use:   "port [session] <service> <port-name>",
+	Short: "Get the host port for a service",
+	Long: `Get the host port for a service's named port.
+
+If only one session is running, the session name can be omitted:
+  playground port <service> <port-name>
+
+With multiple sessions, specify the session:
+  playground port <session> <service> <port-name>
+
+Use --list to show all available ports for a service:
+  playground port <service> --list`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var session, serviceName, portName string
+
+		if portListFlag {
+			switch len(args) {
+			case 1:
+				serviceName = args[0]
+			case 2:
+				session = args[0]
+				serviceName = args[1]
+			default:
+				return fmt.Errorf("expected 1 or 2 arguments with --list")
+			}
+		} else {
+			switch len(args) {
+			case 2:
+				serviceName = args[0]
+				portName = args[1]
+			case 3:
+				session = args[0]
+				serviceName = args[1]
+				portName = args[2]
+			default:
+				return fmt.Errorf("expected 2 or 3 arguments")
+			}
+		}
+
+		cmd.SilenceUsage = true
+
+		result, err := playground.GetServicePort(session, serviceName, portName)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(result)
+		return nil
+	},
+}
+
 var generateDocsCmd = &cobra.Command{
 	Use:   "generate-docs",
 	Short: "Generate documentation for all recipes",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return playground.GenerateDocs(recipes)
+	},
+}
+
+var generateCmd = &cobra.Command{
+	Use:   "generate <recipe>",
+	Short: "Generate a playground.yaml file from a recipe (e.g. l1) or custom recipe (e.g. rbuilder/release)",
+	Long:  "Generate a playground.yaml file that represents the full configuration of a recipe",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("please specify a recipe or custom recipe. Run 'playground recipes' to see available options")
+		}
+
+		name := args[0]
+
+		// First check if it's a recipe
+		for _, r := range recipes {
+			if r.Name() == name {
+				yamlContent, err := playground.RecipeToYAML(r)
+				if err != nil {
+					return fmt.Errorf("failed to convert recipe to YAML: %w", err)
+				}
+				outFile := "playground.yaml"
+				if !generateForce {
+					if _, err := os.Stat(outFile); err == nil {
+						return fmt.Errorf("file %s already exists. Use --force to overwrite", outFile)
+					}
+				}
+				if err := os.WriteFile(outFile, []byte(yamlContent), 0o644); err != nil {
+					return fmt.Errorf("failed to write %s: %w", outFile, err)
+				}
+				fmt.Printf("Created %s\n", outFile)
+				return nil
+			}
+		}
+
+		// Check if it's a custom recipe
+		customRecipes, err := playground.GetEmbeddedCustomRecipes()
+		if err != nil {
+			return fmt.Errorf("failed to list custom recipes: %w", err)
+		}
+		for _, cr := range customRecipes {
+			if cr == name {
+				return playground.GenerateFromCustomRecipe(name, generateForce)
+			}
+		}
+
+		return fmt.Errorf("recipe or custom recipe '%s' not found. Run 'playground recipes' to see available options", name)
+	},
+}
+
+var recipesCmd = &cobra.Command{
+	Use:   "recipes",
+	Short: "List all available recipes and custom recipes",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		customRecipes, err := playground.GetEmbeddedCustomRecipes()
+		if err != nil {
+			return fmt.Errorf("failed to list custom recipes: %w", err)
+		}
+		whiteTitleColor.Println("Base Recipes:")
+		for _, recipe := range recipes {
+			fmt.Println("  " + recipesColor.Sprint(recipe.Name()))
+			descriptionColor.Add(color.Bold).Printf("    %s\n", recipe.Description())
+			componentsStr := playground.GetRecipeComponentsFormatted(recipe)
+			if componentsStr != "" {
+				componentsColor.Printf("    %s\n", componentsStr)
+			}
+			fmt.Println()
+		}
+		whiteTitleColor.Println("Custom Recipes:")
+		for _, cr := range customRecipes {
+			fmt.Println("  " + customRecipesColor.Sprint(cr))
+			info, err := playground.GetCustomRecipeInfo(cr, recipes)
+			if err == nil {
+				if info.Description != "" {
+					descriptionColor.Add(color.Bold).Printf("    %s\n", info.Description)
+				}
+				// Show base + modified/new components
+				var parts []string
+				parts = append(parts, info.Base)
+				if len(info.ModifiedComponents) > 0 {
+					parts = append(parts, "modified "+strings.Join(info.ModifiedComponents, ", "))
+				}
+				if len(info.NewComponents) > 0 {
+					parts = append(parts, "new "+strings.Join(info.NewComponents, ", "))
+				}
+				if len(parts) > 1 {
+					componentsColor.Printf("    %s\n", strings.Join(parts, " + "))
+				}
+			}
+			fmt.Println()
+		}
+		return nil
 	},
 }
 
@@ -264,6 +451,20 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var testCmd = &cobra.Command{
+	Use:   "test",
+	Short: "Send a test transaction to the local EL node",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		ctx := mainctx.Get()
+		cfg := playground.DefaultTestTxConfig()
+		cfg.RPCURL = testRPCURL
+		cfg.ELRPCURL = testELRPCURL
+		cfg.Timeout = testTimeout
+		return playground.SendTestTransaction(ctx, cfg)
+	},
+}
+
 var recipes = []playground.Recipe{
 	&playground.L1Recipe{},
 	&playground.OpRecipe{},
@@ -271,6 +472,32 @@ var recipes = []playground.Recipe{
 }
 
 func main() {
+	// Set the embedded custom recipes filesystem for the playground package
+	playground.CustomRecipesFS = customRecipesFS
+
+	// Add common flags to startCmd for YAML recipe files
+	startCmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
+	startCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+	startCmd.Flags().BoolVar(&watchdog, "watchdog", false, "enable watchdog")
+	startCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
+	startCmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
+	startCmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
+	startCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
+	startCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
+	startCmd.Flags().DurationVar(&timeout, "timeout", 0, "")
+	startCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
+	startCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
+	startCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
+	startCmd.Flags().StringVar(&networkName, "network", "", "network name")
+	startCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
+	startCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
+	startCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
+	startCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
+	startCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
+	startCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
+	startCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+	startCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
+
 	for _, recipe := range recipes {
 		recipeCmd := &cobra.Command{
 			Use:   recipe.Name(),
@@ -315,6 +542,8 @@ func main() {
 	logsCmd.Flags().BoolVarP(&followFlag, "follow", "f", false, "Stream logs continuously instead of displaying and exiting")
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(listCmd)
+	portCmd.Flags().BoolVarP(&portListFlag, "list", "l", false, "List all available ports for the service")
+	rootCmd.AddCommand(portCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(cleanCmd)
 
@@ -325,6 +554,13 @@ func main() {
 	debugCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(generateDocsCmd)
+	generateCmd.Flags().BoolVar(&generateForce, "force", false, "overwrite existing files")
+	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(recipesCmd)
+	testCmd.Flags().StringVar(&testRPCURL, "rpc", "http://localhost:8545", "Target RPC URL for sending transactions")
+	testCmd.Flags().StringVar(&testELRPCURL, "el-rpc", "", "EL RPC URL for chain queries (default: same as --rpc)")
+	testCmd.Flags().DurationVar(&testTimeout, "timeout", 2*time.Minute, "Timeout for waiting for transaction receipt")
+	rootCmd.AddCommand(testCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -341,8 +577,15 @@ func runIt(recipe playground.Recipe) error {
 	}
 	logging.ConfigureSlog(logLevelFlag)
 	sessionID := utils.GeneratePetName()
+
+	out, err := playground.NewOutput(outputFlag)
+	if err != nil {
+		return err
+	}
+
 	slog.Info("Welcome to Builder Playground! ⚡️🤖")
 	slog.Info("Session ID: "+greenColor.Sprint(sessionID), "log-level", logLevel)
+	slog.Info("Output folder: " + out.Dst())
 	slog.Info("")
 
 	// parse the overrides
@@ -353,11 +596,6 @@ func runIt(recipe playground.Recipe) error {
 			return fmt.Errorf("invalid override format: %s, expected service=val", val)
 		}
 		overrides[parts[0]] = parts[1]
-	}
-
-	out, err := playground.NewOutput(outputFlag)
-	if err != nil {
-		return err
 	}
 
 	slog.Debug("Building artifacts...")
@@ -456,7 +694,11 @@ func runIt(recipe playground.Recipe) error {
 			})
 
 			var svcInfo []any
-			svcInfo = append(svcInfo, "image", ss.Image, "tag", ss.Tag)
+			if ss.HostPath != "" {
+				svcInfo = append(svcInfo, "host_path", ss.HostPath)
+			} else {
+				svcInfo = append(svcInfo, "image", ss.Image, "tag", ss.Tag)
+			}
 			for _, p := range ports {
 				protocol := ""
 				if p.Protocol == playground.ProtocolUDP {
