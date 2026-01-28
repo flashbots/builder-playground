@@ -497,10 +497,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 
 	// The containers have access to the full set of artifacts on the /artifacts folder
 	// so, we have to bind it as a volume on the container.
-	outputFolder, err := d.out.AbsoluteDstPath()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get absolute path for output folder: %w", err)
-	}
+	outputFolder := d.out.Dst()
 
 	// Validate that the image exists
 	imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)

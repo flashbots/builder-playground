@@ -522,6 +522,14 @@ func NewOutput(dst string) (*output, error) {
 	if dst == "" {
 		// Use the $HOMEDIR/devnet as the default output
 		dst = filepath.Join(homeDir, "devnet")
+	} else {
+		// Convert relative paths to absolute paths
+		if !filepath.IsAbs(dst) {
+			dst, err = filepath.Abs(dst)
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert relative path to absolute: %w", err)
+			}
+		}
 	}
 
 	out := &output{dst: dst, homeDir: homeDir}
@@ -546,10 +554,6 @@ func (o *output) Read(path string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-func (o *output) AbsoluteDstPath() (string, error) {
-	return filepath.Abs(o.dst)
 }
 
 func (o *output) Exists(path string) bool {

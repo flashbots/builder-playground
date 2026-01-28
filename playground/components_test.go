@@ -200,10 +200,8 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 		t.Fatal(err)
 	}
 
-	o := &output{
-		dst:     e2eTestDir,
-		homeDir: filepath.Join(e2eTestDir, "artifacts"),
-	}
+	o, err := NewOutput(e2eTestDir)
+	require.NoError(t, err)
 
 	exCtx := &ExContext{
 		Output:   o,
