@@ -246,7 +246,7 @@ func TestYamlReleaseToRelease(t *testing.T) {
 		Org:     "myorg",
 		Repo:    "myrepo",
 		Version: "v1.0.0",
-		Format:  "tar.gz",
+		URL:     "url",
 	}
 
 	rel := yamlReleaseToRelease(cfg)
@@ -255,8 +255,13 @@ func TestYamlReleaseToRelease(t *testing.T) {
 	require.Equal(t, "myorg", rel.Org)
 	require.Equal(t, "myrepo", rel.Repo)
 	require.Equal(t, "v1.0.0", rel.Version)
-	require.Equal(t, "x86_64-unknown-linux-gnu", rel.Arch("linux", "amd64"))
-	require.Equal(t, "aarch64-apple-darwin", rel.Arch("darwin", "arm64"))
+	require.Equal(t, "url", rel.URL)
+
+	arch, _ := rel.Arch("linux", "amd64")
+	require.Equal(t, "x86_64-unknown-linux-gnu", arch)
+
+	arch, _ = rel.Arch("darwin", "arm64")
+	require.Equal(t, "aarch64-apple-darwin", arch)
 }
 
 func TestYamlReleaseToRelease_BinaryFormat(t *testing.T) {
@@ -264,12 +269,12 @@ func TestYamlReleaseToRelease_BinaryFormat(t *testing.T) {
 		Name:    "myapp",
 		Org:     "myorg",
 		Version: "v1.0.0",
-		Format:  "binary",
 	}
 
 	rel := yamlReleaseToRelease(cfg)
 
-	require.Empty(t, rel.Arch("linux", "amd64"))
+	arch, _ := rel.Arch("linux", "amd64")
+	require.Empty(t, arch)
 }
 
 func TestIsYAMLRecipeFile(t *testing.T) {
@@ -410,12 +415,12 @@ func TestYamlReleaseToRelease_DarwinAmd64(t *testing.T) {
 		Name:    "myapp",
 		Org:     "myorg",
 		Version: "v1.0.0",
-		Format:  "tar.gz",
 	}
 
 	rel := yamlReleaseToRelease(cfg)
 
-	require.Equal(t, "x86_64-apple-darwin", rel.Arch("darwin", "amd64"))
+	arch, _ := rel.Arch("darwin", "amd64")
+	require.Equal(t, "x86_64-apple-darwin", arch)
 }
 
 func TestYamlReleaseToRelease_UnknownOS(t *testing.T) {
@@ -423,12 +428,12 @@ func TestYamlReleaseToRelease_UnknownOS(t *testing.T) {
 		Name:    "myapp",
 		Org:     "myorg",
 		Version: "v1.0.0",
-		Format:  "tar.gz",
 	}
 
 	rel := yamlReleaseToRelease(cfg)
 
-	require.Empty(t, rel.Arch("windows", "amd64"))
+	arch, _ := rel.Arch("windows", "amd64")
+	require.Empty(t, arch)
 }
 
 func TestCreateServiceFromConfig_WithHostPath(t *testing.T) {

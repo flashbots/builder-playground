@@ -81,9 +81,8 @@ type YAMLReleaseConfig struct {
 	Org     string `yaml:"org"`
 	Repo    string `yaml:"repo,omitempty"`
 	Version string `yaml:"version"`
-	// Format specifies the download format: "tar.gz" (default) or "binary"
-	// For "binary", downloads the raw binary directly without extraction
-	Format string `yaml:"format,omitempty"`
+	// URL template for download. Variables: .Name, .Repo, .Org, .Version, .Arch, .GOOS, .GOARCH
+	URL string `yaml:"url"`
 }
 
 // YAMLRecipe wraps a base recipe and applies YAML-based modifications
@@ -450,21 +449,17 @@ func yamlReleaseToRelease(cfg *YAMLReleaseConfig) *release {
 		Org:     cfg.Org,
 		Repo:    cfg.Repo,
 		Version: cfg.Version,
-		Format:  cfg.Format,
-		Arch: func(goos, goarch string) string {
-			// For binary format, arch is not used
-			if cfg.Format == "binary" {
-				return ""
-			}
-			// Default architecture mapping for tar.gz
+		URL:     cfg.URL,
+		Arch: func(goos, goarch string) (string, bool) {
+			// Default architecture mapping
 			if goos == "linux" {
-				return "x86_64-unknown-linux-gnu"
+				return "x86_64-unknown-linux-gnu", true
 			} else if goos == "darwin" && goarch == "arm64" {
-				return "aarch64-apple-darwin"
+				return "aarch64-apple-darwin", true
 			} else if goos == "darwin" && goarch == "amd64" {
-				return "x86_64-apple-darwin"
+				return "x86_64-apple-darwin", true
 			}
-			return ""
+			return "", false
 		},
 	}
 }

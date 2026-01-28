@@ -2,7 +2,10 @@ package playground
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +15,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"text/template"
+)
+
+var ErrPlatformNotSupported = errors.New("platform not supported")
+
+type ArchiveFormat string
+
+const (
+	FormatTarGz  ArchiveFormat = "tar.gz"
+	FormatZip    ArchiveFormat = "zip"
+	FormatBinary ArchiveFormat = "binary"
 )
 
 type release struct {
@@ -19,9 +34,10 @@ type release struct {
 	Repo    string
 	Org     string
 	Version string
-	Arch    func(string, string) string
-	// Format specifies the download format: "tar.gz" (default) or "binary"
-	Format string
+	Arch    func(string, string) (string, bool)
+
+	// URL template for download. Variables: .Name, .Repo, .Org, .Version, .Arch, .GOOS, .GOARCH
+	URL string
 }
 
 func DownloadRelease(outputFolder string, artifact *release) (string, error) {
@@ -42,107 +58,75 @@ func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 		return "", fmt.Errorf("error creating output folder: %v", err)
 	}
 
-	archVersion := artifact.Arch(goos, goarch)
-
-	// Handle binary format (raw binary download)
-	if artifact.Format == "binary" {
-		repo := artifact.Repo
-		if repo == "" {
-			repo = artifact.Name
-		}
-		releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", artifact.Org, repo, artifact.Version, artifact.Name)
-		log.Printf("Downloading binary %s: %s\n", outPath, releasesURL)
-
-		if err := downloadBinary(releasesURL, outPath); err != nil {
-			return "", fmt.Errorf("error downloading binary: %v", err)
-		}
-	} else if archVersion == "" {
-		// Case 2. The architecture is not supported.
+	archVersion, ok := artifact.Arch(goos, goarch)
+	if !ok {
 		log.Printf("unsupported OS/Arch: %s/%s\n", goos, goarch)
 		if _, err := exec.LookPath(artifact.Name); err != nil {
 			return "", fmt.Errorf("error looking up binary in PATH: %v", err)
-		} else {
-			outPath = artifact.Name
-			log.Printf("Using %s from PATH\n", artifact.Name)
 		}
-	} else {
-		// Case 3. Download the binary from the release page (tar.gz format)
-		repo := artifact.Repo
-		if repo == "" {
-			repo = artifact.Name
-		}
-		releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, repo, artifact.Version, artifact.Name, artifact.Version, archVersion)
-		log.Printf("Downloading %s: %s\n", outPath, releasesURL)
+		outPath = artifact.Name
+		log.Printf("Using %s from PATH\n", artifact.Name)
+		return outPath, nil
+	}
 
-		if err := downloadArtifact(releasesURL, artifact.Name, outPath); err != nil {
-			return "", fmt.Errorf("error downloading artifact: %v", err)
-		}
+	// Build URL from template
+	repo := artifact.Repo
+	if repo == "" {
+		repo = artifact.Name
+	}
+
+	tmpl, err := template.New("url").Parse(artifact.URL)
+	if err != nil {
+		return "", fmt.Errorf("error parsing URL template: %v", err)
+	}
+
+	var urlBuf bytes.Buffer
+	templateData := map[string]string{
+		"Name":    artifact.Name,
+		"Repo":    repo,
+		"Org":     artifact.Org,
+		"Version": artifact.Version,
+		"Arch":    archVersion,
+		"GOOS":    goos,
+		"GOARCH":  goarch,
+	}
+	if err := tmpl.Execute(&urlBuf, templateData); err != nil {
+		return "", fmt.Errorf("error executing URL template: %v", err)
+	}
+
+	downloadURL := urlBuf.String()
+	log.Printf("Downloading %s: %s\n", outPath, downloadURL)
+
+	if err := downloadFile(downloadURL, outPath, ""); err != nil {
+		return "", fmt.Errorf("error downloading file: %v", err)
 	}
 
 	return outPath, nil
 }
 
-func downloadArtifact(url, expectedFile, outPath string) error {
-	slog.Info("downloading artifact", "url", url, "expectedFile", expectedFile, "outPath", outPath)
-	// Download the file
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("error downloading file: %v", err)
+// detectFormat determines the archive format from the URL or returns the provided format.
+// If format is empty, it attempts to detect from the URL extension.
+// Returns one of FormatTarGz, FormatZip, or FormatBinary (default if no format detected)
+func detectFormat(url string, format ArchiveFormat) ArchiveFormat {
+	if format != "" {
+		return format
 	}
-	defer resp.Body.Close()
-
-	// Create a gzip reader
-	gzipReader, err := gzip.NewReader(resp.Body)
-	if err != nil {
-		return fmt.Errorf("error creating gzip reader: %v", err)
+	if strings.HasSuffix(url, ".tar.gz") {
+		return FormatTarGz
 	}
-	defer gzipReader.Close()
-
-	// Create a tar reader
-	tarReader := tar.NewReader(gzipReader)
-
-	// Extract the file
-	var found bool
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading tar: %v", err)
-		}
-
-		if header.Typeflag == tar.TypeReg {
-			if header.Name != expectedFile {
-				return fmt.Errorf("unexpected file in archive: %s", header.Name)
-			}
-			outFile, err := os.Create(outPath)
-			if err != nil {
-				return fmt.Errorf("error creating output file: %v", err)
-			}
-			defer outFile.Close()
-
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				return fmt.Errorf("error writing output file: %v", err)
-			}
-
-			// change permissions
-			if err := os.Chmod(outPath, 0o755); err != nil {
-				return fmt.Errorf("error changing permissions: %v", err)
-			}
-			found = true
-			break // Assuming there's only one file per repo
-		}
+	if strings.HasSuffix(url, ".zip") {
+		return FormatZip
 	}
-
-	if !found {
-		return fmt.Errorf("file not found in archive: %s", expectedFile)
-	}
-	return nil
+	return FormatBinary
 }
 
-func downloadBinary(url, outPath string) error {
-	slog.Info("downloading binary", "url", url, "outPath", outPath)
+// downloadFile downloads a file from url and extracts it based on the format.
+// format can be FormatTarGz, FormatZip, or FormatBinary (or empty to auto-detect).
+// For archives, extracts the first regular file found.
+func downloadFile(url, outPath string, format ArchiveFormat) error {
+	format = detectFormat(url, format)
+	slog.Info("downloading file", "url", url, "format", format, "outPath", outPath)
+
 	resp, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("error downloading file: %v", err)
@@ -153,13 +137,109 @@ func downloadBinary(url, outPath string) error {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
+	switch format {
+	case FormatTarGz:
+		return extractTarGz(resp.Body, outPath)
+	case FormatZip:
+		return extractZip(resp.Body, outPath)
+	case FormatBinary:
+		return writeBinary(resp.Body, outPath)
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+}
+
+func extractTarGz(r io.Reader, outPath string) error {
+	gzipReader, err := gzip.NewReader(r)
+	if err != nil {
+		return fmt.Errorf("error creating gzip reader: %v", err)
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+
+	// Extract the first regular file found
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("error reading tar: %v", err)
+		}
+
+		if header.Typeflag == tar.TypeReg {
+			outFile, err := os.Create(outPath)
+			if err != nil {
+				return fmt.Errorf("error creating output file: %v", err)
+			}
+			defer outFile.Close()
+
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				return fmt.Errorf("error writing output file: %v", err)
+			}
+
+			if err := os.Chmod(outPath, 0o755); err != nil {
+				return fmt.Errorf("error changing permissions: %v", err)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no regular file found in archive")
+}
+
+func extractZip(r io.Reader, outPath string) error {
+	// Read the entire response into memory (required for zip.NewReader)
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("error reading response: %v", err)
+	}
+
+	zipReader, err := zip.NewReader(strings.NewReader(string(data)), int64(len(data)))
+	if err != nil {
+		return fmt.Errorf("error creating zip reader: %v", err)
+	}
+
+	// Extract the first regular file found
+	for _, file := range zipReader.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+
+		rc, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("error opening file in zip: %v", err)
+		}
+		defer rc.Close()
+
+		outFile, err := os.Create(outPath)
+		if err != nil {
+			return fmt.Errorf("error creating output file: %v", err)
+		}
+		defer outFile.Close()
+
+		if _, err := io.Copy(outFile, rc); err != nil {
+			return fmt.Errorf("error writing output file: %v", err)
+		}
+
+		if err := os.Chmod(outPath, 0o755); err != nil {
+			return fmt.Errorf("error changing permissions: %v", err)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("no regular file found in archive")
+}
+
+func writeBinary(r io.Reader, outPath string) error {
 	outFile, err := os.Create(outPath)
 	if err != nil {
 		return fmt.Errorf("error creating output file: %v", err)
 	}
 	defer outFile.Close()
 
-	if _, err := io.Copy(outFile, resp.Body); err != nil {
+	if _, err := io.Copy(outFile, r); err != nil {
 		return fmt.Errorf("error writing output file: %v", err)
 	}
 

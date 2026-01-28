@@ -435,16 +435,17 @@ var rethELRelease = &release{
 	Name:    "reth",
 	Org:     "paradigmxyz",
 	Version: "v1.9.3",
-	Arch: func(goos, goarch string) string {
+	Arch: func(goos, goarch string) (string, bool) {
 		if goos == "linux" {
-			return "x86_64-unknown-linux-gnu"
+			return "x86_64-unknown-linux-gnu", true
 		} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-			return "aarch64-apple-darwin"
+			return "aarch64-apple-darwin", true
 		} else if goos == "darwin" && goarch == "amd64" {
-			return "x86_64-apple-darwin"
+			return "x86_64-apple-darwin", true
 		}
-		return ""
+		return "", false
 	},
+	URL: "https://github.com/{{.Org}}/{{.Repo}}/releases/download/{{.Version}}/{{.Name}}-{{.Version}}-{{.Arch}}.tar.gz",
 }
 
 func logLevelToRethVerbosity(logLevel LogLevel) string {
@@ -654,16 +655,17 @@ var opRethRelease = &release{
 	Repo:    "reth",
 	Org:     "paradigmxyz",
 	Version: "v1.9.3",
-	Arch: func(goos, goarch string) string {
+	Arch: func(goos, goarch string) (string, bool) {
 		if goos == "linux" {
-			return "x86_64-unknown-linux-gnu"
+			return "x86_64-unknown-linux-gnu", true
 		} else if goos == "darwin" && goarch == "arm64" { // Apple M1
-			return "aarch64-apple-darwin"
+			return "aarch64-apple-darwin", true
 		} else if goos == "darwin" && goarch == "amd64" {
-			return "x86_64-apple-darwin"
+			return "x86_64-apple-darwin", true
 		}
-		return ""
+		return "", false
 	},
+	URL: "https://github.com/{{.Org}}/{{.Repo}}/releases/download/{{.Version}}/{{.Name}}-{{.Version}}-{{.Arch}}.tar.gz",
 }
 
 func (o *OpReth) Apply(ctx *ExContext) *Component {
