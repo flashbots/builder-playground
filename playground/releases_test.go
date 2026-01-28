@@ -41,7 +41,6 @@ func TestReleases(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		require.NoError(t, err)
 
 		// Verify the binary is executable
 		info, err := os.Stat(binPath)

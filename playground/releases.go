@@ -196,7 +196,7 @@ func extractZip(r io.Reader, outPath string) error {
 		return fmt.Errorf("error reading response: %v", err)
 	}
 
-	zipReader, err := zip.NewReader(strings.NewReader(string(data)), int64(len(data)))
+	zipReader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return fmt.Errorf("error creating zip reader: %v", err)
 	}

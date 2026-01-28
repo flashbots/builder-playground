@@ -17,7 +17,7 @@ recipe:
           name: "rbuilder"
           org: "flashbots"
           version: "v1.3.4"
-          format: "binary"
+          url: "https://github.com/{{.Org}}/{{.Repo}}/releases/download/{{.Version}}/{{.Name}}"
         args:
           - "run"
           - "rbuilder.toml"

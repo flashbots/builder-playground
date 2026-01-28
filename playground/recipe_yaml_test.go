@@ -264,19 +264,6 @@ func TestYamlReleaseToRelease(t *testing.T) {
 	require.Equal(t, "aarch64-apple-darwin", arch)
 }
 
-func TestYamlReleaseToRelease_BinaryFormat(t *testing.T) {
-	cfg := &YAMLReleaseConfig{
-		Name:    "myapp",
-		Org:     "myorg",
-		Version: "v1.0.0",
-	}
-
-	rel := yamlReleaseToRelease(cfg)
-
-	arch, _ := rel.Arch("linux", "amd64")
-	require.Empty(t, arch)
-}
-
 func TestIsYAMLRecipeFile(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "recipe-test")
 	require.NoError(t, err)
