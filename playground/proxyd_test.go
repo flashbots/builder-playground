@@ -104,7 +104,7 @@ func TestRecipeOpstackWithProxyd(t *testing.T) {
 
 	manifest := tt.test(&OpRecipe{}, []string{
 		"--proxyd",
-		"--ingress-rpc", "op-geth", // Use op-geth as mock ingress for this test
+		"--ingress-rpc", "http://op-geth:8545", // Use op-geth as mock ingress for this test
 	})
 
 	// Verify proxyd service exists
@@ -138,7 +138,7 @@ func TestRecipeOpstackWithProxydAndFlashblocks(t *testing.T) {
 		"--proxyd",
 		"--flashblocks",
 		"--external-builder", "op-rbuilder",
-		"--ingress-rpc", "flashblocks-rpc", // Use flashblocks-rpc as mock ingress for this test
+		"--ingress-rpc", "http://flashblocks-rpc:8545", // Use flashblocks-rpc as mock ingress for this test
 	})
 
 	// Verify proxyd service exists
@@ -170,7 +170,7 @@ func TestRecipeOpstackWithProxydCustomMethods(t *testing.T) {
 
 	tt.test(&OpRecipe{}, []string{
 		"--proxyd",
-		"--ingress-rpc", "op-geth",
+		"--ingress-rpc", "http://op-geth:8545",
 		"--proxyd-ingress-methods", "eth_customMethod1,eth_customMethod2",
 		"--proxyd-standard-methods", "debug_customMethod",
 	})
@@ -192,7 +192,7 @@ func TestProxydOutput(t *testing.T) {
 
 	manifest := tt.test(&OpRecipe{}, []string{
 		"--proxyd",
-		"--ingress-rpc", "op-geth",
+		"--ingress-rpc", "http://op-geth:8545",
 	})
 
 	recipe := &OpRecipe{
