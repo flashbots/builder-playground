@@ -35,6 +35,8 @@ type Manifest struct {
 	// list of Services
 	Services []*Service `json:"services"`
 
+	Bootnode *BootnodeRef `json:"bootnode,omitempty"`
+
 	// overrides is a map of service name to the path of the executable to run
 	// on the host machine instead of a container.
 	overrides map[string]string
