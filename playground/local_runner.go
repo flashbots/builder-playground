@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"maps"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -176,11 +175,6 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 
 func (d *LocalRunner) checkAndUpdateReadiness() {
 	for name, task := range d.tasks {
-		// ensure the task is not a host service
-		if d.isHostService(name) {
-			continue
-		}
-
 		// first ensure the task has started
 		if task.status != TaskStatusStarted {
 			return
@@ -237,7 +231,7 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	}
 
 	if status == TaskStatusDie {
-		d.exitErr <- fmt.Errorf("container %s failed", name)
+		d.SendExitErr(fmt.Errorf("container %s failed", name))
 	}
 
 	d.emitCallback(name, status)
@@ -248,10 +242,16 @@ func (d *LocalRunner) ExitErr() <-chan error {
 	return d.exitErr
 }
 
+func (d *LocalRunner) SendExitErr(err error) {
+	d.exitErr <- err
+}
+
 func (d *LocalRunner) Stop(keepResources bool) error {
 	// stop all the handles
 	for _, handle := range d.handles {
-		handle.Process.Kill()
+		if handle.Process != nil {
+			handle.Process.Kill()
+		}
 	}
 	return StopSession(d.manifest.ID, keepResources)
 }
@@ -713,79 +713,63 @@ func (d *LocalRunner) createVolumeDir(service, volumeName string) (string, error
 }
 
 // waitForDependencies waits for all dependencies of a host service to be healthy
+// It polls the task status on a ticker rather than checking health endpoints directly
 func (d *LocalRunner) waitForDependencies(ss *Service) error {
 	if len(ss.DependsOn) == 0 {
 		return nil
 	}
 
+	// Collect all dependencies that need to be healthy
+	var depsToWaitFor []string
 	for _, dep := range ss.DependsOn {
 		if dep.Condition != DependsOnConditionHealthy {
 			continue
 		}
+		depsToWaitFor = append(depsToWaitFor, dep.Name)
+	}
 
-		// The dependency name might be a healthmon sidecar (e.g., "el_healthmon")
-		// We need to check the original service name
-		depName := dep.Name
-		originalName := strings.TrimSuffix(depName, "_healthmon")
+	if len(depsToWaitFor) == 0 {
+		return nil
+	}
 
-		// Check if the original service is a host service
-		if d.isHostService(originalName) {
-			depSvc := d.manifest.MustGetService(originalName)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
-			// Poll until the dependency is healthy
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
-			slog.Info("Waiting for dependency", "service", ss.Name, "dependency", originalName)
+	slog.Debug("Waiting for dependencies", "service", ss.Name, "dependencies", depsToWaitFor)
 
-			for {
-				select {
-				case <-ctx.Done():
-					return fmt.Errorf("timeout waiting for %s to be healthy", originalName)
-				default:
-				}
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for dependencies %v to be healthy", depsToWaitFor)
+		case <-ticker.C:
+			allHealthy := true
 
-				// For host services, check HTTP endpoint directly
-				httpPort := depSvc.MustGetPort("http")
-				url := fmt.Sprintf("http://localhost:%d", httpPort.HostPort)
-				client := &http.Client{Timeout: 2 * time.Second}
-				resp, err := client.Get(url)
-				if err == nil {
-					resp.Body.Close()
-					if resp.StatusCode < 500 {
-						slog.Info("Dependency is healthy", "service", ss.Name, "dependency", originalName)
-						break
-					}
-				}
-
-				time.Sleep(1 * time.Second)
-			}
-		} else {
-			// For Docker services, check the healthmon container
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-
-			slog.Info("Waiting for dependency", "service", ss.Name, "dependency", depName)
-
-			for {
-				select {
-				case <-ctx.Done():
-					return fmt.Errorf("timeout waiting for %s to be healthy", depName)
-				default:
-				}
-
-				resp, err := ExecuteHealthCheckManually(depName)
-				if err == nil && resp.ExitCode == 0 {
-					slog.Info("Dependency is healthy", "service", ss.Name, "dependency", depName)
+			d.tasksMtx.Lock()
+			for _, depName := range depsToWaitFor {
+				task, exists := d.tasks[depName]
+				if !exists {
+					// Dependency doesn't exist in tasks, might be an error
+					allHealthy = false
 					break
 				}
 
-				time.Sleep(1 * time.Second)
+				// Check if the dependency is healthy
+				if !task.ready {
+					allHealthy = false
+					break
+				}
+			}
+			d.tasksMtx.Unlock()
+
+			if allHealthy {
+				slog.Debug("All dependencies are healthy", "service", ss.Name)
+				return nil
 			}
 		}
 	}
-
-	return nil
 }
 
 // runOnHost runs the service on the host machine
@@ -845,11 +829,18 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 	cmd.Stdout = logOutput
 	cmd.Stderr = logOutput
 
+	// Mark service as started
+	d.updateTaskStatus(ss.Name, TaskStatusStarted)
+
+	// Start the process
 	go func() {
 		if err := cmd.Run(); err != nil {
-			d.exitErr <- fmt.Errorf("error running host service %s: %w", ss.Name, err)
+			d.SendExitErr(fmt.Errorf("error running host service %s: %w", ss.Name, err))
 		}
 	}()
+
+	// Note: Health checking for host services is handled by Docker sidecar containers
+	// created during manifest validation (e.g., *_readycheck sidecars that use host.docker.internal)
 
 	// we do not need to lock this array because we run the host services sequentially
 	d.handles = append(d.handles, cmd)

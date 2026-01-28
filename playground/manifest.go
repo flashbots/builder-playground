@@ -228,9 +228,15 @@ func (s *Manifest) Validate(out *output) error {
 			ss.ReadyCheck = nil
 			ss.WithLabel(healthCheckSidecarLabel, sidecarName)
 
-			// the url supplied by the service will bind to localhost, we have to change it
-			// to point to the main service name so that the sidecar can reach it
-			readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", ss.Name)
+			// For host services, the URL uses localhost - replace with host.docker.internal
+			// For docker services, replace localhost with the service name for DNS resolution
+			if ss.HostPath != "" {
+				// Host service: use host.docker.internal to reach the host from the Docker sidecar
+				readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", "host.docker.internal")
+			} else {
+				// Docker service: use service name for DNS resolution
+				readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", ss.Name)
+			}
 			readyCheck.Test = []string{"CMD", "curl", readyCheck.QueryURL}
 
 			s.NewService(sidecarName).
