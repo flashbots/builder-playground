@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func TestReleases(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		_, err := DownloadRelease(out.dst, tc)
+		binPath, err := DownloadRelease(out.dst, tc)
 		if err != nil {
 			if strings.Contains(err.Error(), "error looking up binary in PATH") {
 				// TODO: This should be done better without the error string matching
@@ -41,5 +42,10 @@ func TestReleases(t *testing.T) {
 			}
 		}
 		require.NoError(t, err)
+
+		// Verify the binary is executable
+		info, err := os.Stat(binPath)
+		require.NoError(t, err)
+		require.NotZero(t, info.Mode()&0111, "binary should be executable")
 	}
 }
