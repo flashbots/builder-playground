@@ -15,6 +15,9 @@ type YAMLRecipeConfig struct {
 	// Base is the name of the base recipe (l1, opstack, buildernet)
 	Base string `yaml:"base"`
 
+	// BaseArgs are arguments to pass to the base recipe's flags
+	BaseArgs []string `yaml:"base_args,omitempty"`
+
 	// Description is an optional description of the recipe
 	Description string `yaml:"description,omitempty"`
 
@@ -123,6 +126,14 @@ func ParseYAMLRecipe(filePath string, baseRecipes []Recipe) (*YAMLRecipe, error)
 
 	if baseRecipe == nil {
 		return nil, fmt.Errorf("unknown base recipe: %s", config.Base)
+	}
+
+	// Parse base_args into the base recipe's flags
+	if len(config.BaseArgs) > 0 {
+		flags := baseRecipe.Flags()
+		if err := flags.Parse(config.BaseArgs); err != nil {
+			return nil, fmt.Errorf("failed to parse base_args: %w", err)
+		}
 	}
 
 	return &YAMLRecipe{
