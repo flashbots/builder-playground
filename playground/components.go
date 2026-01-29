@@ -230,6 +230,10 @@ type WebsocketProxy struct {
 func (w *WebsocketProxy) Apply(ctx *ExContext) *Component {
 	component := NewComponent("webproxy")
 
+	// NOTE: The mikawamp/websocket-rpc image is amd64-only.
+	// For other architectures, build from https://github.com/flashbots/rollup-boost with:
+	//   docker build --build-arg SERVICE_NAME=flashblocks-websocket-proxy -t websocket-proxy:<tag> .
+	// and use: --override websocket-proxy=websocket-proxy:<tag>
 	component.NewService("websocket-proxy").
 		WithImage("docker.io/mikawamp/websocket-rpc").
 		WithTag("latest").
@@ -630,6 +634,10 @@ type Proxyd struct {
 func (p *Proxyd) Apply(ctx *ExContext) *Component {
 	component := NewComponent("proxyd")
 
+	// NOTE: The upstream OP Labs proxyd image is amd64-only.
+	// For other architectures, build from https://github.com/ethereum-optimism/infra with:
+	//   docker build -t proxyd:<tag> -f proxyd/Dockerfile .
+	// and use: --override proxyd=proxyd:<tag>
 	component.NewService("proxyd").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/proxyd").
 		WithTag("latest").
