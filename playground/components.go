@@ -130,7 +130,7 @@ func (f *FlashblocksRPC) Apply(ctx *ExContext) *Component {
 		service = component.NewService("flashblocks-rpc").
 			WithImage("ghcr.io/base/node-reth-dev").
 			WithTag("main").
-			WithEntrypoint("/app/base-reth-node").
+			WithEntrypoint("/app/base-client").
 			WithArgs(
 				"node",
 				"--websocket-url", websocketURL,
