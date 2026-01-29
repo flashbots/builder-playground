@@ -381,37 +381,45 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 		return defaultPort
 	}
 
+	resolveAddr := func(targetSvc *Service, port *Port, protocol, user string) string {
+		// - Service runs on host:
+		//   A: target is inside docker: access with localhost:hostPort
+		//   B: target is on the host: access with localhost:hostPort
+		// - Service runs inside docker:
+		//   C: target is inside docker: access it with DNS service:port
+		//   D: target is on the host: access it with host.docker.internal:hostPort
+		if d.isHostService(s.Name) {
+			// A and B
+			return printAddr(protocol, "localhost", port.HostPort, user)
+		} else {
+			if d.isHostService(targetSvc.Name) {
+				// D
+				return printAddr(protocol, "host.docker.internal", port.HostPort, user)
+			}
+			// C
+			return printAddr(protocol, targetSvc.Name, port.Port, user)
+		}
+	}
+
 	funcs := template.FuncMap{
 		"Service": func(name, portLabel, protocol, user string) string {
-			// For {{Service "name" "portLabel"}}:
-			// - Service runs on host:
-			//   A: target is inside docker: access with localhost:hostPort
-			//   B: target is on the host: access with localhost:hostPort
-			// - Service runs inside docker:
-			//   C: target is inside docker: access it with DNS service:port
-			//   D: target is on the host: access it with host.docker.internal:hostPort
-
-			// find the service and the port that it resolves for that label
 			svc := d.manifest.MustGetService(name)
 			port := svc.MustGetPort(portLabel)
-
-			if d.isHostService(s.Name) {
-				// A and B
-				return printAddr(protocol, "localhost", port.HostPort, user)
-			} else {
-				if d.isHostService(svc.Name) {
-					// D
-					return printAddr(protocol, "host.docker.internal", port.HostPort, user)
-				}
-				// C
-				return printAddr(protocol, svc.Name, port.Port, user)
-			}
+			return resolveAddr(svc, port, protocol, user)
 		},
 		"Port": func(name string, defaultPort int) int {
 			return resolvePort(name, defaultPort, ProtocolTCP)
 		},
 		"PortUDP": func(name string, defaultPort int) int {
 			return resolvePort(name, defaultPort, ProtocolUDP)
+		},
+		"Bootnode": func() string {
+			if d.manifest.Bootnode == nil {
+				return ""
+			}
+			svc := d.manifest.MustGetService(d.manifest.Bootnode.Service)
+			port := svc.MustGetPort("rpc")
+			return resolveAddr(svc, port, "enode", d.manifest.Bootnode.ID)
 		},
 	}
 
