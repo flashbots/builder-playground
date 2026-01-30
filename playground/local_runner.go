@@ -504,11 +504,8 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 
 	// Validate that the image exists
 	imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
-	// TODO: Cannot validate if they have a platform
-	if s.Platform == "" {
-		if err := d.validateImageExists(imageName); err != nil {
-			return nil, nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
-		}
+	if err := d.validateImageExists(imageName); err != nil {
+		return nil, nil, fmt.Errorf("failed to validate image %s: %w", imageName, err)
 	}
 
 	labels := map[string]string{
@@ -559,10 +556,6 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// Add the ethereum network
 		"networks": []string{d.config.NetworkName},
 		"labels":   labels,
-	}
-
-	if s.Platform != "" {
-		service["platform"] = s.Platform
 	}
 
 	if d.config.Platform != "" {
@@ -992,7 +985,7 @@ func CreatePrometheusServices(manifest *Manifest, out *output) error {
 	return nil
 }
 
-func (d *LocalRunner) ensureImage(ctx context.Context, imageName, platform string) error {
+func (d *LocalRunner) ensureImage(ctx context.Context, imageName string) error {
 	// Check if image exists locally
 	_, err := d.client.ImageInspect(ctx, imageName)
 	if err == nil {
@@ -1006,9 +999,7 @@ func (d *LocalRunner) ensureImage(ctx context.Context, imageName, platform strin
 	d.emitCallback(imageName, TaskStatusPulling)
 
 	slog.Info("pulling image", "image", imageName)
-	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{
-		Platform: platform,
-	})
+	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to pull image %s: %w", imageName, err)
 	}
@@ -1037,7 +1028,7 @@ func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
 		s := svc // Capture loop variable
 		g.Go(func() error {
 			imageName := fmt.Sprintf("%s:%s", s.Image, s.Tag)
-			if err := d.ensureImage(ctx, imageName, s.Platform); err != nil {
+			if err := d.ensureImage(ctx, imageName); err != nil {
 				return fmt.Errorf("failed to ensure image %s: %w", imageName, err)
 			}
 			return nil

@@ -367,8 +367,7 @@ type Service struct {
 	Entrypoint string `json:"entrypoint,omitempty"`
 	HostPath   string `json:"host_path,omitempty"`
 
-	UngracefulShutdown bool   `json:"ungraceful_shutdown,omitempty"`
-	Platform           string `json:"platform,omitempty"`
+	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
 	postHook *postHook
 	release  *release
@@ -441,11 +440,6 @@ func (s *Service) WithEntrypoint(entrypoint string) *Service {
 
 func (s *Service) WithTag(tag string) *Service {
 	s.Tag = tag
-	return s
-}
-
-func (s *Service) WithPlatform(platform string) *Service {
-	s.Platform = platform
 	return s
 }
 

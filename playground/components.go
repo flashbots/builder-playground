@@ -765,14 +765,13 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 		WithTag("1.3.5").
 		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
 		WithArtifact("/data/genesis.json", "genesis.json").
-		WithPlatform("linux/amd64").      // TODO
-		WithVolume("data", "/data_reth"). // TODO
+		WithVolume("data", "/data_reth"). // TODO. This works but we do not have any primitive yet for sharing volumes
 		DependsOnHealthy("el").
 		WithArgs(
 			"run", "./rbuilder-config.toml",
 		)
 
-	svc.HostPath = "rbuilder"
+	svc.HostPath = "rbuilder" // TODO: Once we have official cross-compile releases we can use the releaser
 	return component
 }
 

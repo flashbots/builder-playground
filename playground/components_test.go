@@ -115,6 +115,8 @@ func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
 
 func TestComponentRbuilder(t *testing.T) {
 	tt := newTestFramework(t)
+	tt.e2eRootDir = "/tmp" // TODO: This is required because output folder issues (#344) and the ipc issues
+
 	defer tt.Close()
 
 	recipe := &rbuilderRecipe{
@@ -123,9 +125,8 @@ func TestComponentRbuilder(t *testing.T) {
 			useNativeReth: true,
 		},
 	}
-	tt.test(recipe, nil)
 
-	time.Sleep(10 * time.Second)
+	tt.test(recipe, nil)
 }
 
 func TestRecipeBuilderHub(t *testing.T) {
