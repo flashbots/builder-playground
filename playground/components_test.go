@@ -94,6 +94,42 @@ func TestRecipeL1UseNativeReth(t *testing.T) {
 	})
 }
 
+type rbuilderRecipe struct {
+	*mockRecipe
+	l1 *L1Recipe
+}
+
+func (r *rbuilderRecipe) Artifacts() *ArtifactsBuilder {
+	return r.l1.Artifacts()
+}
+
+func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
+	c := NewComponent("rbuilder-test-recipe")
+
+	c.AddService(ctx, r.l1)
+	c.AddComponent(ctx, &Rbuilder{})
+
+	return c
+}
+
+func TestComponentRbuilder(t *testing.T) {
+	t.Skip("It needs rbuilder on PATH")
+
+	tt := newTestFramework(t)
+	tt.e2eRootDir = "/tmp" // TODO: This is required because output folder issues (#344) and the ipc issues
+
+	defer tt.Close()
+
+	recipe := &rbuilderRecipe{
+		l1: &L1Recipe{
+			blockTime:     12 * time.Second,
+			useNativeReth: true,
+		},
+	}
+
+	tt.test(recipe, nil)
+}
+
 func TestRecipeBuilderHub(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
@@ -200,9 +236,12 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 		t.Fatal(err)
 	}
 
+	homeDir, err := GetHomeDir()
+	require.NoError(t, err)
+
 	o := &output{
 		dst:     e2eTestDir,
-		homeDir: filepath.Join(e2eTestDir, "artifacts"),
+		homeDir: homeDir,
 	}
 
 	exCtx := &ExContext{
