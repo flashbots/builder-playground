@@ -751,8 +751,7 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 //go:embed utils/rbuilder-config.toml.tmpl
 var rbuilderConfigToml string
 
-type Rbuilder struct {
-}
+type Rbuilder struct{}
 
 func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 	component := NewComponent("rbuilder")
