@@ -498,42 +498,75 @@ func main() {
 	startCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
 	startCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
 
+	// Helper to add common recipe flags to a command
+	addCommonRecipeFlags := func(cmd *cobra.Command) {
+		cmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
+		cmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+		cmd.Flags().BoolVar(&watchdog, "watchdog", false, "enable watchdog")
+		cmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
+		cmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
+		cmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
+		cmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
+		cmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
+		cmd.Flags().DurationVar(&timeout, "timeout", 0, "")
+		cmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
+		cmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
+		cmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
+		cmd.Flags().StringVar(&networkName, "network", "", "network name")
+		cmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
+		cmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
+		cmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
+		cmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
+		cmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
+		cmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
+		cmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+		cmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
+	}
+
 	for _, recipe := range recipes {
 		recipeCmd := &cobra.Command{
 			Use:   recipe.Name(),
 			Short: recipe.Description(),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				// Silence usage for internal errors, not flag parsing errors
 				cmd.SilenceUsage = true
 				return runIt(recipe)
 			},
 		}
-		// add the flags from the recipe
 		recipeCmd.Flags().AddFlagSet(recipe.Flags())
-		// add the common flags
-		recipeCmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
-		recipeCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-		recipeCmd.Flags().BoolVar(&watchdog, "watchdog", false, "enable watchdog")
-		recipeCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
-		recipeCmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
-		recipeCmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
-		recipeCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
-		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
-		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
-		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
-		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
-		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
-		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
-		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
-		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
-		recipeCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
-		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
-		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
-		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
-		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
-		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present)")
-
+		addCommonRecipeFlags(recipeCmd)
 		startCmd.AddCommand(recipeCmd)
+	}
+
+	// Register custom recipes as subcommands with their flags
+	customRecipeNames, _ := playground.GetEmbeddedCustomRecipes()
+	for _, crName := range customRecipeNames {
+		customRecipeName := crName // capture loop variable
+		// Load recipe just to get flags and description
+		customRecipe, cleanup, err := playground.LoadCustomRecipe(customRecipeName, recipes)
+		if err != nil {
+			continue // Skip invalid custom recipes
+		}
+		recipeFlags := customRecipe.Flags()
+		recipeDesc := customRecipe.Description()
+		cleanup() // Clean up temp dir from flag discovery
+
+		customCmd := &cobra.Command{
+			Use:   customRecipeName,
+			Short: recipeDesc,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				// Load the recipe again when actually running
+				recipe, cleanupRun, err := playground.LoadCustomRecipe(customRecipeName, recipes)
+				if err != nil {
+					return err
+				}
+				defer cleanupRun()
+				cmd.SilenceUsage = true
+				return runIt(recipe)
+			},
+		}
+		customCmd.Flags().AddFlagSet(recipeFlags)
+		addCommonRecipeFlags(customCmd)
+		startCmd.AddCommand(customCmd)
 	}
 
 	rootCmd.AddCommand(startCmd)
