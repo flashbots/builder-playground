@@ -122,6 +122,60 @@ var cleanCmd = &cobra.Command{
 	RunE:  shutDownCmdFunc("clean"),
 }
 
+var validateCmd = &cobra.Command{
+	Use:   "validate <recipe>",
+	Short: "Validate a recipe without starting it",
+	Long:  "Validates a recipe's configuration, checking for issues like missing dependencies, invalid host paths, and configuration errors.",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		recipeName := args[0]
+
+		// Check if it's a YAML recipe file
+		if playground.IsYAMLRecipeFile(recipeName) {
+			yamlRecipe, err := playground.ParseYAMLRecipe(recipeName, recipes)
+			if err != nil {
+				return fmt.Errorf("failed to parse YAML recipe: %w", err)
+			}
+			return runValidation(yamlRecipe)
+		}
+
+		// Check base recipes
+		for _, recipe := range recipes {
+			if recipe.Name() == recipeName {
+				return runValidation(recipe)
+			}
+		}
+
+		return fmt.Errorf("recipe '%s' not found", recipeName)
+	},
+}
+
+func runValidation(recipe playground.Recipe) error {
+	fmt.Printf("Validating recipe: %s\n\n", recipe.Name())
+
+	result := playground.ValidateRecipe(recipe, recipes)
+
+	if len(result.Warnings) > 0 {
+		fmt.Println("Warnings:")
+		for _, w := range result.Warnings {
+			fmt.Printf("  - %s\n", w)
+		}
+		fmt.Println()
+	}
+
+	if len(result.Errors) > 0 {
+		fmt.Println("Errors:")
+		for _, e := range result.Errors {
+			fmt.Printf("  - %s\n", e)
+		}
+		fmt.Println()
+		return fmt.Errorf("validation failed with %d error(s)", len(result.Errors))
+	}
+
+	fmt.Println("Validation passed!")
+	return nil
+}
+
 func shutDownCmdFunc(cmdName string) func(cmd *cobra.Command, args []string) error {
 	var keepResources bool
 	switch cmdName {
@@ -546,6 +600,7 @@ func main() {
 	rootCmd.AddCommand(portCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(cleanCmd)
+	rootCmd.AddCommand(validateCmd)
 
 	rootCmd.AddCommand(stopCmd)
 	stopCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")

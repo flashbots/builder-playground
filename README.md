@@ -234,6 +234,16 @@ rpc: 30303
 ws: 8546
 ```
 
+## Validate
+
+Check a recipe for errors before running:
+
+```bash
+$ builder-playground validate my-recipe.yaml
+```
+
+This validates dependencies, host paths, port conflicts, and service name uniqueness without starting any containers. Useful for catching configuration errors early, especially with custom recipes.
+
 ## Stop
 
 Stop local playground sessions and keep all Docker resources (containers/volumes/networks):
