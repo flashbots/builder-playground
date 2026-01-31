@@ -2,6 +2,7 @@ package playground
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +74,10 @@ type YAMLServiceConfig struct {
 
 	// Release specifies a GitHub release to download for host execution
 	Release *YAMLReleaseConfig `yaml:"release,omitempty"`
+
+	// ReadyCheck is a URL to check for service readiness (used for health checks)
+	// Format: "http://localhost:PORT/path" - the service is ready when this URL returns 200
+	ReadyCheck string `yaml:"ready_check,omitempty"`
 }
 
 // YAMLReleaseConfig specifies a GitHub release to download
@@ -206,9 +211,10 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 		if componentConfig.Remove {
 			// Remove the component and all its services
 			if existingComponent != nil {
-				// Track all services in this component as removed
 				collectServiceNames(existingComponent, removedServices)
 				removeComponent(component, componentName)
+			} else {
+				slog.Warn("cannot remove component: not found", "name", componentName)
 			}
 			continue
 		}
@@ -234,6 +240,8 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 					if existingService != nil {
 						removeService(component, serviceName)
 						removedServices[serviceName] = true
+					} else {
+						slog.Warn("cannot remove service: not found", "name", serviceName, "component", componentName)
 					}
 					continue
 				}
@@ -441,6 +449,9 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig) {
 		svc.WithRelease(rel)
 		svc.UseHostExecution()
 	}
+	if config.ReadyCheck != "" {
+		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
+	}
 }
 
 // yamlReleaseToRelease converts a YAMLReleaseConfig to a release struct
@@ -483,6 +494,7 @@ func applyFilesToService(svc *Service, files map[string]string) {
 }
 
 // applyDependsOn parses depends_on entries and adds them to the service
+// Supports formats: "service", "service:condition", "component.service", "component.service:condition"
 func applyDependsOn(svc *Service, dependsOn []string) {
 	for _, dep := range dependsOn {
 		parts := strings.SplitN(dep, ":", 2)
@@ -491,6 +503,15 @@ func applyDependsOn(svc *Service, dependsOn []string) {
 		if len(parts) == 2 {
 			condition = parts[1]
 		}
+
+		// Handle component.service format - extract just the service name
+		if strings.Contains(serviceName, ".") {
+			componentParts := strings.SplitN(serviceName, ".", 2)
+			if len(componentParts) == 2 {
+				serviceName = componentParts[1]
+			}
+		}
+
 		switch condition {
 		case "healthy":
 			svc.DependsOnHealthy(serviceName)
@@ -553,6 +574,9 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig) *Service {
 		rel := yamlReleaseToRelease(config.Release)
 		svc.WithRelease(rel)
 		svc.UseHostExecution()
+	}
+	if config.ReadyCheck != "" {
+		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
 	}
 
 	return svc
