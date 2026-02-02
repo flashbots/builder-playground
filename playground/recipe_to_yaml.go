@@ -116,9 +116,12 @@ func convertServiceToYAML(svc *Service) *YAMLServiceConfig {
 		}
 	}
 	if len(svc.VolumesMapped) > 0 {
-		config.Volumes = make(map[string]string)
-		for containerPath, volumeName := range svc.VolumesMapped {
-			config.Volumes[containerPath] = volumeName
+		config.Volumes = make(map[string]*YAMLVolumeMappedConfig)
+		for containerPath, volumeMapping := range svc.VolumesMapped {
+			config.Volumes[containerPath] = &YAMLVolumeMappedConfig{
+				Name:    volumeMapping.Name,
+				IsLocal: volumeMapping.IsLocal,
+			}
 		}
 	}
 	if len(svc.DependsOn) > 0 {

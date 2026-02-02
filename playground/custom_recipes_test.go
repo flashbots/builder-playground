@@ -399,7 +399,7 @@ func (m *mockRecipe) Description() string {
 }
 
 func (m *mockRecipe) Flags() *flag.FlagSet {
-	return nil
+	return flag.NewFlagSet("", 0)
 }
 
 func (m *mockRecipe) Artifacts() *ArtifactsBuilder {

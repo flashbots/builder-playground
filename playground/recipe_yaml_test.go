@@ -384,9 +384,11 @@ func TestApplyServiceOverrides_AllFields(t *testing.T) {
 		Tag:        "v2.0.0",
 		Entrypoint: "/bin/bash",
 		Ports:      map[string]int{"http": 8080, "https": 8443},
-		Volumes:    map[string]string{"/data": "myvolume"},
-		DependsOn:  []string{"db:healthy"},
-		HostPath:   "/usr/local/bin/app",
+		Volumes: map[string]*YAMLVolumeMappedConfig{"/data": {
+			Name: "myvolume",
+		}},
+		DependsOn: []string{"db:healthy"},
+		HostPath:  "/usr/local/bin/app",
 		Release: &YAMLReleaseConfig{
 			Name:    "myapp",
 			Org:     "myorg",
@@ -460,14 +462,16 @@ func TestCreateServiceFromConfig_WithRelease(t *testing.T) {
 
 func TestCreateServiceFromConfig_WithVolumes(t *testing.T) {
 	config := &YAMLServiceConfig{
-		Image:   "test-image",
-		Volumes: map[string]string{"/data": "myvolume"},
+		Image: "test-image",
+		Volumes: map[string]*YAMLVolumeMappedConfig{"/data": {
+			Name: "myvolume",
+		}},
 	}
 
 	svc := createServiceFromConfig("my-service", config)
 
 	require.NotNil(t, svc.VolumesMapped)
-	require.Equal(t, "myvolume", svc.VolumesMapped["/data"])
+	require.Equal(t, "myvolume", svc.VolumesMapped["/data"].Name)
 }
 
 func TestParseYAMLRecipe(t *testing.T) {

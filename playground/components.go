@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	_ "embed"
+
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-boost-utils/bls"
@@ -503,7 +505,7 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 		WithRelease(rethELRelease).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth")
+		WithVolume("data", "/data_reth", true)
 
 	UseHealthmon(component, svc, healthmonExecution)
 
@@ -742,6 +744,31 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 		WithTag("latest").
 		WithArgs(args...).
 		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
+
+	return component
+}
+
+//go:embed utils/rbuilder-config.toml.tmpl
+var rbuilderConfigToml string
+
+type Rbuilder struct{}
+
+func (r *Rbuilder) Apply(ctx *ExContext) *Component {
+	component := NewComponent("rbuilder")
+
+	// TODO: Handle error
+	ctx.Output.WriteFile("rbuilder-config.toml", rbuilderConfigToml)
+
+	component.NewService("rbuilder").
+		WithImage("ghcr.io/flashbots/rbuilder").
+		WithTag("sha-7efdc0b").
+		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
+		WithArtifact("/data/genesis.json", "genesis.json").
+		WithVolume("shared:el-data", "/data_reth", true).
+		DependsOnHealthy("el").
+		WithArgs(
+			"run", "/data/rbuilder-config.toml",
+		)
 
 	return component
 }

@@ -588,6 +588,11 @@ func runIt(recipe playground.Recipe) error {
 	slog.Info("Output folder: " + out.Dst())
 	slog.Info("")
 
+	if utils.GetSessionTempDirCount() > 20 {
+		slog.Warn("Too many temp dirs - please later remove " + utils.TempPlaygroundDirPath() + " (auto-removed at reboot)")
+		slog.Info("")
+	}
+
 	// parse the overrides
 	overrides := map[string]string{}
 	for _, val := range withOverrides {

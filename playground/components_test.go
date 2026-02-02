@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -92,6 +93,44 @@ func TestRecipeL1UseNativeReth(t *testing.T) {
 	tt.test(&L1Recipe{}, []string{
 		"--use-native-reth",
 	})
+}
+
+type rbuilderRecipe struct {
+	*mockRecipe
+	l1 *L1Recipe
+}
+
+func (r *rbuilderRecipe) Artifacts() *ArtifactsBuilder {
+	return r.l1.Artifacts()
+}
+
+func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
+	c := NewComponent("rbuilder-test-recipe")
+
+	c.AddService(ctx, r.l1)
+	c.AddComponent(ctx, &Rbuilder{})
+
+	return c
+}
+
+func TestComponentRbuilder(t *testing.T) {
+	// TODO: Re-enable this for all architectures when the rbuilder container flow works.
+	if runtime.GOARCH != "arm64" {
+		t.Skip("Skipping rbuilder component test on non-arm64 architecture for now")
+	}
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	recipe := &rbuilderRecipe{
+		l1: &L1Recipe{
+			// TODO: We might have to change things from rbuilder-config
+			// if the time is lower than 12 seconds.
+			blockTime: 12 * time.Second,
+		},
+	}
+
+	tt.test(recipe, nil)
+	tt.WaitForBlock("el", 1)
 }
 
 func TestRecipeBuilderHub(t *testing.T) {
@@ -200,9 +239,12 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 		t.Fatal(err)
 	}
 
+	homeDir, err := GetHomeDir()
+	require.NoError(t, err)
+
 	o := &output{
 		dst:     e2eTestDir,
-		homeDir: filepath.Join(e2eTestDir, "artifacts"),
+		homeDir: homeDir,
 	}
 
 	exCtx := &ExContext{
@@ -261,6 +303,28 @@ func (tt *testFramework) Close() {
 		if err := tt.runner.Stop(false); err != nil {
 			tt.t.Log(err)
 		}
+	}
+}
+
+// WaitForBlock waits for the specified service to reach the given block number.
+// It polls the service's HTTP endpoint and fails the test if the block isn't
+// reached within 1 minute or if the runner exits with an error.
+func (tt *testFramework) WaitForBlock(service string, num uint64) {
+	elService := tt.runner.manifest.MustGetService(service)
+	rethURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+
+	waitForBlockCh := make(chan error)
+	go func() {
+		waitForBlockCh <- waitForBlock(rethURL, num, 1*time.Minute)
+	}()
+
+	select {
+	case err := <-waitForBlockCh:
+		if err != nil {
+			tt.t.Fatal(err)
+		}
+	case err := <-tt.runner.ExitErr():
+		tt.t.Fatal(err)
 	}
 }
 
