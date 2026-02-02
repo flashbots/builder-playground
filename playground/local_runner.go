@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -541,7 +540,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		dockerVolumeName := d.createVolumeName(s.Name, volume.Name)
 
 		if volume.IsLocal {
-			absPath := path.Join(os.TempDir(), "builder-playground", d.manifest.ID, dockerVolumeName)
+			absPath := filepath.Join(os.TempDir(), "builder-playground", d.manifest.ID, dockerVolumeName)
 			if err := os.MkdirAll(absPath, 0o755); err != nil {
 				return nil, nil, fmt.Errorf("failed to create directory %s: %w", absPath, err)
 			}
