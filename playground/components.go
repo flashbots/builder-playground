@@ -761,7 +761,7 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 
 	component.NewService("rbuilder").
 		WithImage("ghcr.io/flashbots/rbuilder").
-		WithTag("sha-51e6940").
+		WithTag("sha-7efdc0b").
 		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithVolume("shared:el-data", "/data_reth", true).

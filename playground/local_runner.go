@@ -540,10 +540,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		dockerVolumeName := d.createVolumeName(s.Name, volume.Name)
 
 		if volume.IsLocal {
-			absPath, err := d.out.CreateDir(dockerVolumeName)
-			if err != nil {
-				return nil, nil, err
-			}
+			absPath := utils.MustGetVolumeDir(d.manifest.ID, dockerVolumeName)
 			volumes[absPath] = localPath
 		} else {
 			volumes[dockerVolumeName] = localPath
