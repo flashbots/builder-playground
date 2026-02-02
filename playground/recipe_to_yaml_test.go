@@ -88,13 +88,13 @@ func TestConvertServiceToYAML(t *testing.T) {
 				Name:  "data-service",
 				Image: "postgres",
 				VolumesMapped: map[string]*VolumeMapped{
-					"/var/lib/postgresql/data": &VolumeMapped{Name: "pgdata"},
+					"/var/lib/postgresql/data": {Name: "pgdata"},
 				},
 			},
 			expected: &YAMLServiceConfig{
 				Image: "postgres",
 				Volumes: map[string]*YAMLVolumeMappedConfig{
-					"/var/lib/postgresql/data": &YAMLVolumeMappedConfig{Name: "pgdata"},
+					"/var/lib/postgresql/data": {Name: "pgdata"},
 				},
 			},
 		},
