@@ -540,10 +540,14 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		dockerVolumeName := d.createVolumeName(s.Name, volume.Name)
 
 		if volume.IsLocal {
-			absPath, err := d.out.CreateDir(dockerVolumeName)
-			if err != nil {
-				return nil, nil, err
+			absPath := fmt.Sprintf("/tmp/builder-playground/%s/%s", d.manifest.ID, dockerVolumeName)
+			if err := os.MkdirAll(absPath, 0o755); err != nil {
+				return nil, nil, fmt.Errorf("failed to create directory %s: %w", absPath, err)
 			}
+			// absPath, err := d.out.CreateDir(dockerVolumeName)
+			// if err != nil {
+			// 	return nil, nil, err
+			// }
 			volumes[absPath] = localPath
 		} else {
 			volumes[dockerVolumeName] = localPath

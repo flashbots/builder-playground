@@ -760,12 +760,13 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 	ctx.Output.WriteFile("rbuilder-config.toml", rbuilderConfigToml)
 
 	component.NewService("rbuilder").
-		WithImage("ghcr.io/flashbots/rbuilder").
-		WithTag("sha-51e6940").
+		WithImage("rbuilder-caner").
+		WithTag("latest").
 		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithVolume("shared:el-data", "/data_reth", true).
 		DependsOnHealthy("el").
+		WithEntrypoint("/app/rbuilder").
 		WithArgs(
 			"run", "/data/rbuilder-config.toml",
 		)

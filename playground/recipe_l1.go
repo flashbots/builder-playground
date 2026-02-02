@@ -34,6 +34,8 @@ type L1Recipe struct {
 	useNativeReth bool
 
 	useSeparateMevBoost bool
+
+	withRbuilder bool
 }
 
 func (l *L1Recipe) Name() string {
@@ -52,6 +54,7 @@ func (l *L1Recipe) Flags() *flag.FlagSet {
 	flags.StringVar(&l.secondaryEL, "secondary-el", "", "Address or port to use for the secondary EL (execution layer); Can be a port number (e.g., '8551') in which case the full URL is derived as `http://localhost:<port>` or a complete URL (e.g., `http://docker-container-name:8551`), use `http://host.docker.internal:<port>` to reach a secondary execution client that runs on your host and not within Docker.")
 	flags.BoolVar(&l.useNativeReth, "use-native-reth", false, "use the native reth binary")
 	flags.BoolVar(&l.useSeparateMevBoost, "use-separate-mev-boost", false, "use separate mev-boost and mev-boost-relay services")
+	flags.BoolVar(&l.withRbuilder, "rbuilder", false, "include rbuilder in the recipe")
 	return flags
 }
 
@@ -132,6 +135,10 @@ func (l *L1Recipe) Apply(ctx *ExContext) *Component {
 			BeaconClient:     "beacon",
 			ValidationServer: mevBoostValidationServer,
 		})
+	}
+
+	if l.withRbuilder {
+		component.AddComponent(ctx, &Rbuilder{})
 	}
 
 	component.RunContenderIfEnabled(ctx)
