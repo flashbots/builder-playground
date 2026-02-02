@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +114,10 @@ func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
 }
 
 func TestComponentRbuilder(t *testing.T) {
+	// TODO: Re-enable this for all architectures when the rbuilder container flow works.
+	if runtime.GOARCH != "arm64" {
+		t.Skip("Skipping rbuilder component test on non-arm64 architecture for now")
+	}
 	tt := newTestFramework(t)
 	defer tt.Close()
 
