@@ -536,10 +536,19 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 
 	// create the bind volumes
 	var createdVolumes []string
-	for localPath, volumeName := range s.VolumesMapped {
-		dockerVolumeName := d.createVolumeName(s.Name, volumeName)
-		volumes[dockerVolumeName] = localPath
-		createdVolumes = append(createdVolumes, dockerVolumeName)
+	for localPath, volume := range s.VolumesMapped {
+		dockerVolumeName := d.createVolumeName(s.Name, volume.Name)
+
+		if volume.IsLocal {
+			absPath, err := d.out.CreateDir(dockerVolumeName)
+			if err != nil {
+				return nil, nil, err
+			}
+			volumes[absPath] = localPath
+		} else {
+			volumes[dockerVolumeName] = localPath
+			createdVolumes = append(createdVolumes, dockerVolumeName)
+		}
 	}
 
 	volumesInLine := []string{}
@@ -803,8 +812,8 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 
 	// Create the volumes for this service
 	volumesMapped := map[string]string{}
-	for pathInDocker, volumeName := range ss.VolumesMapped {
-		volumeDirAbsPath, err := d.createVolumeDir(ss.Name, volumeName)
+	for pathInDocker, volume := range ss.VolumesMapped {
+		volumeDirAbsPath, err := d.createVolumeDir(ss.Name, volume.Name)
 		if err != nil {
 			return err
 		}

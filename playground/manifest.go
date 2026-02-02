@@ -359,8 +359,8 @@ type Service struct {
 	Ports    []*Port    `json:"ports,omitempty"`
 	NodeRefs []*NodeRef `json:"node_refs,omitempty"`
 
-	FilesMapped   map[string]string `json:"files_mapped,omitempty"`
-	VolumesMapped map[string]string `json:"volumes_mapped,omitempty"`
+	FilesMapped   map[string]string        `json:"files_mapped,omitempty"`
+	VolumesMapped map[string]*VolumeMapped `json:"volumes_mapped,omitempty"`
 
 	Tag        string `json:"tag,omitempty"`
 	Image      string `json:"image,omitempty"`
@@ -371,6 +371,11 @@ type Service struct {
 
 	postHook *postHook
 	release  *release
+}
+
+type VolumeMapped struct {
+	Name    string
+	IsLocal bool
 }
 
 type DependsOnCondition string
@@ -495,11 +500,18 @@ func (s *Service) WithArgs(args ...string) *Service {
 	return s
 }
 
-func (s *Service) WithVolume(name, localPath string) *Service {
-	if s.VolumesMapped == nil {
-		s.VolumesMapped = make(map[string]string)
+func (s *Service) WithVolume(name, localPath string, isLocalTri ...bool) *Service {
+	isLocal := false
+	if len(isLocalTri) == 1 {
+		isLocal = isLocalTri[0]
 	}
-	s.VolumesMapped[localPath] = name
+	if s.VolumesMapped == nil {
+		s.VolumesMapped = make(map[string]*VolumeMapped)
+	}
+	s.VolumesMapped[localPath] = &VolumeMapped{
+		Name:    name,
+		IsLocal: isLocal,
+	}
 	return s
 }
 

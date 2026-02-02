@@ -113,21 +113,19 @@ func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
 }
 
 func TestComponentRbuilder(t *testing.T) {
-	t.Skip("It needs rbuilder on PATH")
-
 	tt := newTestFramework(t)
-	tt.e2eRootDir = "/tmp" // TODO: This is required because output folder issues (#344) and the ipc issues
-
 	defer tt.Close()
 
 	recipe := &rbuilderRecipe{
 		l1: &L1Recipe{
-			blockTime:     12 * time.Second,
-			useNativeReth: true,
+			// TODO: We might have to change things from rbuilder-config
+			// if the time is lower than 12 seconds.
+			blockTime: 12 * time.Second,
 		},
 	}
 
 	tt.test(recipe, nil)
+	tt.WaitForBlock("el", 1)
 }
 
 func TestRecipeBuilderHub(t *testing.T) {
@@ -300,6 +298,28 @@ func (tt *testFramework) Close() {
 		if err := tt.runner.Stop(false); err != nil {
 			tt.t.Log(err)
 		}
+	}
+}
+
+// WaitForBlock waits for the specified service to reach the given block number.
+// It polls the service's HTTP endpoint and fails the test if the block isn't
+// reached within 1 minute or if the runner exits with an error.
+func (tt *testFramework) WaitForBlock(service string, num uint64) {
+	elService := tt.runner.manifest.MustGetService(service)
+	rethURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+
+	waitForBlockCh := make(chan error)
+	go func() {
+		waitForBlockCh <- waitForBlock(rethURL, num, 1*time.Minute)
+	}()
+
+	select {
+	case err := <-waitForBlockCh:
+		if err != nil {
+			tt.t.Fatal(err)
+		}
+	case err := <-tt.runner.ExitErr():
+		tt.t.Fatal(err)
 	}
 }
 

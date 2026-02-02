@@ -61,7 +61,7 @@ type YAMLServiceConfig struct {
 	Files map[string]string `yaml:"files,omitempty"`
 
 	// Volumes is a map of container path to volume name
-	Volumes map[string]string `yaml:"volumes,omitempty"`
+	Volumes map[string]*YAMLVolumeMappedConfig `yaml:"volumes,omitempty"`
 
 	// DependsOn is a list of services this service depends on
 	// Format: "service_name" or "service_name:condition" where condition is "healthy" or "running"
@@ -73,6 +73,11 @@ type YAMLServiceConfig struct {
 
 	// Release specifies a GitHub release to download for host execution
 	Release *YAMLReleaseConfig `yaml:"release,omitempty"`
+}
+
+type YAMLVolumeMappedConfig struct {
+	Name    string `yaml:"name"`
+	IsLocal bool   `yaml:"isLocal"`
 }
 
 // YAMLReleaseConfig specifies a GitHub release to download
@@ -425,8 +430,8 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig) {
 		applyFilesToService(svc, config.Files)
 	}
 	if config.Volumes != nil {
-		for containerPath, volumeName := range config.Volumes {
-			svc.WithVolume(volumeName, containerPath)
+		for containerPath, volumeMapping := range config.Volumes {
+			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
 		}
 	}
 	if config.DependsOn != nil {
@@ -538,8 +543,8 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig) *Service {
 		applyFilesToService(svc, config.Files)
 	}
 	if config.Volumes != nil {
-		for containerPath, volumeName := range config.Volumes {
-			svc.WithVolume(volumeName, containerPath)
+		for containerPath, volumeMapping := range config.Volumes {
+			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
 		}
 	}
 	if config.DependsOn != nil {

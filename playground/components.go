@@ -505,7 +505,7 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 		WithRelease(rethELRelease).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth")
+		WithVolume("data", "/data_reth", true)
 
 	UseHealthmon(component, svc, healthmonExecution)
 
@@ -759,18 +759,17 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 	// TODO: Handle error
 	ctx.Output.WriteFile("rbuilder-config.toml", rbuilderConfigToml)
 
-	svc := component.NewService("rbuilder").
+	component.NewService("rbuilder").
 		WithImage("ghcr.io/flashbots/rbuilder").
-		WithTag("1.3.5").
+		WithTag("sha-51e6940").
 		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
 		WithArtifact("/data/genesis.json", "genesis.json").
-		WithVolume("data", "/data_reth"). // TODO. This works but we do not have any primitive yet for sharing volumes
+		WithVolume("shared:el-data", "/data_reth", true).
 		DependsOnHealthy("el").
 		WithArgs(
-			"run", "./rbuilder-config.toml",
+			"run", "/data/rbuilder-config.toml",
 		)
 
-	svc.HostPath = "rbuilder" // TODO: Once we have official cross-compile releases we can use the releaser
 	return component
 }
 
