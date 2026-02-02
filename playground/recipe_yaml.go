@@ -77,7 +77,7 @@ type YAMLServiceConfig struct {
 
 type YAMLVolumeMappedConfig struct {
 	Name    string `yaml:"name"`
-	IsLocal bool   `yaml:"isLocal"`
+	IsLocal bool   `yaml:"is_local"`
 }
 
 // YAMLReleaseConfig specifies a GitHub release to download
