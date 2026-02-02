@@ -7,7 +7,7 @@ import (
 
 // MustGetPlaygroundTempDir creates the temp dir for
 func MustGetPlaygroundTempDir() string {
-	return makeDir(os.TempDir(), "builder-playground")
+	return makeDir(TempPlaygroundDirPath())
 }
 
 // MustGetSessionTempDir creates and returns the temp dir for the session under
@@ -20,6 +20,24 @@ func MustGetTempSessionDir(sessionID string) string {
 // the temp session dir.
 func MustGetVolumeDir(sessionID, volumeName string) string {
 	return makeDir(MustGetTempSessionDir(sessionID), "bind-mount-volumes", volumeName)
+}
+
+// GetSessionTempDirCount returns the number of session directories under the playground temp dir.
+func GetSessionTempDirCount() int {
+	playgroundDir := TempPlaygroundDirPath()
+	entries, _ := os.ReadDir(playgroundDir)
+	var count int
+	for _, entry := range entries {
+		if entry.IsDir() {
+			count++
+		}
+	}
+	return count
+}
+
+// TempPlaygroundDirPath returns the temp playground dir path.
+func TempPlaygroundDirPath() string {
+	return filepath.Join(os.TempDir(), "builder-playground")
 }
 
 func makeDir(segments ...string) string {

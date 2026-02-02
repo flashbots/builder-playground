@@ -101,3 +101,48 @@ func TestMakeDirIdempotent(t *testing.T) {
 	r.NoError(err)
 	r.True(info.IsDir(), "expected %s to be a directory", result1)
 }
+
+func TestGetSessionTempDirCount(t *testing.T) {
+	r := require.New(t)
+
+	playgroundDir := MustGetPlaygroundTempDir()
+
+	// Get initial count
+	initialCount := GetSessionTempDirCount()
+
+	r.Zero(initialCount)
+
+	// Create some test session directories
+	testSessions := []string{
+		"test-session-count-1",
+		"test-session-count-2",
+		"test-session-count-3",
+	}
+	for _, session := range testSessions {
+		os.Mkdir(filepath.Join(playgroundDir, session), 0o755)
+	}
+	defer func() {
+		for _, session := range testSessions {
+			os.RemoveAll(filepath.Join(playgroundDir, session))
+		}
+	}()
+
+	// Count should increase by the number of sessions we created
+	r.Equal(initialCount+3, GetSessionTempDirCount())
+}
+
+func TestGetSessionTempDirCount_IgnoresFiles(t *testing.T) {
+	r := require.New(t)
+
+	playgroundDir := MustGetPlaygroundTempDir()
+
+	initialCount := GetSessionTempDirCount()
+
+	// Create a file (not a directory)
+	testFile := filepath.Join(playgroundDir, "test-file-not-session.txt")
+	os.WriteFile(testFile, []byte("test"), 0o644)
+	defer os.Remove(testFile)
+
+	// Count should not change since files are ignored
+	r.Equal(initialCount, GetSessionTempDirCount())
+}
