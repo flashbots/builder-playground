@@ -624,6 +624,7 @@ func runIt(recipe playground.Recipe) error {
 
 	components := recipe.Apply(exCtx)
 	svcManager := playground.NewManifest(sessionID, components)
+	svcManager.Bootnode = exCtx.Bootnode
 
 	// generate the dot graph
 	slog.Debug("Generating dot graph...")
