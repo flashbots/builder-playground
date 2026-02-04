@@ -252,6 +252,9 @@ func (d *LocalRunner) Stop(keepResources bool) error {
 	// stop all the handles
 	for _, handle := range d.handles {
 		ticker := time.NewTicker(time.Millisecond * 200)
+		time.AfterFunc(time.Second*5, func() {
+			ticker.Stop()
+		})
 		for range ticker.C {
 			if handle.Process == nil {
 				continue
