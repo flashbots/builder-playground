@@ -251,7 +251,15 @@ func (d *LocalRunner) ExitErr() <-chan error {
 func (d *LocalRunner) Stop(keepResources bool) error {
 	// stop all the handles
 	for _, handle := range d.handles {
-		handle.Process.Kill()
+		ticker := time.NewTicker(time.Millisecond * 200)
+		for range ticker.C {
+			if handle.Process == nil {
+				continue
+			}
+			handle.Process.Kill()
+			ticker.Stop()
+			break
+		}
 	}
 	return StopSession(d.manifest.ID, keepResources)
 }
