@@ -249,22 +249,30 @@ func (d *LocalRunner) ExitErr() <-chan error {
 }
 
 func (d *LocalRunner) Stop(keepResources bool) error {
-	// stop all the handles
+	// kill all the processes ran by playground on the host
 	for _, handle := range d.handles {
-		ticker := time.NewTicker(time.Millisecond * 200)
-		time.AfterFunc(time.Second*5, func() {
-			ticker.Stop()
-		})
-		for range ticker.C {
-			if handle.Process == nil {
-				continue
-			}
-			handle.Process.Kill()
-			ticker.Stop()
-			break
-		}
+		killProcessWithHandle(handle)
 	}
 	return StopSession(d.manifest.ID, keepResources)
+}
+
+// killProcessWithHandle waits for the process to be set in the handle
+// and avoids a panic, with a hard timeout.
+func killProcessWithHandle(handle *exec.Cmd) {
+	ticker := time.NewTicker(time.Millisecond * 200)
+	defer ticker.Stop()
+	timeout := time.After(time.Second * 5)
+	for {
+		select {
+		case <-ticker.C:
+			if handle.Process != nil {
+				handle.Process.Kill()
+				return
+			}
+		case <-timeout:
+			return
+		}
+	}
 }
 
 func StopSession(id string, keepResources bool) error {
