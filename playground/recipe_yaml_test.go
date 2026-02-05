@@ -176,7 +176,7 @@ func TestApplyServiceOverrides(t *testing.T) {
 		Env:   map[string]string{"KEY": "value"},
 	}
 
-	applyServiceOverrides(svc, config)
+	applyServiceOverrides(svc, config, nil)
 
 	require.Equal(t, "new-image", svc.Image)
 	require.Equal(t, "new-tag", svc.Tag)
@@ -194,7 +194,7 @@ func TestApplyServiceOverrides_PartialOverride(t *testing.T) {
 
 	config := &YAMLServiceConfig{Tag: "new-tag"}
 
-	applyServiceOverrides(svc, config)
+	applyServiceOverrides(svc, config, nil)
 
 	require.Equal(t, "original-image", svc.Image)
 	require.Equal(t, "new-tag", svc.Tag)
@@ -206,7 +206,7 @@ func TestApplyDependsOn(t *testing.T) {
 
 	dependsOn := []string{"db:healthy", "cache:running", "other"}
 
-	applyDependsOn(svc, dependsOn)
+	applyDependsOn(svc, dependsOn, nil)
 
 	require.Len(t, svc.DependsOn, 3)
 	require.Equal(t, "db", svc.DependsOn[0].Name)
@@ -215,6 +215,21 @@ func TestApplyDependsOn(t *testing.T) {
 	require.Equal(t, DependsOnConditionRunning, svc.DependsOn[1].Condition)
 	require.Equal(t, "other", svc.DependsOn[2].Name)
 	require.Equal(t, DependsOnConditionHealthy, svc.DependsOn[2].Condition)
+}
+
+func TestApplyDependsOn_ComponentServiceFormat(t *testing.T) {
+	svc := &Service{Name: "test-svc"}
+
+	// Test component.service format - should extract just the service name
+	dependsOn := []string{"reth.el:healthy", "merger.merger-builder:running"}
+
+	applyDependsOn(svc, dependsOn, nil)
+
+	require.Len(t, svc.DependsOn, 2)
+	require.Equal(t, "el", svc.DependsOn[0].Name)
+	require.Equal(t, DependsOnConditionHealthy, svc.DependsOn[0].Condition)
+	require.Equal(t, "merger-builder", svc.DependsOn[1].Name)
+	require.Equal(t, DependsOnConditionRunning, svc.DependsOn[1].Condition)
 }
 
 func TestCreateServiceFromConfig(t *testing.T) {
@@ -228,7 +243,7 @@ func TestCreateServiceFromConfig(t *testing.T) {
 		DependsOn:  []string{"db:healthy"},
 	}
 
-	svc := createServiceFromConfig("my-service", config)
+	svc := createServiceFromConfig("my-service", config, nil)
 
 	require.Equal(t, "my-service", svc.Name)
 	require.Equal(t, "test-image", svc.Image)
@@ -394,7 +409,7 @@ func TestApplyServiceOverrides_AllFields(t *testing.T) {
 		},
 	}
 
-	applyServiceOverrides(svc, config)
+	applyServiceOverrides(svc, config, nil)
 
 	require.Equal(t, "new-image", svc.Image)
 	require.Equal(t, "v2.0.0", svc.Tag)
@@ -437,7 +452,7 @@ func TestCreateServiceFromConfig_WithHostPath(t *testing.T) {
 		HostPath: "/usr/local/bin/myapp",
 	}
 
-	svc := createServiceFromConfig("my-service", config)
+	svc := createServiceFromConfig("my-service", config, nil)
 
 	require.Equal(t, "/usr/local/bin/myapp", svc.HostPath)
 }
@@ -452,7 +467,7 @@ func TestCreateServiceFromConfig_WithRelease(t *testing.T) {
 		},
 	}
 
-	svc := createServiceFromConfig("my-service", config)
+	svc := createServiceFromConfig("my-service", config, nil)
 
 	require.NotNil(t, svc.release)
 	require.Equal(t, "myapp", svc.release.Name)
@@ -464,7 +479,7 @@ func TestCreateServiceFromConfig_WithVolumes(t *testing.T) {
 		Volumes: map[string]string{"/data": "myvolume"},
 	}
 
-	svc := createServiceFromConfig("my-service", config)
+	svc := createServiceFromConfig("my-service", config, nil)
 
 	require.NotNil(t, svc.VolumesMapped)
 	require.Equal(t, "myvolume", svc.VolumesMapped["/data"])
@@ -805,7 +820,7 @@ func TestApplyDependsOn_UnknownCondition(t *testing.T) {
 
 	dependsOn := []string{"db:unknown-condition"}
 
-	applyDependsOn(svc, dependsOn)
+	applyDependsOn(svc, dependsOn, nil)
 
 	require.Len(t, svc.DependsOn, 1)
 	require.Equal(t, "db", svc.DependsOn[0].Name)

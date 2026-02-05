@@ -248,10 +248,10 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 
 				if existingService != nil {
 					// Override existing service properties
-					applyServiceOverrides(existingService, serviceConfig)
+					applyServiceOverrides(existingService, serviceConfig, component)
 				} else {
 					// Create new service
-					newService := createServiceFromConfig(serviceName, serviceConfig)
+					newService := createServiceFromConfig(serviceName, serviceConfig, component)
 					existingComponent.Services = append(existingComponent.Services, newService)
 				}
 			}
@@ -403,7 +403,7 @@ func containsRemovedServiceRef(arg string, removedServices map[string]bool) bool
 }
 
 // applyServiceOverrides applies YAML config overrides to an existing service
-func applyServiceOverrides(svc *Service, config *YAMLServiceConfig) {
+func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Component) {
 	if config.Image != "" {
 		svc.Image = config.Image
 	}
@@ -438,7 +438,7 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig) {
 		}
 	}
 	if config.DependsOn != nil {
-		applyDependsOn(svc, config.DependsOn)
+		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
 		svc.HostPath = config.HostPath
@@ -495,7 +495,8 @@ func applyFilesToService(svc *Service, files map[string]string) {
 
 // applyDependsOn parses depends_on entries and adds them to the service
 // Supports formats: "service", "service:condition", "component.service", "component.service:condition"
-func applyDependsOn(svc *Service, dependsOn []string) {
+// The root parameter is used to validate component names when using the component.service format.
+func applyDependsOn(svc *Service, dependsOn []string, root *Component) {
 	for _, dep := range dependsOn {
 		parts := strings.SplitN(dep, ":", 2)
 		serviceName := parts[0]
@@ -508,7 +509,16 @@ func applyDependsOn(svc *Service, dependsOn []string) {
 		if strings.Contains(serviceName, ".") {
 			componentParts := strings.SplitN(serviceName, ".", 2)
 			if len(componentParts) == 2 {
+				componentName := componentParts[0]
 				serviceName = componentParts[1]
+
+				// Validate that the component exists
+				if root != nil && findComponent(root, componentName) == nil {
+					slog.Warn("depends_on references unknown component",
+						"component", componentName,
+						"service", serviceName,
+						"full_reference", dep)
+				}
 			}
 		}
 
@@ -524,7 +534,7 @@ func applyDependsOn(svc *Service, dependsOn []string) {
 }
 
 // createServiceFromConfig creates a new service from YAML config
-func createServiceFromConfig(name string, config *YAMLServiceConfig) *Service {
+func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Component) *Service {
 	svc := &Service{
 		Name:     name,
 		Args:     []string{},
@@ -564,7 +574,7 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig) *Service {
 		}
 	}
 	if config.DependsOn != nil {
-		applyDependsOn(svc, config.DependsOn)
+		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
 		svc.HostPath = config.HostPath
