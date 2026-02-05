@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/flashbots/builder-playground/utils"
 )
 
 func Logs(ctx context.Context, sessionName, serviceName string, follow bool) error {
@@ -53,18 +54,21 @@ func Logs(ctx context.Context, sessionName, serviceName string, follow bool) err
 
 // findServiceLogFile looks for a log file for the given service
 func findServiceLogFile(serviceName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
+	logsDir, err := utils.GetLogsDir()
 	if err != nil {
 		return "", err
 	}
 
-	// Check the default devnet output directory (under .local/state)
-	logPath := filepath.Join(homeDir, ".local", "state", "builder-playground", "devnet", "logs", serviceName+".log")
+	logPath := filepath.Join(logsDir, serviceName+".log")
 	if _, err := os.Stat(logPath); err == nil {
 		return logPath, nil
 	}
 
 	// Fallback: legacy location
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
 	logPath = filepath.Join(homeDir, "devnet", "logs", serviceName+".log")
 	if _, err := os.Stat(logPath); err == nil {
 		return logPath, nil
