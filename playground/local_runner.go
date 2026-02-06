@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -306,6 +307,9 @@ func StopSession(id string, keepResources bool) error {
 		args = append(args, "down", "-v") // removes containers and volumes
 	}
 	cmd := exec.CommandContext(context.Background(), "docker", args...)
+	// Isolate terminal signals from the child process and avoid weird force-kill cases
+	// and leftovers.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var outBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &outBuf
@@ -322,8 +326,6 @@ func ForceKillSession(id string, keepResources bool) {
 	cmd := exec.Command("sh", "-c",
 		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d", id, stopGracePeriodSecs))
 	_ = cmd.Run()
-	// Below call helps with cleanup.
-	StopSession(id, keepResources)
 }
 
 func GetLocalSessions() ([]string, error) {

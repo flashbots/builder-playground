@@ -33,12 +33,13 @@ func newSignalHandler(sigCh chan os.Signal) *signalHandler {
 func (sh *signalHandler) handle() {
 	for sig := range sh.sigCh {
 		sh.sigCount++
-		if sh.sigCount == 1 {
+		switch sh.sigCount {
+		case 1:
 			slog.Warn("received signal, shutting down gracefully... (interrupt 2 more times force kill)", "signal", sig)
 			sh.gracefulCtxCancel()
-		} else if sh.sigCount == 2 {
+		case 2:
 			slog.Warn("received signal again (interrupt 1 more time to force kill)", "signal", sig)
-		} else if sh.sigCount >= 3 {
+		case 3:
 			slog.Warn("force killing...")
 			sh.forceKillCtxCancel()
 		}
