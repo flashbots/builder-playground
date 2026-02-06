@@ -253,13 +253,15 @@ func (d *LocalRunner) ExitErr() <-chan error {
 }
 
 func (d *LocalRunner) Stop(keepResources bool) error {
-	// keep an eye on the force kill requests
+	// Keep an eye on the force kill requests.
 	go func() {
 		<-mainctx.GetForceKillCtx().Done()
 		d.stopAllProcessesWithSignal(os.Kill)
 		ForceKillSession(d.manifest.ID, keepResources)
 	}()
-	// kill all the processes ran by playground on the host
+	// Kill all the processes ran by playground on the host.
+	// Possible to make a more graceful exit with os.Interrupt here
+	// but preferring a quick exit for now.
 	d.stopAllProcessesWithSignal(os.Kill)
 	return StopSession(d.manifest.ID, keepResources)
 }
