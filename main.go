@@ -836,6 +836,8 @@ func runIt(recipe playground.Recipe) error {
 		timerCh = time.After(timeout)
 	}
 
+	exitCode := 1
+
 	select {
 	case <-ctx.Done():
 		log.Println("Stopping...")
@@ -844,6 +846,7 @@ func runIt(recipe playground.Recipe) error {
 	case err := <-watchdogErr:
 		log.Println("Watchdog failed:", err)
 	case <-timerCh:
+		exitCode = 0
 		log.Println("Timeout reached")
 	}
 
@@ -851,6 +854,6 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
 
-	os.Exit(1)
+	os.Exit(exitCode)
 	return nil
 }

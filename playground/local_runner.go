@@ -283,7 +283,6 @@ func stopProcessWithSignal(handle *exec.Cmd, signal os.Signal) {
 		case <-ticker.C:
 			if handle.Process != nil {
 				handle.Process.Signal(signal)
-				handle.Process.Wait()
 				return
 			}
 		case <-timeout:
