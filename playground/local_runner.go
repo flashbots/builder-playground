@@ -60,7 +60,8 @@ type LocalRunner struct {
 	handles []*exec.Cmd
 
 	// exitError signals when one of the services fails
-	exitErr chan error
+	exitErr     chan error
+	exitErrOnce sync.Once
 
 	// tasks tracks the status of each service
 	tasksMtx        sync.Mutex
@@ -242,7 +243,7 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	}
 
 	if status == TaskStatusDie {
-		d.exitErr <- fmt.Errorf("container %s failed", name)
+		d.sendExitError(fmt.Errorf("container %s failed", name))
 	}
 
 	d.emitCallback(name, status)
@@ -251,6 +252,13 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 
 func (d *LocalRunner) ExitErr() <-chan error {
 	return d.exitErr
+}
+
+func (d *LocalRunner) sendExitError(err error) {
+	d.exitErrOnce.Do(func() {
+		d.exitErr <- err
+		close(d.exitErr)
+	})
 }
 
 func (d *LocalRunner) Stop(keepResources bool) error {
@@ -813,7 +821,7 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			slog.Info("Waiting for dependency", "service", ss.Name, "dependency", originalName)
+			slog.Info("Waiting for host dependency", "service", ss.Name, "dependency", originalName)
 
 			for {
 				select {
@@ -839,7 +847,7 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			slog.Info("Waiting for dependency", "service", ss.Name, "dependency", depName)
+			slog.Info("Waiting for container dependency", "service", ss.Name, "dependency", depName)
 
 			for {
 				select {
@@ -936,7 +944,7 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 			if lastLines != "" {
 				errMsg += fmt.Sprintf("\n  Last output:\n%s", lastLines)
 			}
-			d.exitErr <- fmt.Errorf("%s", errMsg)
+			d.sendExitError(fmt.Errorf("%s", errMsg))
 		}
 	}()
 
