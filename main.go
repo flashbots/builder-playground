@@ -272,10 +272,14 @@ var logsCmd = &cobra.Command{
 				cmd.SilenceUsage = true
 				fmt.Println("multiple sessions found: please use 'list' to see all and provide like 'logs <session-name> <service-name>'")
 				return fmt.Errorf("invalid amount of args")
-			} else {
-				if err := playground.Logs(ctx, "", args[0], follow); err != nil && !strings.Contains(err.Error(), "signal") {
-					return fmt.Errorf("failed to show logs: %w", err)
-				}
+			}
+			// Use the session name if exactly one exists
+			sessionName := ""
+			if len(sessions) == 1 {
+				sessionName = sessions[0]
+			}
+			if err := playground.Logs(ctx, sessionName, args[0], follow); err != nil && !strings.Contains(err.Error(), "signal") {
+				return fmt.Errorf("failed to show logs: %w", err)
 			}
 		case 2:
 			if err := playground.Logs(ctx, args[0], args[1], follow); err != nil && !strings.Contains(err.Error(), "signal") {
@@ -529,64 +533,77 @@ func main() {
 	// Set the embedded custom recipes filesystem for the playground package
 	playground.CustomRecipesFS = customRecipesFS
 
-	// Add common flags to startCmd for YAML recipe files
-	startCmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
-	startCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-	startCmd.Flags().BoolVar(&watchdog, "watchdog", false, "enable watchdog")
-	startCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
-	startCmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
-	startCmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
-	startCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
-	startCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
-	startCmd.Flags().DurationVar(&timeout, "timeout", 0, "")
-	startCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
-	startCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
-	startCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
-	startCmd.Flags().StringVar(&networkName, "network", "", "network name")
-	startCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
-	startCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
-	startCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
-	startCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
-	startCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
-	startCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
-	startCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
-	startCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
+	// Helper to add common recipe flags to a command
+	addCommonRecipeFlags := func(cmd *cobra.Command) {
+		cmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
+		cmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
+		cmd.Flags().BoolVar(&watchdog, "watchdog", false, "enable watchdog")
+		cmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
+		cmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
+		cmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
+		cmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
+		cmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
+		cmd.Flags().DurationVar(&timeout, "timeout", 0, "")
+		cmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
+		cmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
+		cmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
+		cmd.Flags().StringVar(&networkName, "network", "", "network name")
+		cmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
+		cmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
+		cmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
+		cmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
+		cmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
+		cmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
+		cmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+		cmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
+	}
 
-	for _, recipe := range recipes {
+	// Add common flags to startCmd for YAML recipe files
+	addCommonRecipeFlags(startCmd)
+
+	// Load custom recipes first to get their flags and descriptions
+	customRecipeNames, _ := playground.GetEmbeddedCustomRecipes()
+	customRecipeDisplayNames := make(map[playground.Recipe]string)
+	var customRecipes []playground.Recipe
+
+	for _, crName := range customRecipeNames {
+		customRecipe, cleanup, err := playground.LoadCustomRecipe(crName, recipes)
+		if err != nil {
+			continue // Skip invalid custom recipes
+		}
+		customRecipes = append(customRecipes, customRecipe)
+		customRecipeDisplayNames[customRecipe] = crName
+		cleanup() // Clean up temp dir from flag discovery
+	}
+
+	// Register all recipes (built-in and custom) as subcommands
+	for _, recipe := range append(recipes, customRecipes...) {
+		recipe := recipe // capture loop variable
+		recipeName := recipe.Name()
+		customRecipeName, isCustom := customRecipeDisplayNames[recipe]
+		if isCustom {
+			recipeName = customRecipeName
+		}
+
 		recipeCmd := &cobra.Command{
-			Use:   recipe.Name(),
+			Use:   recipeName,
 			Short: recipe.Description(),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				// Silence usage for internal errors, not flag parsing errors
 				cmd.SilenceUsage = true
+				if isCustom {
+					// Custom recipes need to be reloaded when actually running
+					actualRecipe, cleanupRun, err := playground.LoadCustomRecipe(customRecipeName, recipes)
+					if err != nil {
+						return err
+					}
+					defer cleanupRun()
+					return runIt(actualRecipe)
+				}
 				return runIt(recipe)
 			},
 		}
-		// add the flags from the recipe
 		recipeCmd.Flags().AddFlagSet(recipe.Flags())
-		// add the common flags
-		recipeCmd.Flags().BoolVar(&keepFlag, "keep", false, "keep the containers and resources after the session is stopped")
-		recipeCmd.Flags().StringVar(&outputFlag, "output", "", "Output folder for the artifacts")
-		recipeCmd.Flags().BoolVar(&watchdog, "watchdog", false, "enable watchdog")
-		recipeCmd.Flags().StringArrayVar(&withOverrides, "override", []string{}, "override a service's config")
-		recipeCmd.Flags().BoolVar(&dryRun, "dry-run", false, "dry run the recipe")
-		recipeCmd.Flags().BoolVar(&dryRun, "mise-en-place", false, "mise en place mode")
-		recipeCmd.Flags().Uint64Var(&genesisDelayFlag, "genesis-delay", playground.MinimumGenesisDelay, "")
-		recipeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive mode")
-		recipeCmd.Flags().DurationVar(&timeout, "timeout", 0, "") // Used for CI
-		recipeCmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "log level")
-		recipeCmd.Flags().BoolVar(&bindExternal, "bind-external", false, "bind host ports to external interface")
-		recipeCmd.Flags().BoolVar(&withPrometheus, "with-prometheus", false, "whether to gather the Prometheus metrics")
-		recipeCmd.Flags().StringVar(&networkName, "network", "", "network name")
-		recipeCmd.Flags().Var(&labels, "labels", "list of labels to apply to the resources")
-		recipeCmd.Flags().BoolVar(&disableLogs, "disable-logs", false, "disable logs")
-		recipeCmd.Flags().StringVar(&platform, "platform", "", "docker platform to use")
-		recipeCmd.Flags().BoolVar(&contenderEnabled, "contender", false, "spam nodes with contender")
-		recipeCmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
-		recipeCmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams -- accepts names like \"el\"")
-		recipeCmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
-		recipeCmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts, the input should the account's private key in hexadecimal format prefixed with 0x, the account is added to L1 and to L2 (if present)")
-
+		addCommonRecipeFlags(recipeCmd)
 		startCmd.AddCommand(recipeCmd)
 	}
 
@@ -735,6 +752,11 @@ func runIt(recipe playground.Recipe) error {
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
+
+	// Register force kill handler for this session (triggered on 3rd interrupt)
+	mainctx.RegisterForceKillHandler(func() {
+		playground.ForceKillSession(sessionID)
+	})
 
 	ctx := mainctx.Get()
 

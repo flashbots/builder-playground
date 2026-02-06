@@ -31,7 +31,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const defaultNetworkName = "ethplayground"
+const (
+	defaultNetworkName  = "ethplayground"
+	stopGracePeriodSecs = 30
+)
 
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
@@ -293,6 +296,13 @@ func StopSession(id string, keepResources bool) error {
 	}
 
 	return nil
+}
+
+// ForceKillSession stops all containers for a session with a short grace period (SIGTERM, wait, SIGKILL)
+func ForceKillSession(id string) {
+	cmd := exec.Command("sh", "-c",
+		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d", id, stopGracePeriodSecs))
+	_ = cmd.Run()
 }
 
 func GetLocalSessions() ([]string, error) {
@@ -587,8 +597,9 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// Add volume mount for the output directory
 		"volumes": volumesInLine,
 		// Add the ethereum network
-		"networks": []string{d.config.NetworkName},
-		"labels":   labels,
+		"networks":          []string{d.config.NetworkName},
+		"labels":            labels,
+		"stop_grace_period": fmt.Sprintf("%ds", stopGracePeriodSecs),
 	}
 
 	if d.config.Platform != "" {
@@ -765,6 +776,16 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 		if d.isHostService(originalName) {
 			depSvc := d.manifest.MustGetService(originalName)
 
+			// Determine the URL to check for health
+			var checkURL string
+			if depSvc.ReadyCheck != nil && depSvc.ReadyCheck.QueryURL != "" {
+				checkURL = depSvc.ReadyCheck.QueryURL
+			} else if httpPort, ok := depSvc.GetPort("http"); ok {
+				checkURL = fmt.Sprintf("http://localhost:%d", httpPort.HostPort)
+			} else {
+				return fmt.Errorf("host service %s has no ready_check or http port defined", originalName)
+			}
+
 			// Poll until the dependency is healthy
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
@@ -778,11 +799,8 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 				default:
 				}
 
-				// For host services, check HTTP endpoint directly
-				httpPort := depSvc.MustGetPort("http")
-				url := fmt.Sprintf("http://localhost:%d", httpPort.HostPort)
 				client := &http.Client{Timeout: 2 * time.Second}
-				resp, err := client.Get(url)
+				resp, err := client.Get(checkURL)
 				if err == nil {
 					resp.Body.Close()
 					if resp.StatusCode < 500 {
@@ -871,16 +889,26 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 		// this should not happen, log it
 		logOutput = os.Stdout
 	}
+	logPath := logOutput.Name()
 
 	// Output the command itself to the log output for debugging purposes
-	fmt.Fprint(logOutput, strings.Join(args, " ")+"\n\n")
+	cmdLine := execPath + " " + strings.Join(args, " ")
+	fmt.Fprint(logOutput, cmdLine+"\n\n")
 
 	cmd.Stdout = logOutput
 	cmd.Stderr = logOutput
 
 	go func() {
 		if err := cmd.Run(); err != nil {
-			d.exitErr <- fmt.Errorf("error running host service %s: %w", ss.Name, err)
+			// Read last lines from log file for context
+			lastLines := readLastLines(logPath, 10)
+			slog.Error("Host service failed", "service", ss.Name, "error", err)
+			errMsg := fmt.Sprintf("service %s failed:\n  Command: %s\n  Log file: %s\n  Exit error: %v",
+				ss.Name, execPath, logPath, err)
+			if lastLines != "" {
+				errMsg += fmt.Sprintf("\n  Last output:\n%s", lastLines)
+			}
+			d.exitErr <- fmt.Errorf("%s", errMsg)
 		}
 	}()
 
@@ -1234,4 +1262,20 @@ func findServiceByName(client *client.Client, ctx context.Context, serviceName s
 	}
 
 	return "", nil
+}
+
+// readLastLines reads the last n lines from a file
+func readLastLines(filePath string, n int) string {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(data), "\n")
+	if len(lines) <= n {
+		return "    " + strings.Join(lines, "\n    ")
+	}
+
+	lastLines := lines[len(lines)-n-1:]
+	return "    " + strings.Join(lastLines, "\n    ")
 }

@@ -220,9 +220,15 @@ func (s *Manifest) Validate(out *output) error {
 	for _, ss := range s.Services {
 		// override ready checks that use the QueryURL feature
 		if ss.ReadyCheck != nil && ss.ReadyCheck.QueryURL != "" {
-			// this is a sugar coat syntax for the components, if a component wants to perform
-			// a raw ready check on a url (this is, only validate it exists) we convert that into
-			// a sidecar container with curl installed that performs the check.
+			// For host-executed services, keep the ReadyCheck on the service itself
+			// so that local_runner can poll it directly. Don't create a sidecar.
+			if ss.HostPath != "" {
+				// Host services are polled directly by local_runner.go waitForDependencies()
+				// Keep the ReadyCheck intact for that polling logic
+				continue
+			}
+
+			// For Docker services, create a sidecar container with curl to perform the check.
 			// Note that we have to remove the ready check from the main service.
 			sidecarName := ss.Name + "_readycheck"
 
@@ -231,8 +237,9 @@ func (s *Manifest) Validate(out *output) error {
 			ss.WithLabel(healthCheckSidecarLabel, sidecarName)
 
 			// the url supplied by the service will bind to localhost, we have to change it
-			// to point to the main service name so that the sidecar can reach it
-			readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", ss.Name)
+			// to point to the main service name so that the sidecar can reach it.
+			targetHost := ss.Name
+			readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", targetHost)
 			readyCheck.Test = []string{"CMD", "curl", readyCheck.QueryURL}
 
 			s.NewService(sidecarName).
@@ -464,7 +471,7 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 	for _, p := range s.Ports {
 		if p.Name == name {
 			if p.Port != portNumber {
-				panic(fmt.Sprintf("port %s already defined with different port number", name))
+				panic(fmt.Sprintf("port %s already defined with different port number (existing: %d, new: %d) on service %s", name, p.Port, portNumber, s.Name))
 			}
 			if p.Protocol != protocol {
 				// If they have different protocols they are different ports
