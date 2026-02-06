@@ -317,6 +317,7 @@ func ForceKillSession(id string, keepResources bool) {
 	cmd := exec.Command("sh", "-c",
 		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d", id, stopGracePeriodSecs))
 	_ = cmd.Run()
+	// Below call helps with cleanup.
 	StopSession(id, keepResources)
 }
 
