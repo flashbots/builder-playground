@@ -332,7 +332,7 @@ func StopSession(id string, keepResources bool) error {
 // ForceKillSession stops all containers for a session with a short grace period (SIGTERM, wait, SIGKILL)
 func ForceKillSession(id string, keepResources bool) {
 	cmd := exec.Command("sh", "-c",
-		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d", id, stopGracePeriodSecs))
+		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -s SIGKILL", id))
 	_ = cmd.Run()
 }
 
