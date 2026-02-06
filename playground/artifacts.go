@@ -515,16 +515,16 @@ type output struct {
 }
 
 func NewOutput(dst string) (*output, error) {
-	homeDir, err := GetHomeDir()
+	playgroundDir, err := utils.GetPlaygroundDir()
 	if err != nil {
 		return nil, err
 	}
 	if dst == "" {
 		// Use the $HOMEDIR/devnet as the default output
-		dst = filepath.Join(homeDir, "devnet")
+		dst = filepath.Join(playgroundDir, "devnet")
 	}
 
-	out := &output{dst: dst, homeDir: homeDir}
+	out := &output{dst: dst, homeDir: playgroundDir}
 
 	// check if the output directory exists
 	if out.Exists("") {
@@ -717,33 +717,6 @@ type encObject interface {
 
 type sszObject interface {
 	MarshalSSZ() ([]byte, error)
-}
-
-func GetHomeDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("error getting user home directory: %w", err)
-	}
-
-	// if legacy .playground dir is present, remove it
-	if err := os.RemoveAll(filepath.Join(homeDir, ".playground")); err != nil {
-		return "", err
-	}
-
-	stateHomeDir := os.Getenv("XDG_STATE_HOME")
-	if stateHomeDir == "" {
-		stateHomeDir = filepath.Join(homeDir, ".local", "state")
-	}
-
-	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(stateHomeDir, "builder-playground")
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
-		return "", fmt.Errorf("error creating output directory: %v", err)
-	}
-
-	return customHomeDir, nil
 }
 
 type EnodeAddr struct {

@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/flashbots/builder-playground/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -239,7 +240,7 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 		t.Fatal(err)
 	}
 
-	homeDir, err := GetHomeDir()
+	homeDir, err := utils.GetPlaygroundDir()
 	require.NoError(t, err)
 
 	o := &output{

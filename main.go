@@ -272,10 +272,14 @@ var logsCmd = &cobra.Command{
 				cmd.SilenceUsage = true
 				fmt.Println("multiple sessions found: please use 'list' to see all and provide like 'logs <session-name> <service-name>'")
 				return fmt.Errorf("invalid amount of args")
-			} else {
-				if err := playground.Logs(ctx, "", args[0], follow); err != nil && !strings.Contains(err.Error(), "signal") {
-					return fmt.Errorf("failed to show logs: %w", err)
-				}
+			}
+			// Use the session name if exactly one exists
+			sessionName := ""
+			if len(sessions) == 1 {
+				sessionName = sessions[0]
+			}
+			if err := playground.Logs(ctx, sessionName, args[0], follow); err != nil && !strings.Contains(err.Error(), "signal") {
+				return fmt.Errorf("failed to show logs: %w", err)
 			}
 		case 2:
 			if err := playground.Logs(ctx, args[0], args[1], follow); err != nil && !strings.Contains(err.Error(), "signal") {
