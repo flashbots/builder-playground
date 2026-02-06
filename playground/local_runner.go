@@ -253,12 +253,18 @@ func (d *LocalRunner) ExitErr() <-chan error {
 }
 
 func (d *LocalRunner) Stop(keepResources bool) error {
+	forceKillCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// Keep an eye on the force kill requests.
-	go func() {
-		<-mainctx.GetForceKillCtx().Done()
-		d.stopAllProcessesWithSignal(os.Kill)
-		ForceKillSession(d.manifest.ID, keepResources)
-	}()
+	go func(ctx context.Context) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-mainctx.GetForceKillCtx().Done():
+			d.stopAllProcessesWithSignal(os.Kill)
+			ForceKillSession(d.manifest.ID, keepResources)
+		}
+	}(forceKillCtx)
 	// Kill all the processes ran by playground on the host.
 	// Possible to make a more graceful exit with os.Interrupt here
 	// but preferring a quick exit for now.
@@ -915,6 +921,11 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 
 	go func() {
 		if err := cmd.Run(); err != nil {
+			// If the playground is being exited, ignore the exit error info
+			// to make the outputs less confusing.
+			if mainctx.IsExiting() {
+				return
+			}
 			// Read last lines from log file for context
 			lastLines := readLastLines(logPath, 10)
 			slog.Error("Host service failed", "service", ss.Name, "error", err)

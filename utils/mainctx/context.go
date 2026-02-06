@@ -69,3 +69,15 @@ func Get() context.Context {
 func GetForceKillCtx() context.Context {
 	return sigHandler.forceKillCtx
 }
+
+// IsExiting returns true if the process has received an exit signal.
+func IsExiting() bool {
+	select {
+	case <-sigHandler.gracefulCtx.Done():
+		return true
+	case <-sigHandler.forceKillCtx.Done():
+		return true
+	default:
+		return false
+	}
+}

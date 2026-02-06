@@ -836,24 +836,24 @@ func runIt(recipe playground.Recipe) error {
 		timerCh = time.After(timeout)
 	}
 
-	exitCode := 1
+	var exitErr error
 
 	select {
 	case <-ctx.Done():
-		log.Println("Stopping...")
-	case err := <-dockerRunner.ExitErr():
-		log.Println("Service failed:", err)
-	case err := <-watchdogErr:
-		log.Println("Watchdog failed:", err)
+		exitErr = ctx.Err()
+		slog.Warn("Stopping...", "error", exitErr)
+	case exitErr = <-dockerRunner.ExitErr():
+		slog.Warn("Service failed", "error", exitErr)
+	case exitErr = <-watchdogErr:
+		slog.Warn("Watchdog failed", "error", exitErr)
 	case <-timerCh:
-		exitCode = 0
-		log.Println("Timeout reached")
+		// no exit error
+		slog.Info("Timeout reached! Exiting...")
 	}
 
 	if err := dockerRunner.Stop(keepFlag); err != nil {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
 
-	os.Exit(exitCode)
-	return nil
+	return exitErr
 }
