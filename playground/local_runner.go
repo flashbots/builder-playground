@@ -31,7 +31,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const defaultNetworkName = "ethplayground"
+const (
+	defaultNetworkName  = "ethplayground"
+	stopGracePeriodSecs = 30
+)
 
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
@@ -274,6 +277,13 @@ func StopSession(id string, keepResources bool) error {
 	}
 
 	return nil
+}
+
+// ForceKillSession stops all containers for a session with a short grace period (SIGTERM, wait, SIGKILL)
+func ForceKillSession(id string) {
+	cmd := exec.Command("sh", "-c",
+		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d", id, stopGracePeriodSecs))
+	_ = cmd.Run()
 }
 
 func GetLocalSessions() ([]string, error) {
@@ -568,8 +578,9 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// Add volume mount for the output directory
 		"volumes": volumesInLine,
 		// Add the ethereum network
-		"networks": []string{d.config.NetworkName},
-		"labels":   labels,
+		"networks":          []string{d.config.NetworkName},
+		"labels":            labels,
+		"stop_grace_period": fmt.Sprintf("%ds", stopGracePeriodSecs),
 	}
 
 	if d.config.Platform != "" {
