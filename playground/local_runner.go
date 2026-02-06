@@ -27,6 +27,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/flashbots/builder-playground/utils"
+	"github.com/flashbots/builder-playground/utils/mainctx"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -252,16 +253,26 @@ func (d *LocalRunner) ExitErr() <-chan error {
 }
 
 func (d *LocalRunner) Stop(keepResources bool) error {
+	// keep an eye on the force kill requests
+	go func() {
+		<-mainctx.GetForceKillCtx().Done()
+		d.stopAllProcessesWithSignal(os.Kill)
+		ForceKillSession(d.manifest.ID, keepResources)
+	}()
 	// kill all the processes ran by playground on the host
-	for _, handle := range d.handles {
-		killProcessWithHandle(handle)
-	}
+	d.stopAllProcessesWithSignal(os.Kill)
 	return StopSession(d.manifest.ID, keepResources)
 }
 
-// killProcessWithHandle waits for the process to be set in the handle
+func (d *LocalRunner) stopAllProcessesWithSignal(signal os.Signal) {
+	for _, handle := range d.handles {
+		stopProcessWithSignal(handle, signal)
+	}
+}
+
+// stopProcessWithSignal waits for the process to be set in the handle
 // and avoids a panic, with a hard timeout.
-func killProcessWithHandle(handle *exec.Cmd) {
+func stopProcessWithSignal(handle *exec.Cmd, signal os.Signal) {
 	ticker := time.NewTicker(time.Millisecond * 200)
 	defer ticker.Stop()
 	timeout := time.After(time.Second * 5)
@@ -269,7 +280,8 @@ func killProcessWithHandle(handle *exec.Cmd) {
 		select {
 		case <-ticker.C:
 			if handle.Process != nil {
-				handle.Process.Kill()
+				handle.Process.Signal(signal)
+				handle.Process.Wait()
 				return
 			}
 		case <-timeout:
@@ -299,10 +311,11 @@ func StopSession(id string, keepResources bool) error {
 }
 
 // ForceKillSession stops all containers for a session with a short grace period (SIGTERM, wait, SIGKILL)
-func ForceKillSession(id string) {
+func ForceKillSession(id string, keepResources bool) {
 	cmd := exec.Command("sh", "-c",
 		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d", id, stopGracePeriodSecs))
 	_ = cmd.Run()
+	StopSession(id, keepResources)
 }
 
 func GetLocalSessions() ([]string, error) {

@@ -753,11 +753,6 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 
-	// Register force kill handler for this session (triggered on 3rd interrupt)
-	mainctx.RegisterForceKillHandler(func() {
-		playground.ForceKillSession(sessionID)
-	})
-
 	ctx := mainctx.Get()
 
 	slog.Info("Starting services... ⏳", "session-id", svcManager.ID)
@@ -855,5 +850,7 @@ func runIt(recipe playground.Recipe) error {
 	if err := dockerRunner.Stop(keepFlag); err != nil {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
+
+	os.Exit(1)
 	return nil
 }
