@@ -753,11 +753,6 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 
-	// Register force kill handler for this session (triggered on 3rd interrupt)
-	mainctx.RegisterForceKillHandler(func() {
-		playground.ForceKillSession(sessionID)
-	})
-
 	ctx := mainctx.Get()
 
 	slog.Info("Starting services... ⏳", "session-id", svcManager.ID)
@@ -841,19 +836,24 @@ func runIt(recipe playground.Recipe) error {
 		timerCh = time.After(timeout)
 	}
 
+	var exitErr error
+
 	select {
 	case <-ctx.Done():
-		log.Println("Stopping...")
-	case err := <-dockerRunner.ExitErr():
-		log.Println("Service failed:", err)
-	case err := <-watchdogErr:
-		log.Println("Watchdog failed:", err)
+		exitErr = ctx.Err()
+		slog.Warn("Stopping...", "error", exitErr)
+	case exitErr = <-dockerRunner.ExitErr():
+		slog.Warn("Service failed", "error", exitErr)
+	case exitErr = <-watchdogErr:
+		slog.Warn("Watchdog failed", "error", exitErr)
 	case <-timerCh:
-		log.Println("Timeout reached")
+		// no exit error
+		slog.Info("Timeout reached! Exiting...")
 	}
 
 	if err := dockerRunner.Stop(keepFlag); err != nil {
 		return fmt.Errorf("failed to stop docker: %w", err)
 	}
-	return nil
+
+	return exitErr
 }

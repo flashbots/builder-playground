@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/flashbots/builder-playground/utils"
+	"github.com/flashbots/builder-playground/utils/mainctx"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -58,7 +60,8 @@ type LocalRunner struct {
 	handles []*exec.Cmd
 
 	// exitError signals when one of the services fails
-	exitErr chan error
+	exitErr     chan error
+	exitErrOnce sync.Once
 
 	// tasks tracks the status of each service
 	tasksMtx        sync.Mutex
@@ -240,7 +243,7 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	}
 
 	if status == TaskStatusDie {
-		d.exitErr <- fmt.Errorf("container %s failed", name)
+		d.sendExitError(fmt.Errorf("container %s failed", name))
 	}
 
 	d.emitCallback(name, status)
@@ -251,14 +254,56 @@ func (d *LocalRunner) ExitErr() <-chan error {
 	return d.exitErr
 }
 
+func (d *LocalRunner) sendExitError(err error) {
+	d.exitErrOnce.Do(func() {
+		d.exitErr <- err
+		close(d.exitErr)
+	})
+}
+
 func (d *LocalRunner) Stop(keepResources bool) error {
-	// stop all the handles
+	forceKillCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Keep an eye on the force kill requests.
+	go func(ctx context.Context) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-mainctx.GetForceKillCtx().Done():
+			d.stopAllProcessesWithSignal(os.Kill)
+			ForceKillSession(d.manifest.ID, keepResources)
+		}
+	}(forceKillCtx)
+	// Kill all the processes ran by playground on the host.
+	// Possible to make a more graceful exit with os.Interrupt here
+	// but preferring a quick exit for now.
+	d.stopAllProcessesWithSignal(os.Kill)
+	return StopSession(d.manifest.ID, keepResources)
+}
+
+func (d *LocalRunner) stopAllProcessesWithSignal(signal os.Signal) {
 	for _, handle := range d.handles {
-		if handle.Process != nil {
-			handle.Process.Kill()
+		stopProcessWithSignal(handle, signal)
+	}
+}
+
+// stopProcessWithSignal waits for the process to be set in the handle
+// and avoids a panic, with a hard timeout.
+func stopProcessWithSignal(handle *exec.Cmd, signal os.Signal) {
+	ticker := time.NewTicker(time.Millisecond * 200)
+	defer ticker.Stop()
+	timeout := time.After(time.Second * 5)
+	for {
+		select {
+		case <-ticker.C:
+			if handle.Process != nil {
+				handle.Process.Signal(signal)
+				return
+			}
+		case <-timeout:
+			return
 		}
 	}
-	return StopSession(d.manifest.ID, keepResources)
 }
 
 func StopSession(id string, keepResources bool) error {
@@ -270,6 +315,9 @@ func StopSession(id string, keepResources bool) error {
 		args = append(args, "down", "-v") // removes containers and volumes
 	}
 	cmd := exec.CommandContext(context.Background(), "docker", args...)
+	// Isolate terminal signals from the child process and avoid weird force-kill cases
+	// and leftovers.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var outBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &outBuf
@@ -282,9 +330,9 @@ func StopSession(id string, keepResources bool) error {
 }
 
 // ForceKillSession stops all containers for a session with a short grace period (SIGTERM, wait, SIGKILL)
-func ForceKillSession(id string) {
+func ForceKillSession(id string, keepResources bool) {
 	cmd := exec.Command("sh", "-c",
-		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d", id, stopGracePeriodSecs))
+		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -s SIGKILL", id))
 	_ = cmd.Run()
 }
 
@@ -773,7 +821,7 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			slog.Info("Waiting for dependency", "service", ss.Name, "dependency", originalName)
+			slog.Info("Waiting for host dependency", "service", ss.Name, "dependency", originalName)
 
 			for {
 				select {
@@ -799,7 +847,7 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			slog.Info("Waiting for dependency", "service", ss.Name, "dependency", depName)
+			slog.Info("Waiting for container dependency", "service", ss.Name, "dependency", depName)
 
 			for {
 				select {
@@ -883,6 +931,11 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 
 	go func() {
 		if err := cmd.Run(); err != nil {
+			// If the playground is being exited, ignore the exit error info
+			// to make the outputs less confusing.
+			if mainctx.IsExiting() {
+				return
+			}
 			// Read last lines from log file for context
 			lastLines := readLastLines(logPath, 10)
 			slog.Error("Host service failed", "service", ss.Name, "error", err)
@@ -891,7 +944,7 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 			if lastLines != "" {
 				errMsg += fmt.Sprintf("\n  Last output:\n%s", lastLines)
 			}
-			d.exitErr <- fmt.Errorf("%s", errMsg)
+			d.sendExitError(fmt.Errorf("%s", errMsg))
 		}
 	}()
 
