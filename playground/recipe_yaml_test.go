@@ -830,3 +830,57 @@ func TestApplyDependsOn_UnknownCondition(t *testing.T) {
 	require.Equal(t, "db", svc.DependsOn[0].Name)
 	require.Equal(t, DependsOnConditionHealthy, svc.DependsOn[0].Condition)
 }
+
+func TestApplyServiceOverrides_WithReplaceArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		replaceArgs []string
+		expected    []string
+	}{
+		{
+			name:        "replace single pair",
+			args:        []string{"--port", "8080", "--host", "localhost"},
+			replaceArgs: []string{"--port", "9090"},
+			expected:    []string{"--port", "9090", "--host", "localhost"},
+		},
+		{
+			name:        "replace multiple pairs",
+			args:        []string{"--port", "8080", "--host", "localhost", "--timeout", "30"},
+			replaceArgs: []string{"--port", "9090", "--timeout", "60"},
+			expected:    []string{"--port", "9090", "--host", "localhost", "--timeout", "60"},
+		},
+		{
+			name:        "replace with subcommand present",
+			args:        []string{"node", "--datadir", "/old", "--port", "8080"},
+			replaceArgs: []string{"--datadir", "/new", "--port", "9090"},
+			expected:    []string{"node", "--datadir", "/new", "--port", "9090"},
+		},
+		{
+			name:        "replace last flag",
+			args:        []string{"--first", "value1", "--second", "value2"},
+			replaceArgs: []string{"--second", "newvalue2"},
+			expected:    []string{"--first", "value1", "--second", "newvalue2"},
+		},
+		{
+			name:        "empty replace args",
+			args:        []string{"--port", "8080"},
+			replaceArgs: []string{},
+			expected:    []string{"--port", "8080"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &Service{
+				Name: "test-svc",
+				Args: tt.args,
+			}
+			config := &YAMLServiceConfig{
+				ReplaceArgs: tt.replaceArgs,
+			}
+			applyServiceOverrides(svc, config, nil)
+			require.Equal(t, tt.expected, svc.Args)
+		})
+	}
+}
