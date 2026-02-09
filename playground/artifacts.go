@@ -17,18 +17,18 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/OffchainLabs/prysm/v6/config/params"
-	"github.com/OffchainLabs/prysm/v6/crypto/bls"
-	"github.com/OffchainLabs/prysm/v6/runtime/interop"
-	"github.com/OffchainLabs/prysm/v6/runtime/version"
+	"github.com/OffchainLabs/prysm/v7/config/params"
+	"github.com/OffchainLabs/prysm/v7/crypto/bls"
+	"github.com/OffchainLabs/prysm/v7/runtime/interop"
+	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/flashbots/builder-playground/utils"
@@ -47,20 +47,69 @@ var (
 // otherwise, some blocks are missed.
 var MinimumGenesisDelay uint64 = 10
 
-//go:embed utils/rollup.json
-var opRollupConfig []byte
+//go:embed utils/rollup-isthmus.json
+var opRollupConfigIsthmus []byte
 
-//go:embed utils/genesis.json
-var opGenesis []byte
+//go:embed utils/rollup-jovian.json
+var opRollupConfigJovian []byte
 
-//go:embed utils/state.json
-var opState []byte
+//go:embed utils/genesis-isthmus.json
+var opGenesisIsthmus []byte
+
+//go:embed utils/genesis-jovian.json
+var opGenesisJovian []byte
+
+//go:embed utils/state-isthmus.json
+var opStateIsthmus []byte
+
+//go:embed utils/state-jovian.json
+var opStateJovian []byte
 
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
 
 //go:embed utils/builderhub-config.yaml
 var defaultBuilderHubConfig []byte
+
+// l2ForkConfig holds the selected L2 fork configuration files
+type l2ForkConfig struct {
+	genesis      []byte  // L2 genesis JSON
+	rollupConfig []byte  // L2 rollup config JSON
+	state        []byte  // L1 state allocations for OP contracts
+	forkBlock    *uint64 // block number to activate jovian (nil = at genesis or disabled)
+}
+
+// selectL2Fork selects the appropriate L2 fork configuration based on applyLatestL2Fork:
+//   - nil: Use isthmus (default, no jovian)
+//   - 0: Use jovian at genesis
+//   - > 0: Use isthmus at genesis, activate jovian at block N
+func selectL2Fork(applyLatestL2Fork *uint64) *l2ForkConfig {
+	if applyLatestL2Fork == nil {
+		// Default: isthmus only (no jovian)
+		return &l2ForkConfig{
+			genesis:      opGenesisIsthmus,
+			rollupConfig: opRollupConfigIsthmus,
+			state:        opStateIsthmus,
+			forkBlock:    nil,
+		}
+	}
+	if *applyLatestL2Fork == 0 {
+		// Jovian at genesis
+		return &l2ForkConfig{
+			genesis:      opGenesisJovian,
+			rollupConfig: opRollupConfigJovian,
+			state:        opStateJovian,
+			forkBlock:    nil,
+		}
+	}
+	// Isthmus at genesis, jovian at block N
+	return &l2ForkConfig{
+		genesis:      opGenesisIsthmus,
+		rollupConfig: opRollupConfigIsthmus,
+		state:        opStateIsthmus,
+		forkBlock:    applyLatestL2Fork,
+	}
+}
 
 type ArtifactsBuilder struct {
 	// Shared options
@@ -75,6 +124,10 @@ type ArtifactsBuilder struct {
 	l2Enabled            bool
 	applyLatestL2Fork    *uint64
 	opBlockTimeInSeconds uint64
+
+	// Extra files to copy to artifacts (artifactName -> sourcePath)
+	extraFiles     map[string]string
+	predeploysFile string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -119,6 +172,34 @@ func (b *ArtifactsBuilder) OpBlockTime(blockTimeSeconds uint64) *ArtifactsBuilde
 func (b *ArtifactsBuilder) PrefundedAccounts(accounts []string) *ArtifactsBuilder {
 	b.prefundedAccounts = accounts
 	return b
+}
+
+func (b *ArtifactsBuilder) WithExtraFile(artifactName, sourcePath string) *ArtifactsBuilder {
+	if b.extraFiles == nil {
+		b.extraFiles = make(map[string]string)
+	}
+	b.extraFiles[artifactName] = sourcePath
+	return b
+}
+
+func (b *ArtifactsBuilder) PredeployFile(filePath string) *ArtifactsBuilder {
+	b.predeploysFile = filePath
+	return b
+}
+
+func (b *ArtifactsBuilder) loadPredeploys() (types.GenesisAlloc, error) {
+	if b.predeploysFile == "" {
+		return types.GenesisAlloc{}, nil
+	}
+	data, err := os.ReadFile(b.predeploysFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read predeploy file: %w", err)
+	}
+	var alloc types.GenesisAlloc
+	if err := json.Unmarshal(data, &alloc); err != nil {
+		return nil, fmt.Errorf("failed to parse predeploy JSON: %w", err)
+	}
+	return alloc, nil
 }
 
 var staticPrefundedAccounts = []string{
@@ -169,7 +250,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		return err
 	}
 
-	genesisTime := uint64(time.Now().Add(time.Duration(b.genesisDelay) * time.Second).Unix())
+	genesisTime := time.Now().Add(time.Duration(b.genesisDelay) * time.Second)
 	config := params.BeaconConfig()
 	config.ElectraForkEpoch = 0
 
@@ -183,8 +264,10 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	// Apply Optimism pre-state
+	var l2Fork *l2ForkConfig
 	if b.l2Enabled {
-		opAllocs, err := readOptimismL1Allocs()
+		l2Fork = selectL2Fork(b.applyLatestL2Fork)
+		opAllocs, err := readOptimismL1Allocs(l2Fork.state)
 		if err != nil {
 			return err
 		}
@@ -196,9 +279,9 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	var v int
 	if b.applyLatestL1Fork {
-		v = version.Electra
+		v = version.Fulu
 	} else {
-		v = version.Deneb
+		v = version.Electra
 	}
 
 	slog.Debug("Generating keys...")
@@ -231,7 +314,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	slog.Debug("Writing artifacts...")
 	err = out.WriteBatch(map[string]interface{}{
-		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
+		"testnet/config.yaml":                 params.ConfigToYaml(config),
 		"testnet/genesis.ssz":                 state,
 		"genesis.json":                        gen,
 		"jwtsecret":                           defaultJWTToken,
@@ -248,24 +331,34 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	if b.l2Enabled {
 		// We have to start slightly ahead of L1 genesis time
-		opTimestamp := genesisTime + 2
+		opTimestamp := uint64(genesisTime.Unix()) + 2
 
-		// If the latest fork is applied, convert the time to a fork time.
-		// If the time is 0, apply on genesis, the fork time is zero.
-		// if the time b is > 0, apply b * opBlockTimeSeconds to the genesis time.
+		// Calculate fork time if activating jovian at a specific block
 		var forkTime *uint64
-		if b.applyLatestL2Fork != nil {
+		if l2Fork.forkBlock != nil {
 			forkTime = new(uint64)
-
-			if *b.applyLatestL2Fork != 0 {
-				*forkTime = opTimestamp + b.opBlockTimeInSeconds*(*b.applyLatestL2Fork)
-			} else {
-				*forkTime = 0
-			}
+			*forkTime = opTimestamp + b.opBlockTimeInSeconds*(*l2Fork.forkBlock)
 		}
 
-		// Update the allocs to include the same prefunded accounts as the L1 genesis.
-		allocs := types.GenesisAlloc{}
+		// Unmarshal the genesis to get the existing alloc (which contains predeploys)
+		var originalGenesis core.Genesis
+		if err := json.Unmarshal(l2Fork.genesis, &originalGenesis); err != nil {
+			return fmt.Errorf("failed to unmarshal original opGenesis: %w", err)
+		}
+
+		// Update the allocs to include the same prefunded accounts as the L1 genesis,
+		// while preserving the existing predeploys from the template
+		allocs := originalGenesis.Alloc
+
+		// Add custom predeploys, if any
+		predeploys, err := b.loadPredeploys()
+		if err != nil {
+			return err
+		}
+		if err := appendPredeploysToAlloc(&allocs, predeploys); err != nil {
+			return err
+		}
+
 		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
 			return err
 		}
@@ -276,19 +369,17 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 			"alloc":     allocs,
 		}
 		if forkTime != nil {
-			// We need to enable prague on the EL to enable the engine v4 calls
 			input["config"] = map[string]interface{}{
-				"pragueTime":  *forkTime,
-				"isthmusTime": *forkTime,
+				"jovianTime": *forkTime,
 			}
 		}
 
-		newOpGenesis, err := overrideJSON(opGenesis, input)
+		newOpGenesis, err := overrideJSON(l2Fork.genesis, input)
 		if err != nil {
 			return err
 		}
 
-		// the hash of the genesis has changed beause of the timestamp so we need to account for that
+		// the hash of the genesis has changed because of the timestamp so we need to account for that
 		opGenesisBlock, err := toOpBlock(newOpGenesis)
 		if err != nil {
 			return fmt.Errorf("failed to convert opGenesis to block: %w", err)
@@ -317,10 +408,10 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 			},
 		}
 		if forkTime != nil {
-			rollupInput["isthmus_time"] = *forkTime
+			rollupInput["jovian_time"] = *forkTime
 		}
 
-		newOpRollup, err := overrideJSON(opRollupConfig, rollupInput)
+		newOpRollup, err := overrideJSON(l2Fork.rollupConfig, rollupInput)
 		if err != nil {
 			return err
 		}
@@ -330,6 +421,17 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		}
 		if err := out.WriteFile("rollup.json", newOpRollup); err != nil {
 			return err
+		}
+	}
+
+	// Copy extra files from recipe directory
+	for artifactName, sourcePath := range b.extraFiles {
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			return fmt.Errorf("failed to read extra file %s: %w", sourcePath, err)
+		}
+		if err := out.WriteFile(artifactName, data); err != nil {
+			return fmt.Errorf("failed to write extra file %s: %w", artifactName, err)
 		}
 	}
 
@@ -352,7 +454,7 @@ func overrideJSON(jsonData []byte, overrides map[string]interface{}) ([]byte, er
 	mergeMap(original, overrides)
 
 	// Marshal back to JSON
-	result, err := json.Marshal(original)
+	result, err := json.MarshalIndent(original, "", " ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal modified JSON: %w", err)
 	}
@@ -417,16 +519,16 @@ type output struct {
 }
 
 func NewOutput(dst string) (*output, error) {
-	homeDir, err := GetHomeDir()
+	playgroundDir, err := utils.GetPlaygroundDir()
 	if err != nil {
 		return nil, err
 	}
 	if dst == "" {
 		// Use the $HOMEDIR/devnet as the default output
-		dst = filepath.Join(homeDir, "devnet")
+		dst = filepath.Join(playgroundDir, "devnet")
 	}
 
-	out := &output{dst: dst, homeDir: homeDir}
+	out := &output{dst: dst, homeDir: playgroundDir}
 
 	// check if the output directory exists
 	if out.Exists("") {
@@ -436,6 +538,10 @@ func NewOutput(dst string) (*output, error) {
 	}
 
 	return out, nil
+}
+
+func (o *output) Dst() string {
+	return o.dst
 }
 
 func (o *output) Read(path string) (string, error) {
@@ -617,68 +723,6 @@ type sszObject interface {
 	MarshalSSZ() ([]byte, error)
 }
 
-func GetHomeDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("error getting user home directory: %w", err)
-	}
-
-	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(homeDir, ".playground")
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
-		return "", fmt.Errorf("error creating output directory: %v", err)
-	}
-
-	return customHomeDir, nil
-}
-
-func convert(config *params.BeaconChainConfig) ([]byte, error) {
-	val := reflect.ValueOf(config).Elem()
-
-	vals := []string{}
-	for i := 0; i < val.NumField(); i++ {
-		// only encode the public fields with tag 'yaml'
-		tag := val.Type().Field(i).Tag.Get("yaml")
-		if tag == "" {
-			continue
-		}
-
-		// decode the type of the value
-		typ := val.Field(i).Type()
-
-		var resTyp string
-		if isByteArray(typ) || isByteSlice(typ) {
-			resTyp = "0x" + hex.EncodeToString(val.Field(i).Bytes())
-		} else {
-			// basic types
-			switch typ.Kind() {
-			case reflect.String:
-				resTyp = val.Field(i).String()
-			case reflect.Uint8, reflect.Uint64:
-				resTyp = fmt.Sprintf("%d", val.Field(i).Uint())
-			case reflect.Int:
-				resTyp = fmt.Sprintf("%d", val.Field(i).Int())
-			default:
-				panic(fmt.Sprintf("BUG: unsupported type, tag '%s', err: '%s'", tag, val.Field(i).Kind()))
-			}
-		}
-
-		vals = append(vals, fmt.Sprintf("%s: %s", tag, resTyp))
-	}
-
-	return []byte(strings.Join(vals, "\n")), nil
-}
-
-func isByteArray(t reflect.Type) bool {
-	return t.Kind() == reflect.Array && t.Elem().Kind() == reflect.Uint8
-}
-
-func isByteSlice(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
-}
-
 type EnodeAddr struct {
 	PrivKey  *ecdsa.PrivateKey
 	Artifact string
@@ -719,11 +763,11 @@ func (o *output) GetEnodeAddr() *EnodeAddr {
 	return &EnodeAddr{PrivKey: privKey, Artifact: fileName}
 }
 
-func readOptimismL1Allocs() (types.GenesisAlloc, error) {
+func readOptimismL1Allocs(opStateData []byte) (types.GenesisAlloc, error) {
 	var state struct {
 		L1StateDump string `json:"l1StateDump"`
 	}
-	if err := json.Unmarshal(opState, &state); err != nil {
+	if err := json.Unmarshal(opStateData, &state); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal opState: %w", err)
 	}
 
@@ -766,6 +810,16 @@ func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []strin
 			Balance: prefundedBalance,
 			Nonce:   1,
 		}
+	}
+	return nil
+}
+
+func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.GenesisAlloc) error {
+	for addr, account := range predeploys {
+		if _, exists := (*allocs)[addr]; exists {
+			return fmt.Errorf("custom predeploy address %s conflicts with existing alloc entry in template genesis", addr.Hex())
+		}
+		(*allocs)[addr] = account
 	}
 	return nil
 }

@@ -4,3 +4,7 @@ builder-playground
 **/.DS_Store
 e2e-test/
 playground/cache
+playground/utils/op-deployer*
+playground/utils/state.json
+recipe/
+/playground.yaml

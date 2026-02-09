@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"maps"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +16,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"text/template"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
@@ -25,11 +28,15 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/flashbots/builder-playground/utils"
+	"github.com/flashbots/builder-playground/utils/mainctx"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
 
-const defaultNetworkName = "ethplayground"
+const (
+	defaultNetworkName  = "ethplayground"
+	stopGracePeriodSecs = 30
+)
 
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
@@ -53,7 +60,8 @@ type LocalRunner struct {
 	handles []*exec.Cmd
 
 	// exitError signals when one of the services fails
-	exitErr chan error
+	exitErr     chan error
+	exitErrOnce sync.Once
 
 	// tasks tracks the status of each service
 	tasksMtx        sync.Mutex
@@ -116,11 +124,14 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	// TODO: it feels a bit weird to have all this logic on the new command. We should split it later on.
 	for _, service := range cfg.Manifest.Services {
 		if service.Labels[useHostExecutionLabel] == "true" {
-			// If the service wants to run on the host, it must implement the ReleaseService interface
-			// which provides functions to download the release artifact.
+			// If HostPath is already set, use it directly (user-provided binary path)
+			if service.HostPath != "" {
+				continue
+			}
+			// Otherwise, download the release artifact
 			releaseArtifact := service.release
 			if releaseArtifact == nil {
-				return nil, fmt.Errorf("service '%s' must implement the ReleaseService interface", service.Name)
+				return nil, fmt.Errorf("service '%s' requires either host_path or release configuration", service.Name)
 			}
 			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
 			if err != nil {
@@ -189,7 +200,14 @@ func (d *LocalRunner) checkAndUpdateReadiness() {
 			}
 		}
 	}
-	close(d.allTasksReadyCh)
+
+	select {
+	case <-d.allTasksReadyCh:
+		// Channel is already closed, do nothing
+	default:
+		// Channel is not closed yet, close it
+		close(d.allTasksReadyCh)
+	}
 }
 
 func (d *LocalRunner) WaitForReady(ctx context.Context) error {
@@ -225,7 +243,7 @@ func (d *LocalRunner) updateTaskStatus(name string, status TaskStatus) {
 	}
 
 	if status == TaskStatusDie {
-		d.exitErr <- fmt.Errorf("container %s failed", name)
+		d.sendExitError(fmt.Errorf("container %s failed", name))
 	}
 
 	d.emitCallback(name, status)
@@ -236,12 +254,56 @@ func (d *LocalRunner) ExitErr() <-chan error {
 	return d.exitErr
 }
 
+func (d *LocalRunner) sendExitError(err error) {
+	d.exitErrOnce.Do(func() {
+		d.exitErr <- err
+		close(d.exitErr)
+	})
+}
+
 func (d *LocalRunner) Stop(keepResources bool) error {
-	// stop all the handles
-	for _, handle := range d.handles {
-		handle.Process.Kill()
-	}
+	forceKillCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Keep an eye on the force kill requests.
+	go func(ctx context.Context) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-mainctx.GetForceKillCtx().Done():
+			d.stopAllProcessesWithSignal(os.Kill)
+			ForceKillSession(d.manifest.ID, keepResources)
+		}
+	}(forceKillCtx)
+	// Kill all the processes ran by playground on the host.
+	// Possible to make a more graceful exit with os.Interrupt here
+	// but preferring a quick exit for now.
+	d.stopAllProcessesWithSignal(os.Kill)
 	return StopSession(d.manifest.ID, keepResources)
+}
+
+func (d *LocalRunner) stopAllProcessesWithSignal(signal os.Signal) {
+	for _, handle := range d.handles {
+		stopProcessWithSignal(handle, signal)
+	}
+}
+
+// stopProcessWithSignal waits for the process to be set in the handle
+// and avoids a panic, with a hard timeout.
+func stopProcessWithSignal(handle *exec.Cmd, signal os.Signal) {
+	ticker := time.NewTicker(time.Millisecond * 200)
+	defer ticker.Stop()
+	timeout := time.After(time.Second * 5)
+	for {
+		select {
+		case <-ticker.C:
+			if handle.Process != nil {
+				handle.Process.Signal(signal)
+				return
+			}
+		case <-timeout:
+			return
+		}
+	}
 }
 
 func StopSession(id string, keepResources bool) error {
@@ -253,6 +315,9 @@ func StopSession(id string, keepResources bool) error {
 		args = append(args, "down", "-v") // removes containers and volumes
 	}
 	cmd := exec.CommandContext(context.Background(), "docker", args...)
+	// Isolate terminal signals from the child process and avoid weird force-kill cases
+	// and leftovers.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var outBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &outBuf
@@ -262,6 +327,13 @@ func StopSession(id string, keepResources bool) error {
 	}
 
 	return nil
+}
+
+// ForceKillSession stops all containers for a session with a short grace period (SIGTERM, wait, SIGKILL)
+func ForceKillSession(id string, keepResources bool) {
+	cmd := exec.Command("sh", "-c",
+		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -s SIGKILL", id))
+	_ = cmd.Run()
 }
 
 func GetLocalSessions() ([]string, error) {
@@ -369,37 +441,45 @@ func (d *LocalRunner) applyTemplate(s *Service) ([]string, map[string]string, er
 		return defaultPort
 	}
 
+	resolveAddr := func(targetSvc *Service, port *Port, protocol, user string) string {
+		// - Service runs on host:
+		//   A: target is inside docker: access with localhost:hostPort
+		//   B: target is on the host: access with localhost:hostPort
+		// - Service runs inside docker:
+		//   C: target is inside docker: access it with DNS service:port
+		//   D: target is on the host: access it with host.docker.internal:hostPort
+		if d.isHostService(s.Name) {
+			// A and B
+			return printAddr(protocol, "localhost", port.HostPort, user)
+		} else {
+			if d.isHostService(targetSvc.Name) {
+				// D
+				return printAddr(protocol, "host.docker.internal", port.HostPort, user)
+			}
+			// C
+			return printAddr(protocol, targetSvc.Name, port.Port, user)
+		}
+	}
+
 	funcs := template.FuncMap{
 		"Service": func(name, portLabel, protocol, user string) string {
-			// For {{Service "name" "portLabel"}}:
-			// - Service runs on host:
-			//   A: target is inside docker: access with localhost:hostPort
-			//   B: target is on the host: access with localhost:hostPort
-			// - Service runs inside docker:
-			//   C: target is inside docker: access it with DNS service:port
-			//   D: target is on the host: access it with host.docker.internal:hostPort
-
-			// find the service and the port that it resolves for that label
 			svc := d.manifest.MustGetService(name)
 			port := svc.MustGetPort(portLabel)
-
-			if d.isHostService(s.Name) {
-				// A and B
-				return printAddr(protocol, "localhost", port.HostPort, user)
-			} else {
-				if d.isHostService(svc.Name) {
-					// D
-					return printAddr(protocol, "host.docker.internal", port.HostPort, user)
-				}
-				// C
-				return printAddr(protocol, svc.Name, port.Port, user)
-			}
+			return resolveAddr(svc, port, protocol, user)
 		},
 		"Port": func(name string, defaultPort int) int {
 			return resolvePort(name, defaultPort, ProtocolTCP)
 		},
 		"PortUDP": func(name string, defaultPort int) int {
 			return resolvePort(name, defaultPort, ProtocolUDP)
+		},
+		"Bootnode": func() string {
+			if d.manifest.Bootnode == nil {
+				return ""
+			}
+			svc := d.manifest.MustGetService(d.manifest.Bootnode.Service)
+			port := svc.MustGetPort("rpc")
+			return resolveAddr(svc, port, "enode", d.manifest.Bootnode.ID)
 		},
 	}
 
@@ -524,10 +604,16 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 
 	// create the bind volumes
 	var createdVolumes []string
-	for localPath, volumeName := range s.VolumesMapped {
-		dockerVolumeName := d.createVolumeName(s.Name, volumeName)
-		volumes[dockerVolumeName] = localPath
-		createdVolumes = append(createdVolumes, dockerVolumeName)
+	for localPath, volume := range s.VolumesMapped {
+		dockerVolumeName := d.createVolumeName(s.Name, volume.Name)
+
+		if volume.IsLocal {
+			absPath := utils.MustGetVolumeDir(d.manifest.ID, dockerVolumeName)
+			volumes[absPath] = localPath
+		} else {
+			volumes[dockerVolumeName] = localPath
+			createdVolumes = append(createdVolumes, dockerVolumeName)
+		}
 	}
 
 	volumesInLine := []string{}
@@ -542,8 +628,9 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// Add volume mount for the output directory
 		"volumes": volumesInLine,
 		// Add the ethereum network
-		"networks": []string{d.config.NetworkName},
-		"labels":   labels,
+		"networks":          []string{d.config.NetworkName},
+		"labels":            labels,
+		"stop_grace_period": fmt.Sprintf("%ds", stopGracePeriodSecs),
 	}
 
 	if d.config.Platform != "" {
@@ -677,20 +764,119 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 }
 
 func (d *LocalRunner) createVolumeName(service, volumeName string) string {
+	// Check if this is a shared volume (prefixed with "shared:")
+	if strings.HasPrefix(volumeName, "shared:") {
+		// Shared volumes don't include service name prefix
+		return fmt.Sprintf("volume-%s", strings.TrimPrefix(volumeName, "shared:"))
+	}
 	return fmt.Sprintf("volume-%s-%s", service, volumeName)
 }
 
 func (d *LocalRunner) createVolumeDir(service, volumeName string) (string, error) {
 	// create the volume in the output folder
-	volumeDirAbsPath, err := d.out.CreateDir(fmt.Sprintf("volume-%s-%s", service, volumeName))
+	var dirName string
+	if strings.HasPrefix(volumeName, "shared:") {
+		dirName = fmt.Sprintf("volume-%s", strings.TrimPrefix(volumeName, "shared:"))
+	} else {
+		dirName = fmt.Sprintf("volume-%s-%s", service, volumeName)
+	}
+	volumeDirAbsPath, err := d.out.CreateDir(dirName)
 	if err != nil {
 		return "", fmt.Errorf("failed to create volume dir %s: %w", volumeName, err)
 	}
 	return volumeDirAbsPath, nil
 }
 
+// waitForDependencies waits for all dependencies of a host service to be healthy
+func (d *LocalRunner) waitForDependencies(ss *Service) error {
+	if len(ss.DependsOn) == 0 {
+		return nil
+	}
+
+	for _, dep := range ss.DependsOn {
+		if dep.Condition != DependsOnConditionHealthy {
+			continue
+		}
+
+		// The dependency name might be a healthmon sidecar (e.g., "el_healthmon")
+		// We need to check the original service name
+		depName := dep.Name
+		originalName := strings.TrimSuffix(depName, "_healthmon")
+
+		// Check if the original service is a host service
+		if d.isHostService(originalName) {
+			depSvc := d.manifest.MustGetService(originalName)
+
+			// Determine the URL to check for health
+			var checkURL string
+			if depSvc.ReadyCheck != nil && depSvc.ReadyCheck.QueryURL != "" {
+				checkURL = depSvc.ReadyCheck.QueryURL
+			} else if httpPort, ok := depSvc.GetPort("http"); ok {
+				checkURL = fmt.Sprintf("http://localhost:%d", httpPort.HostPort)
+			} else {
+				return fmt.Errorf("host service %s has no ready_check or http port defined", originalName)
+			}
+
+			// Poll until the dependency is healthy
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			slog.Info("Waiting for host dependency", "service", ss.Name, "dependency", originalName)
+
+			for {
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("timeout waiting for %s to be healthy", originalName)
+				default:
+				}
+
+				client := &http.Client{Timeout: 2 * time.Second}
+				resp, err := client.Get(checkURL)
+				if err == nil {
+					resp.Body.Close()
+					if resp.StatusCode < 500 {
+						slog.Info("Dependency is healthy", "service", ss.Name, "dependency", originalName)
+						break
+					}
+				}
+
+				time.Sleep(1 * time.Second)
+			}
+		} else {
+			// For Docker services, check the healthmon container
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			slog.Info("Waiting for container dependency", "service", ss.Name, "dependency", depName)
+
+			for {
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("timeout waiting for %s to be healthy", depName)
+				default:
+				}
+
+				resp, err := ExecuteHealthCheckManually(depName)
+				if err == nil && resp.ExitCode == 0 {
+					slog.Info("Dependency is healthy", "service", ss.Name, "dependency", depName)
+					break
+				}
+
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}
+
+	return nil
+}
+
 // runOnHost runs the service on the host machine
 func (d *LocalRunner) runOnHost(ss *Service) error {
+	// Wait for dependencies to be healthy before starting
+	if err := d.waitForDependencies(ss); err != nil {
+		return fmt.Errorf("failed waiting for dependencies: %w", err)
+	}
+
 	// TODO: Use env vars in host processes
 	args, _, err := d.applyTemplate(ss)
 	if err != nil {
@@ -699,8 +885,8 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 
 	// Create the volumes for this service
 	volumesMapped := map[string]string{}
-	for pathInDocker, volumeName := range ss.VolumesMapped {
-		volumeDirAbsPath, err := d.createVolumeDir(ss.Name, volumeName)
+	for pathInDocker, volume := range ss.VolumesMapped {
+		volumeDirAbsPath, err := d.createVolumeDir(ss.Name, volume.Name)
 		if err != nil {
 			return err
 		}
@@ -727,22 +913,38 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 
 	execPath := ss.HostPath
 	cmd := exec.Command(execPath, args...)
+	cmd.Dir = d.out.dst // Run from artifacts directory so relative paths work
 
 	logOutput, err := d.out.LogOutput(ss.Name)
 	if err != nil {
 		// this should not happen, log it
 		logOutput = os.Stdout
 	}
+	logPath := logOutput.Name()
 
 	// Output the command itself to the log output for debugging purposes
-	fmt.Fprint(logOutput, strings.Join(args, " ")+"\n\n")
+	cmdLine := execPath + " " + strings.Join(args, " ")
+	fmt.Fprint(logOutput, cmdLine+"\n\n")
 
 	cmd.Stdout = logOutput
 	cmd.Stderr = logOutput
 
 	go func() {
 		if err := cmd.Run(); err != nil {
-			d.exitErr <- fmt.Errorf("error running host service %s: %w", ss.Name, err)
+			// If the playground is being exited, ignore the exit error info
+			// to make the outputs less confusing.
+			if mainctx.IsExiting() {
+				return
+			}
+			// Read last lines from log file for context
+			lastLines := readLastLines(logPath, 10)
+			slog.Error("Host service failed", "service", ss.Name, "error", err)
+			errMsg := fmt.Sprintf("service %s failed:\n  Command: %s\n  Log file: %s\n  Exit error: %v",
+				ss.Name, execPath, logPath, err)
+			if lastLines != "" {
+				errMsg += fmt.Sprintf("\n  Last output:\n%s", lastLines)
+			}
+			d.sendExitError(fmt.Errorf("%s", errMsg))
 		}
 	}()
 
@@ -973,9 +1175,11 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	}
 
 	// Second, start the services that are running on the host machine
+	// Start them in parallel - each will wait for its own dependencies
 	g := new(errgroup.Group)
 	for _, svc := range d.manifest.Services {
 		if d.isHostService(svc.Name) {
+			svc := svc // capture loop variable
 			g.Go(func() error {
 				return d.runOnHost(svc)
 			})
@@ -1094,4 +1298,20 @@ func findServiceByName(client *client.Client, ctx context.Context, serviceName s
 	}
 
 	return "", nil
+}
+
+// readLastLines reads the last n lines from a file
+func readLastLines(filePath string, n int) string {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(data), "\n")
+	if len(lines) <= n {
+		return "    " + strings.Join(lines, "\n    ")
+	}
+
+	lastLines := lines[len(lines)-n-1:]
+	return "    " + strings.Join(lastLines, "\n    ")
 }

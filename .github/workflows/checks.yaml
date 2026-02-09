@@ -19,15 +19,16 @@ jobs:
           - "l1 --with-prometheus"
           - "opstack"
           - "opstack --external-builder http://host.docker.internal:4444"
+          - "opstack --enable-latest-fork=0"
           - "opstack --enable-latest-fork=10"
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v6
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
@@ -36,7 +37,7 @@ jobs:
         run: ./scripts/ci-build-playground-utils.sh
 
       - name: Run playground
-        run: go run main.go cook ${{ matrix.flags }} --output /tmp/playground --timeout 4m --watchdog
+        run: go run main.go start ${{ matrix.flags }} --output /tmp/playground --timeout 10s --watchdog
 
       - name: Copy playground logs
         if: ${{ failure() }}
@@ -55,12 +56,12 @@ jobs:
     runs-on: warp-ubuntu-latest-x64-8x
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v6
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
@@ -73,19 +74,19 @@ jobs:
     runs-on: warp-ubuntu-latest-x64-8x
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v6
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Install docker compose
         run: ./scripts/ci-setup-docker-compose.sh
 
       - name: Build playground utils
         run: ./scripts/ci-build-playground-utils.sh
-        
+
       - name: Run unit tests
         run: make integration-test
 
@@ -94,12 +95,12 @@ jobs:
     runs-on: warp-ubuntu-latest-x64-8x
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ^1.24
+          go-version: 1.25
 
       - name: Download dependencies
         run: go mod download
@@ -127,12 +128,12 @@ jobs:
     runs-on: warp-ubuntu-latest-x64-8x
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v6
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Generate documentation
         run: make generate-docs

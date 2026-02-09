@@ -24,23 +24,63 @@ type Recipe interface {
 	Description() string
 	Flags() *flag.FlagSet
 	Artifacts() *ArtifactsBuilder
-	Apply(manifest *Manifest)
+	Apply(ctx *ExContext) *Component
 	Output(manifest *Manifest) map[string]interface{}
 }
 
 // Manifest describes a list of services and their dependencies
 type Manifest struct {
-	ctx *ExContext
-	ID  string `json:"session_id"`
+	ID string `json:"session_id"`
 
 	// list of Services
 	Services []*Service `json:"services"`
 
+	Bootnode *BootnodeRef `json:"bootnode,omitempty"`
+
 	// overrides is a map of service name to the path of the executable to run
 	// on the host machine instead of a container.
 	overrides map[string]string
+}
 
-	out *output
+func (s *Manifest) NewService(name string) *Service {
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	s.Services = append(s.Services, ss)
+	return ss
+}
+
+type Component struct {
+	Name     string
+	Services []*Service
+	Inner    []*Component
+}
+
+func NewComponent(name string) *Component {
+	return &Component{Name: name, Inner: []*Component{}}
+}
+
+func (p *Component) NewService(name string) *Service {
+	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
+	p.Services = append(p.Services, ss)
+	return ss
+}
+
+func (p *Component) AddComponent(ctx *ExContext, gen ComponentGen) {
+	p.Inner = append(p.Inner, gen.Apply(ctx))
+}
+
+func (p *Component) AddService(ctx *ExContext, srv ComponentGen) {
+	p.Inner = append(p.Inner, srv.Apply(ctx))
+}
+
+func componentToManifest(p *Component) []*Service {
+	services := p.Services
+
+	for _, innerComponent := range p.Inner {
+		innerServices := componentToManifest(innerComponent)
+		services = append(services, innerServices...)
+	}
+
+	return services
 }
 
 func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
@@ -73,15 +113,13 @@ func (m *Manifest) ApplyOverrides(overrides map[string]string) error {
 	return nil
 }
 
-func NewManifest(ctx *ExContext, out *output, name ...string) *Manifest {
-	if len(name) == 0 {
-		name = []string{utils.GeneratePetName()}
+func NewManifest(name string, component *Component) *Manifest {
+	if name == "" {
+		name = utils.GeneratePetName()
 	}
-	ctx.Output = out
 	return &Manifest{
-		ID:        name[0],
-		ctx:       ctx,
-		out:       out,
+		ID:        name,
+		Services:  componentToManifest(component),
 		overrides: make(map[string]string),
 	}
 }
@@ -150,16 +188,12 @@ func (b *BootnodeRef) Connect() string {
 	return ConnectEnode(b.Service, b.ID)
 }
 
-type Component interface {
-	Apply(manifest *Manifest)
+type ComponentGen interface {
+	Apply(manifest *ExContext) *Component
 }
 
 type ServiceReady interface {
 	Ready(service *Service) error
-}
-
-func (s *Manifest) AddComponent(component Component) {
-	component.Apply(s)
 }
 
 func (s *Manifest) MustGetService(name string) *Service {
@@ -182,13 +216,19 @@ func (s *Manifest) GetService(name string) (*Service, bool) {
 // Validate validates the manifest
 // - checks if all the port dependencies are met from the service description
 // - downloads any local release artifacts for the services that require host execution
-func (s *Manifest) Validate() error {
+func (s *Manifest) Validate(out *output) error {
 	for _, ss := range s.Services {
 		// override ready checks that use the QueryURL feature
 		if ss.ReadyCheck != nil && ss.ReadyCheck.QueryURL != "" {
-			// this is a sugar coat syntax for the components, if a component wants to perform
-			// a raw ready check on a url (this is, only validate it exists) we convert that into
-			// a sidecar container with curl installed that performs the check.
+			// For host-executed services, keep the ReadyCheck on the service itself
+			// so that local_runner can poll it directly. Don't create a sidecar.
+			if ss.HostPath != "" {
+				// Host services are polled directly by local_runner.go waitForDependencies()
+				// Keep the ReadyCheck intact for that polling logic
+				continue
+			}
+
+			// For Docker services, create a sidecar container with curl to perform the check.
 			// Note that we have to remove the ready check from the main service.
 			sidecarName := ss.Name + "_readycheck"
 
@@ -197,8 +237,9 @@ func (s *Manifest) Validate() error {
 			ss.WithLabel(healthCheckSidecarLabel, sidecarName)
 
 			// the url supplied by the service will bind to localhost, we have to change it
-			// to point to the main service name so that the sidecar can reach it
-			readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", ss.Name)
+			// to point to the main service name so that the sidecar can reach it.
+			targetHost := ss.Name
+			readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", targetHost)
 			readyCheck.Test = []string{"CMD", "curl", readyCheck.QueryURL}
 
 			s.NewService(sidecarName).
@@ -253,7 +294,7 @@ func (s *Manifest) Validate() error {
 	// validate that the mounts are correct
 	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
-			fileLoc := filepath.Join(s.out.dst, fileNameRef)
+			fileLoc := filepath.Join(out.dst, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
 				if os.IsNotExist(err) {
@@ -267,7 +308,7 @@ func (s *Manifest) Validate() error {
 	// validate that the mounts are correct
 	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
-			fileLoc := filepath.Join(s.out.dst, fileNameRef)
+			fileLoc := filepath.Join(out.dst, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
 				if os.IsNotExist(err) {
@@ -327,8 +368,8 @@ type Service struct {
 	Ports    []*Port    `json:"ports,omitempty"`
 	NodeRefs []*NodeRef `json:"node_refs,omitempty"`
 
-	FilesMapped   map[string]string `json:"files_mapped,omitempty"`
-	VolumesMapped map[string]string `json:"volumes_mapped,omitempty"`
+	FilesMapped   map[string]string        `json:"files_mapped,omitempty"`
+	VolumesMapped map[string]*VolumeMapped `json:"volumes_mapped,omitempty"`
 
 	Tag        string `json:"tag,omitempty"`
 	Image      string `json:"image,omitempty"`
@@ -339,6 +380,11 @@ type Service struct {
 
 	postHook *postHook
 	release  *release
+}
+
+type VolumeMapped struct {
+	Name    string
+	IsLocal bool
 }
 
 type DependsOnCondition string
@@ -396,12 +442,6 @@ func (s *Service) WithLabel(key, value string) *Service {
 	return s
 }
 
-func (s *Manifest) NewService(name string) *Service {
-	ss := &Service{Name: name, Args: []string{}, Ports: []*Port{}, NodeRefs: []*NodeRef{}}
-	s.Services = append(s.Services, ss)
-	return ss
-}
-
 func (s *Service) WithImage(image string) *Service {
 	s.Image = image
 	return s
@@ -431,7 +471,7 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 	for _, p := range s.Ports {
 		if p.Name == name {
 			if p.Port != portNumber {
-				panic(fmt.Sprintf("port %s already defined with different port number", name))
+				panic(fmt.Sprintf("port %s already defined with different port number (existing: %d, new: %d) on service %s", name, p.Port, portNumber, s.Name))
 			}
 			if p.Protocol != protocol {
 				// If they have different protocols they are different ports
@@ -469,11 +509,18 @@ func (s *Service) WithArgs(args ...string) *Service {
 	return s
 }
 
-func (s *Service) WithVolume(name, localPath string) *Service {
-	if s.VolumesMapped == nil {
-		s.VolumesMapped = make(map[string]string)
+func (s *Service) WithVolume(name, localPath string, isLocalTri ...bool) *Service {
+	isLocal := false
+	if len(isLocalTri) == 1 {
+		isLocal = isLocalTri[0]
 	}
-	s.VolumesMapped[localPath] = name
+	if s.VolumesMapped == nil {
+		s.VolumesMapped = make(map[string]*VolumeMapped)
+	}
+	s.VolumesMapped[localPath] = &VolumeMapped{
+		Name:    name,
+		IsLocal: isLocal,
+	}
 	return s
 }
 
@@ -492,7 +539,7 @@ func (s *Service) WithReady(check ReadyCheck) *Service {
 
 type postHook struct {
 	Name   string
-	Action func(s *Service) error
+	Action func(m *Manifest, s *Service) error
 }
 
 func (s *Service) WithPostHook(hook *postHook) *Service {
@@ -504,7 +551,7 @@ func (m *Manifest) ExecutePostHookActions() error {
 	for _, svc := range m.Services {
 		if svc.postHook != nil {
 			slog.Info("Executing post-hook operation", "name", svc.postHook.Name)
-			if err := svc.postHook.Action(svc); err != nil {
+			if err := svc.postHook.Action(m, svc); err != nil {
 				return err
 			}
 		}
@@ -698,8 +745,8 @@ func (s *Manifest) GenerateDotGraph() string {
 	return b.String()
 }
 
-func (m *Manifest) SaveJson() error {
-	return m.out.WriteFile("manifest.json", m)
+func (m *Manifest) SaveJson(out *output) error {
+	return out.WriteFile("manifest.json", m)
 }
 
 func ReadManifest(outputFolder string) (*Manifest, error) {
@@ -720,14 +767,11 @@ func ReadManifest(outputFolder string) (*Manifest, error) {
 	}
 
 	// set the output folder
-	manifestData.out = &output{
-		dst: outputFolder,
-	}
 	return &manifestData, nil
 }
 
-func (svcManager *Manifest) RunContenderIfEnabled() {
-	if svcManager.ctx.Contender.Enabled {
-		svcManager.AddComponent(svcManager.ctx.Contender.Contender())
+func (component *Component) RunContenderIfEnabled(ctx *ExContext) {
+	if ctx.Contender.Enabled {
+		component.AddService(ctx, ctx.Contender.Contender())
 	}
 }

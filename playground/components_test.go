@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/flashbots/builder-playground/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,6 +49,15 @@ func TestRecipeOpstackExternalBuilder(t *testing.T) {
 	})
 }
 
+func TestRecipeOpstackEnableForkAtGenesis(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	tt.test(&OpRecipe{}, []string{
+		"--enable-latest-fork", "0",
+	})
+}
+
 func TestRecipeOpstackEnableForkAfter(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
@@ -70,11 +81,57 @@ func TestRecipeL1Simple(t *testing.T) {
 
 func TestRecipeL1UseNativeReth(t *testing.T) {
 	tt := newTestFramework(t)
+
+	// When Reth runs in the host machine in a normal test, the output directory is in
+	// <repo>/e2e-test which might create an IPC path longer than the max limit.
+	// Thus, only for this test we output the artifacts to /tmp folder ensuring we do not
+	// pass that limit.
+	// https://discussions.apple.com/thread/250275651
+	tt.e2eRootDir = "/tmp"
+
 	defer tt.Close()
 
 	tt.test(&L1Recipe{}, []string{
 		"--use-native-reth",
 	})
+}
+
+type rbuilderRecipe struct {
+	*mockRecipe
+	l1 *L1Recipe
+}
+
+func (r *rbuilderRecipe) Artifacts() *ArtifactsBuilder {
+	return r.l1.Artifacts()
+}
+
+func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
+	c := NewComponent("rbuilder-test-recipe")
+
+	c.AddService(ctx, r.l1)
+	c.AddComponent(ctx, &Rbuilder{})
+
+	return c
+}
+
+func TestComponentRbuilder(t *testing.T) {
+	// TODO: Re-enable this for all architectures when the rbuilder container flow works.
+	if runtime.GOARCH != "arm64" {
+		t.Skip("Skipping rbuilder component test on non-arm64 architecture for now")
+	}
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	recipe := &rbuilderRecipe{
+		l1: &L1Recipe{
+			// TODO: We might have to change things from rbuilder-config
+			// if the time is lower than 12 seconds.
+			blockTime: 12 * time.Second,
+		},
+	}
+
+	tt.test(recipe, nil)
+	tt.WaitForBlock("el", 1)
 }
 
 func TestRecipeBuilderHub(t *testing.T) {
@@ -153,8 +210,9 @@ func TestRecipeBuilderNet(t *testing.T) {
 }
 
 type testFramework struct {
-	t      *testing.T
-	runner *LocalRunner
+	t          *testing.T
+	runner     *LocalRunner
+	e2eRootDir string
 }
 
 func newTestFramework(t *testing.T) *testFramework {
@@ -164,7 +222,7 @@ func newTestFramework(t *testing.T) *testFramework {
 	return &testFramework{t: t}
 }
 
-func (tt *testFramework) test(component Component, args []string) *Manifest {
+func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 	t := tt.t
 
 	// use the name of the repo and the current timestamp to generate
@@ -172,21 +230,30 @@ func (tt *testFramework) test(component Component, args []string) *Manifest {
 	testName := toSnakeCase(t.Name())
 	currentTime := time.Now().Format("2006-01-02-15-04")
 
-	e2eTestDir := filepath.Join("../e2e-test/" + currentTime + "_" + testName)
+	e2eRootDir := tt.e2eRootDir
+	if e2eRootDir == "" {
+		e2eRootDir = "../e2e-test"
+	}
+
+	e2eTestDir := filepath.Join(e2eRootDir, currentTime+"_"+testName)
 	if err := os.MkdirAll(e2eTestDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
+	homeDir, err := utils.GetPlaygroundDir()
+	require.NoError(t, err)
+
+	o := &output{
+		dst:     e2eTestDir,
+		homeDir: homeDir,
+	}
+
 	exCtx := &ExContext{
+		Output:   o,
 		LogLevel: LevelDebug,
 		Contender: &ContenderContext{
 			Enabled: false,
 		},
-	}
-
-	o := &output{
-		dst:     e2eTestDir,
-		homeDir: filepath.Join(e2eTestDir, "artifacts"),
 	}
 
 	if recipe, ok := component.(Recipe); ok {
@@ -199,10 +266,10 @@ func (tt *testFramework) test(component Component, args []string) *Manifest {
 		require.NoError(t, err)
 	}
 
-	svcManager := NewManifest(exCtx, o)
-	component.Apply(svcManager)
+	components := component.Apply(exCtx)
+	svcManager := NewManifest("", components)
 
-	require.NoError(t, svcManager.Validate())
+	require.NoError(t, svcManager.Validate(o))
 
 	// Generate random network name with "testing-" prefix
 	networkName := fmt.Sprintf("testing-%d", rand.Int63())
@@ -237,6 +304,28 @@ func (tt *testFramework) Close() {
 		if err := tt.runner.Stop(false); err != nil {
 			tt.t.Log(err)
 		}
+	}
+}
+
+// WaitForBlock waits for the specified service to reach the given block number.
+// It polls the service's HTTP endpoint and fails the test if the block isn't
+// reached within 1 minute or if the runner exits with an error.
+func (tt *testFramework) WaitForBlock(service string, num uint64) {
+	elService := tt.runner.manifest.MustGetService(service)
+	rethURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+
+	waitForBlockCh := make(chan error)
+	go func() {
+		waitForBlockCh <- waitForBlock(rethURL, num, 1*time.Minute)
+	}()
+
+	select {
+	case err := <-waitForBlockCh:
+		if err != nil {
+			tt.t.Fatal(err)
+		}
+	case err := <-tt.runner.ExitErr():
+		tt.t.Fatal(err)
 	}
 }
 
