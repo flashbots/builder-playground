@@ -87,9 +87,25 @@ type YAMLServiceConfig struct {
 	// Format: "http://localhost:PORT/path" - the service is ready when this URL returns 200
 	ReadyCheck string `yaml:"ready_check,omitempty"`
 
-	// Lifecycle specifies custom init/start/stop commands for host execution
-	// Cannot be used with host_path, release, or args
-	Lifecycle *YAMLLifecycleConfig `yaml:"lifecycle,omitempty"`
+	// LifecycleHooks enables lifecycle mode for host execution
+	// When true, init/start/stop commands are used instead of host_path/release
+	LifecycleHooks bool `yaml:"lifecycle_hooks,omitempty"`
+
+	LifecycleHookParams `yaml:",inline"`
+}
+
+type LifecycleHookParams struct {
+	// Init commands run sequentially before start. Each must return exit code 0.
+	// Only used when lifecycle_hooks is true
+	Init []string `yaml:"init,omitempty"`
+
+	// Start command runs the service. May hang (long-running) or return 0.
+	// Only used when lifecycle_hooks is true
+	Start string `yaml:"start,omitempty"`
+
+	// Stop commands run when playground exits. May return non-zero (best effort).
+	// Only used when lifecycle_hooks is true
+	Stop []string `yaml:"stop,omitempty"`
 }
 
 type YAMLVolumeMappedConfig struct {
@@ -106,18 +122,6 @@ type YAMLReleaseConfig struct {
 	// Format specifies the download format: "tar.gz" (default) or "binary"
 	// For "binary", downloads the raw binary directly without extraction
 	Format string `yaml:"format,omitempty"`
-}
-
-// YAMLLifecycleConfig specifies lifecycle commands for a host-executed service
-// This is an alternative to host_path/release for services that need custom init/start/stop logic
-type YAMLLifecycleConfig struct {
-	// Init commands run sequentially before start. Each must return exit code 0.
-	Init []string `yaml:"init,omitempty"`
-	// Start command runs the service. May hang (long-running) or return 0.
-	// Non-zero exit code is a failure.
-	Start string `yaml:"start"`
-	// Stop commands run when playground exits. May return non-zero (best effort).
-	Stop []string `yaml:"stop,omitempty"`
 }
 
 // YAMLRecipe wraps a base recipe and applies YAML-based modifications
@@ -475,12 +479,11 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
 	}
-	if config.Lifecycle != nil {
-		svc.Lifecycle = &Lifecycle{
-			Init:  config.Lifecycle.Init,
-			Start: config.Lifecycle.Start,
-			Stop:  config.Lifecycle.Stop,
-		}
+	if config.LifecycleHooks {
+		svc.LifecycleHooks = true
+		svc.Init = config.Init
+		svc.Start = config.Start
+		svc.Stop = config.Stop
 		svc.UseHostExecution()
 	}
 }
@@ -652,12 +655,11 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
 	}
-	if config.Lifecycle != nil {
-		svc.Lifecycle = &Lifecycle{
-			Init:  config.Lifecycle.Init,
-			Start: config.Lifecycle.Start,
-			Stop:  config.Lifecycle.Stop,
-		}
+	if config.LifecycleHooks {
+		svc.LifecycleHooks = true
+		svc.Init = config.Init
+		svc.Start = config.Start
+		svc.Stop = config.Stop
 		svc.UseHostExecution()
 	}
 

@@ -104,25 +104,33 @@ func validateYAMLRecipe(recipe *YAMLRecipe, baseRecipes []Recipe, result *Valida
 	}
 }
 
-// validateLifecycleConfig checks that lifecycle is not used with incompatible options
+// validateLifecycleConfig checks that lifecycle_hooks is not used with incompatible options
+// and that init/start/stop are only used when lifecycle_hooks is true
 func validateLifecycleConfig(serviceName, componentName string, config *YAMLServiceConfig, result *ValidationResult) {
-	if config.Lifecycle == nil {
+	hasLifecycleFields := len(config.Init) > 0 || config.Start != "" || len(config.Stop) > 0
+
+	// If lifecycle_hooks is not set but lifecycle fields are used, that's an error
+	if !config.LifecycleHooks {
+		if hasLifecycleFields {
+			result.AddError("service '%s' in component '%s': init, start, and stop require lifecycle_hooks: true", serviceName, componentName)
+		}
 		return
 	}
 
+	// lifecycle_hooks is true - check for incompatible options
 	if config.HostPath != "" {
-		result.AddError("service '%s' in component '%s': lifecycle cannot be used with host_path", serviceName, componentName)
+		result.AddError("service '%s' in component '%s': lifecycle_hooks cannot be used with host_path", serviceName, componentName)
 	}
 	if config.Release != nil {
-		result.AddError("service '%s' in component '%s': lifecycle cannot be used with release", serviceName, componentName)
+		result.AddError("service '%s' in component '%s': lifecycle_hooks cannot be used with release", serviceName, componentName)
 	}
 	if len(config.Args) > 0 {
-		result.AddError("service '%s' in component '%s': lifecycle cannot be used with args", serviceName, componentName)
+		result.AddError("service '%s' in component '%s': lifecycle_hooks cannot be used with args", serviceName, componentName)
 	}
 
 	// Validate that at least one of init or start is specified
-	if len(config.Lifecycle.Init) == 0 && config.Lifecycle.Start == "" {
-		result.AddError("service '%s' in component '%s': lifecycle requires at least one of init or start", serviceName, componentName)
+	if len(config.Init) == 0 && config.Start == "" {
+		result.AddError("service '%s' in component '%s': lifecycle_hooks requires at least one of init or start", serviceName, componentName)
 	}
 }
 

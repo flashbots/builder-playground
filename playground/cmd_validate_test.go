@@ -17,128 +17,140 @@ func TestValidateLifecycleConfig(t *testing.T) {
 		{
 			name: "valid lifecycle config with init start and stop",
 			config: &YAMLServiceConfig{
-				Lifecycle: &YAMLLifecycleConfig{
-					Init:  []string{"echo init"},
-					Start: "./start.sh",
-					Stop:  []string{"echo stop"},
-				},
+				LifecycleHooks:      true,
+				LifecycleHookParams: LifecycleHookParams{Init: []string{"echo init"}, Start: "./start.sh", Stop: []string{"echo stop"}},
 			},
 			expectedErrors: 0,
 		},
 		{
 			name: "valid lifecycle config with only init",
 			config: &YAMLServiceConfig{
-				Lifecycle: &YAMLLifecycleConfig{
-					Init: []string{"echo init"},
-				},
+				LifecycleHooks:      true,
+				LifecycleHookParams: LifecycleHookParams{Init: []string{"echo init"}},
 			},
 			expectedErrors: 0,
 		},
 		{
 			name: "valid lifecycle config with init and stop",
 			config: &YAMLServiceConfig{
-				Lifecycle: &YAMLLifecycleConfig{
-					Init: []string{"echo init"},
-					Stop: []string{"echo stop"},
-				},
+				LifecycleHooks:      true,
+				LifecycleHookParams: LifecycleHookParams{Init: []string{"echo init"}, Stop: []string{"echo stop"}},
 			},
 			expectedErrors: 0,
 		},
 		{
 			name: "valid lifecycle config with only start",
 			config: &YAMLServiceConfig{
-				Lifecycle: &YAMLLifecycleConfig{
-					Start: "./start.sh",
-				},
+				LifecycleHooks:      true,
+				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
 			},
 			expectedErrors: 0,
 		},
 		{
-			name: "lifecycle with host_path",
+			name: "lifecycle_hooks with host_path",
 			config: &YAMLServiceConfig{
-				HostPath: "/usr/bin/app",
-				Lifecycle: &YAMLLifecycleConfig{
-					Start: "./start.sh",
-				},
+				LifecycleHooks:      true,
+				HostPath:            "/usr/bin/app",
+				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
 			},
 			expectedErrors: 1,
-			errorContains:  []string{"lifecycle cannot be used with host_path"},
+			errorContains:  []string{"lifecycle_hooks cannot be used with host_path"},
 		},
 		{
-			name: "lifecycle with release",
+			name: "lifecycle_hooks with release",
 			config: &YAMLServiceConfig{
+				LifecycleHooks: true,
 				Release: &YAMLReleaseConfig{
 					Name:    "app",
 					Org:     "org",
 					Version: "v1.0.0",
 				},
-				Lifecycle: &YAMLLifecycleConfig{
-					Start: "./start.sh",
-				},
+				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
 			},
 			expectedErrors: 1,
-			errorContains:  []string{"lifecycle cannot be used with release"},
+			errorContains:  []string{"lifecycle_hooks cannot be used with release"},
 		},
 		{
-			name: "lifecycle with args",
+			name: "lifecycle_hooks with args",
 			config: &YAMLServiceConfig{
-				Args: []string{"--port", "8080"},
-				Lifecycle: &YAMLLifecycleConfig{
-					Start: "./start.sh",
-				},
+				LifecycleHooks:      true,
+				Args:                []string{"--port", "8080"},
+				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
 			},
 			expectedErrors: 1,
-			errorContains:  []string{"lifecycle cannot be used with args"},
+			errorContains:  []string{"lifecycle_hooks cannot be used with args"},
 		},
 		{
-			name: "lifecycle with only stop - invalid",
+			name: "lifecycle_hooks with only stop - invalid",
 			config: &YAMLServiceConfig{
-				Lifecycle: &YAMLLifecycleConfig{
-					Stop: []string{"echo stop"},
-				},
-			},
-			expectedErrors: 2,
-			errorContains: []string{
-				"lifecycle requires at least one of init or start",
-				"lifecycle.stop cannot be specified without init or start",
-			},
-		},
-		{
-			name: "lifecycle with nothing - invalid",
-			config: &YAMLServiceConfig{
-				Lifecycle: &YAMLLifecycleConfig{},
+				LifecycleHooks:      true,
+				LifecycleHookParams: LifecycleHookParams{Stop: []string{"echo stop"}},
 			},
 			expectedErrors: 1,
-			errorContains:  []string{"lifecycle requires at least one of init or start"},
+			errorContains:  []string{"lifecycle_hooks requires at least one of init or start"},
 		},
 		{
-			name: "lifecycle with all incompatible options",
+			name: "lifecycle_hooks with nothing - invalid",
 			config: &YAMLServiceConfig{
-				HostPath: "/usr/bin/app",
+				LifecycleHooks: true,
+			},
+			expectedErrors: 1,
+			errorContains:  []string{"lifecycle_hooks requires at least one of init or start"},
+		},
+		{
+			name: "lifecycle_hooks with all incompatible options",
+			config: &YAMLServiceConfig{
+				LifecycleHooks: true,
+				HostPath:       "/usr/bin/app",
 				Release: &YAMLReleaseConfig{
 					Name:    "app",
 					Org:     "org",
 					Version: "v1.0.0",
 				},
-				Args: []string{"--port", "8080"},
-				Lifecycle: &YAMLLifecycleConfig{
-					Start: "./start.sh",
-				},
+				Args:                []string{"--port", "8080"},
+				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
 			},
 			expectedErrors: 3,
 			errorContains: []string{
-				"lifecycle cannot be used with host_path",
-				"lifecycle cannot be used with release",
-				"lifecycle cannot be used with args",
+				"lifecycle_hooks cannot be used with host_path",
+				"lifecycle_hooks cannot be used with release",
+				"lifecycle_hooks cannot be used with args",
 			},
 		},
 		{
-			name: "no lifecycle - no errors",
+			name: "no lifecycle_hooks - no errors",
 			config: &YAMLServiceConfig{
 				HostPath: "/usr/bin/app",
 				Args:     []string{"--port", "8080"},
 			},
 			expectedErrors: 0,
+		},
+		{
+			name: "init without lifecycle_hooks - invalid",
+			config: &YAMLServiceConfig{
+				HostPath:            "/usr/bin/app",
+				LifecycleHookParams: LifecycleHookParams{Init: []string{"echo init"}},
+			},
+			expectedErrors: 1,
+			errorContains:  []string{"init, start, and stop require lifecycle_hooks: true"},
+		},
+		{
+			name: "start without lifecycle_hooks - invalid",
+			config: &YAMLServiceConfig{
+				HostPath:            "/usr/bin/app",
+				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+			},
+			expectedErrors: 1,
+			errorContains:  []string{"init, start, and stop require lifecycle_hooks: true"},
+		},
+		{
+			name: "stop without lifecycle_hooks - invalid",
+			config: &YAMLServiceConfig{
+				HostPath:            "/usr/bin/app",
+				LifecycleHookParams: LifecycleHookParams{Stop: []string{"echo stop"}},
+			},
+			expectedErrors: 1,
+			errorContains:  []string{"init, start, and stop require lifecycle_hooks: true"},
 		},
 	}
 
@@ -171,10 +183,9 @@ func TestValidateLifecycleConfig_InYAMLRecipe(t *testing.T) {
 				"test-component": {
 					Services: map[string]*YAMLServiceConfig{
 						"test-svc": {
-							HostPath: "/usr/bin/app",
-							Lifecycle: &YAMLLifecycleConfig{
-								Start: "./start.sh",
-							},
+							LifecycleHooks:      true,
+							HostPath:            "/usr/bin/app",
+							LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
 						},
 					},
 				},
@@ -189,10 +200,43 @@ func TestValidateLifecycleConfig_InYAMLRecipe(t *testing.T) {
 	require.NotEmpty(t, result.Errors)
 	found := false
 	for _, err := range result.Errors {
-		if strings.Contains(err, "lifecycle cannot be used with host_path") {
+		if strings.Contains(err, "lifecycle_hooks cannot be used with host_path") {
 			found = true
 			break
 		}
 	}
 	require.True(t, found, "expected lifecycle validation error not found")
+}
+
+func TestValidateLifecycleConfig_InYAMLRecipe_WithoutLifecycleHooks(t *testing.T) {
+	// Test that init/start/stop without lifecycle_hooks is caught during YAML recipe validation
+	recipe := &YAMLRecipe{
+		config: &YAMLRecipeConfig{
+			Base: "l1",
+			Recipe: map[string]*YAMLComponentConfig{
+				"test-component": {
+					Services: map[string]*YAMLServiceConfig{
+						"test-svc": {
+							HostPath:            "/usr/bin/app",
+							LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	result := &ValidationResult{}
+	validateYAMLRecipe(recipe, baseRecipes, result)
+
+	require.NotEmpty(t, result.Errors)
+	found := false
+	for _, err := range result.Errors {
+		if strings.Contains(err, "init, start, and stop require lifecycle_hooks: true") {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected lifecycle validation error not found in %v", result.Errors)
 }

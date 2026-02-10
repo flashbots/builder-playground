@@ -27,12 +27,11 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 	// Create a service with init commands that create files
 	testFile := filepath.Join(tmpDir, "init-test.txt")
 	svc := &Service{
-		Name: "test-lifecycle",
-		Lifecycle: &Lifecycle{
-			Init: []string{
-				"echo 'init1' > " + testFile,
-				"echo 'init2' >> " + testFile,
-			},
+		Name:           "test-lifecycle",
+		LifecycleHooks: true,
+		Init: []string{
+			"echo 'init1' > " + testFile,
+			"echo 'init2' >> " + testFile,
 		},
 	}
 
@@ -64,14 +63,13 @@ func TestLocalRunner_LifecycleService_InitFailure_RunsStopCommands(t *testing.T)
 
 	stopFile := filepath.Join(tmpDir, "stop-ran.txt")
 	svc := &Service{
-		Name: "test-lifecycle",
-		Lifecycle: &Lifecycle{
-			Init: []string{
-				"exit 1", // This will fail
-			},
-			Stop: []string{
-				"echo 'stopped' > " + stopFile,
-			},
+		Name:           "test-lifecycle",
+		LifecycleHooks: true,
+		Init: []string{
+			"exit 1", // This will fail
+		},
+		Stop: []string{
+			"echo 'stopped' > " + stopFile,
 		},
 	}
 
@@ -100,10 +98,9 @@ func TestLocalRunner_LifecycleService_StartCommand(t *testing.T) {
 
 	startFile := filepath.Join(tmpDir, "start-ran.txt")
 	svc := &Service{
-		Name: "test-lifecycle",
-		Lifecycle: &Lifecycle{
-			Start: "echo 'started' > " + startFile,
-		},
+		Name:           "test-lifecycle",
+		LifecycleHooks: true,
+		Start:          "echo 'started' > " + startFile,
 	}
 
 	err = runner.runLifecycleService(context.Background(), svc)
@@ -138,11 +135,10 @@ func TestLocalRunner_LifecycleService_InitOnly(t *testing.T) {
 
 	initFile := filepath.Join(tmpDir, "init-only.txt")
 	svc := &Service{
-		Name: "test-lifecycle",
-		Lifecycle: &Lifecycle{
-			Init: []string{
-				"echo 'init-only' > " + initFile,
-			},
+		Name:           "test-lifecycle",
+		LifecycleHooks: true,
+		Init: []string{
+			"echo 'init-only' > " + initFile,
 		},
 	}
 
@@ -167,13 +163,12 @@ func TestLocalRunner_StopCommands(t *testing.T) {
 
 	stopFile := filepath.Join(tmpDir, "stop.txt")
 	svc := &Service{
-		Name: "test-lifecycle",
-		Lifecycle: &Lifecycle{
-			Init: []string{"echo init"},
-			Stop: []string{
-				"echo 'stop1' > " + stopFile,
-				"echo 'stop2' >> " + stopFile,
-			},
+		Name:           "test-lifecycle",
+		LifecycleHooks: true,
+		Init:           []string{"echo init"},
+		Stop: []string{
+			"echo 'stop1' > " + stopFile,
+			"echo 'stop2' >> " + stopFile,
 		},
 	}
 
@@ -201,13 +196,12 @@ func TestLocalRunner_StopCommands_ContinueOnError(t *testing.T) {
 
 	stopFile := filepath.Join(tmpDir, "stop.txt")
 	svc := &Service{
-		Name: "test-lifecycle",
-		Lifecycle: &Lifecycle{
-			Init: []string{"echo init"},
-			Stop: []string{
-				"exit 1",                         // This fails
-				"echo 'continued' > " + stopFile, // But this should still run
-			},
+		Name:           "test-lifecycle",
+		LifecycleHooks: true,
+		Init:           []string{"echo init"},
+		Stop: []string{
+			"exit 1",                         // This fails
+			"echo 'continued' > " + stopFile, // But this should still run
 		},
 	}
 

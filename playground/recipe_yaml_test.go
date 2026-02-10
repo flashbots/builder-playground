@@ -823,14 +823,14 @@ recipe:
   new-component:
     services:
       lifecycle-svc:
-        lifecycle:
-          init:
-            - echo init1
-            - echo init2
-          start: echo start && sleep infinity
-          stop:
-            - echo stop1
-            - echo stop2
+        lifecycle_hooks: true
+        init:
+          - echo init1
+          - echo init2
+        start: echo start && sleep infinity
+        stop:
+          - echo stop1
+          - echo stop2
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
@@ -852,10 +852,10 @@ recipe:
 
 	svc := component.FindService("lifecycle-svc")
 	require.NotNil(t, svc)
-	require.NotNil(t, svc.Lifecycle)
-	require.Equal(t, []string{"echo init1", "echo init2"}, svc.Lifecycle.Init)
-	require.Equal(t, "echo start && sleep infinity", svc.Lifecycle.Start)
-	require.Equal(t, []string{"echo stop1", "echo stop2"}, svc.Lifecycle.Stop)
+	require.True(t, svc.LifecycleHooks)
+	require.Equal(t, []string{"echo init1", "echo init2"}, svc.Init)
+	require.Equal(t, "echo start && sleep infinity", svc.Start)
+	require.Equal(t, []string{"echo stop1", "echo stop2"}, svc.Stop)
 
 	// Verify host execution is enabled by checking the label exists
 	require.NotNil(t, svc.Labels)
@@ -872,8 +872,8 @@ recipe:
   new-component:
     services:
       lifecycle-svc:
-        lifecycle:
-          start: ./run-server.sh
+        lifecycle_hooks: true
+        start: ./run-server.sh
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
@@ -895,10 +895,10 @@ recipe:
 
 	svc := component.FindService("lifecycle-svc")
 	require.NotNil(t, svc)
-	require.NotNil(t, svc.Lifecycle)
-	require.Empty(t, svc.Lifecycle.Init)
-	require.Equal(t, "./run-server.sh", svc.Lifecycle.Start)
-	require.Empty(t, svc.Lifecycle.Stop)
+	require.True(t, svc.LifecycleHooks)
+	require.Empty(t, svc.Init)
+	require.Equal(t, "./run-server.sh", svc.Start)
+	require.Empty(t, svc.Stop)
 }
 
 func TestYAMLRecipe_Lifecycle_InitOnly(t *testing.T) {
@@ -911,10 +911,10 @@ recipe:
   new-component:
     services:
       lifecycle-svc:
-        lifecycle:
-          init:
-            - echo "setup step 1"
-            - echo "setup step 2"
+        lifecycle_hooks: true
+        init:
+          - echo "setup step 1"
+          - echo "setup step 2"
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
@@ -936,10 +936,10 @@ recipe:
 
 	svc := component.FindService("lifecycle-svc")
 	require.NotNil(t, svc)
-	require.NotNil(t, svc.Lifecycle)
-	require.Equal(t, []string{"echo \"setup step 1\"", "echo \"setup step 2\""}, svc.Lifecycle.Init)
-	require.Empty(t, svc.Lifecycle.Start)
-	require.Empty(t, svc.Lifecycle.Stop)
+	require.True(t, svc.LifecycleHooks)
+	require.Equal(t, []string{"echo \"setup step 1\"", "echo \"setup step 2\""}, svc.Init)
+	require.Empty(t, svc.Start)
+	require.Empty(t, svc.Stop)
 }
 
 func TestYAMLRecipe_Lifecycle_InitAndStop(t *testing.T) {
@@ -952,11 +952,11 @@ recipe:
   new-component:
     services:
       lifecycle-svc:
-        lifecycle:
-          init:
-            - echo "setup"
-          stop:
-            - echo "cleanup"
+        lifecycle_hooks: true
+        init:
+          - echo "setup"
+        stop:
+          - echo "cleanup"
 `
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
@@ -978,8 +978,8 @@ recipe:
 
 	svc := component.FindService("lifecycle-svc")
 	require.NotNil(t, svc)
-	require.NotNil(t, svc.Lifecycle)
-	require.Equal(t, []string{"echo \"setup\""}, svc.Lifecycle.Init)
-	require.Empty(t, svc.Lifecycle.Start)
-	require.Equal(t, []string{"echo \"cleanup\""}, svc.Lifecycle.Stop)
+	require.True(t, svc.LifecycleHooks)
+	require.Equal(t, []string{"echo \"setup\""}, svc.Init)
+	require.Empty(t, svc.Start)
+	require.Equal(t, []string{"echo \"cleanup\""}, svc.Stop)
 }

@@ -131,8 +131,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 			if service.HostPath != "" {
 				continue
 			}
-			// If Lifecycle is set, no binary path needed - commands are shell commands
-			if service.Lifecycle != nil {
+			// If LifecycleHooks is set, no binary path needed - commands are shell commands
+			if service.LifecycleHooks {
 				continue
 			}
 			// Otherwise, download the release artifact
@@ -884,7 +884,7 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 // runOnHost runs the service on the host machine
 func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 	// If this is a lifecycle service, use the lifecycle runner
-	if ss.Lifecycle != nil {
+	if ss.LifecycleHooks {
 		return d.runLifecycleService(ctx, ss)
 	}
 

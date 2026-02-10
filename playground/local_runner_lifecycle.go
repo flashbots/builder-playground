@@ -68,7 +68,7 @@ func (d *LocalRunner) runLifecycleService(ctx context.Context, svc *Service) err
 	d.lifecycleServices = append(d.lifecycleServices, svc)
 
 	// Run init commands sequentially - each must return exit code 0
-	for i, cmd := range svc.Lifecycle.Init {
+	for i, cmd := range svc.Init {
 		slog.Info("Running lifecycle init command", "service", svc.Name, "command", cmd, "index", i)
 		lc.logHeader("Init", i, cmd)
 
@@ -78,15 +78,15 @@ func (d *LocalRunner) runLifecycleService(ctx context.Context, svc *Service) err
 		}
 	}
 
-	if svc.Lifecycle.Start == "" {
+	if svc.Start == "" {
 		return nil
 	}
 
 	// Run start command - may hang (long-running) or return 0
-	slog.Info("Running lifecycle start command", "service", svc.Name, "command", svc.Lifecycle.Start)
-	lc.logHeader("Start", -1, svc.Lifecycle.Start)
+	slog.Info("Running lifecycle start command", "service", svc.Name, "command", svc.Start)
+	lc.logHeader("Start", -1, svc.Start)
 
-	startCmd := lc.newCmd(ctx, svc.Lifecycle.Start)
+	startCmd := lc.newCmd(ctx, svc.Start)
 	go func() {
 		if err := startCmd.Run(); err != nil {
 			if mainctx.IsExiting() {
@@ -94,7 +94,7 @@ func (d *LocalRunner) runLifecycleService(ctx context.Context, svc *Service) err
 			}
 			slog.Error("Lifecycle service failed", "service", svc.Name, "error", err)
 			d.runLifecycleStopCommands(svc, logFile)
-			d.sendExitError(fmt.Errorf("%s", lc.formatError("start", svc.Lifecycle.Start, err)))
+			d.sendExitError(fmt.Errorf("%s", lc.formatError("start", svc.Start, err)))
 		}
 	}()
 
@@ -104,7 +104,7 @@ func (d *LocalRunner) runLifecycleService(ctx context.Context, svc *Service) err
 
 // runLifecycleStopCommands runs the stop commands for a lifecycle service
 func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer) {
-	if svc.Lifecycle == nil || len(svc.Lifecycle.Stop) == 0 {
+	if len(svc.Stop) == 0 {
 		return
 	}
 
@@ -114,7 +114,7 @@ func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer
 		logWriter: logOutput,
 	}
 
-	for i, stopCmd := range svc.Lifecycle.Stop {
+	for i, stopCmd := range svc.Stop {
 		slog.Info("Running lifecycle stop command", "service", svc.Name, "command", stopCmd, "index", i)
 		lc.logHeader("Stop", i, stopCmd)
 
