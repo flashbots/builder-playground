@@ -139,6 +139,21 @@ var validateCmd = &cobra.Command{
 			return runValidation(yamlRecipe)
 		}
 
+		// Check if it's a custom recipe name
+		customRecipes, err := playground.GetEmbeddedCustomRecipes()
+		if err == nil {
+			for _, cr := range customRecipes {
+				if cr == recipeName {
+					yamlRecipe, cleanup, err := playground.LoadCustomRecipe(recipeName, recipes)
+					if err != nil {
+						return err
+					}
+					defer cleanup()
+					return runValidation(yamlRecipe)
+				}
+			}
+		}
+
 		// Check base recipes
 		for _, recipe := range recipes {
 			if recipe.Name() == recipeName {
