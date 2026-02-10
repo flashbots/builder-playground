@@ -58,6 +58,18 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
 		BuilderConfig: b.builderConfig,
 	})
 
+	// Apply beacon service overrides for buildernet
+	// We need these for letting the builder connect to the beacon node
+	if beacon := component.FindService("beacon"); beacon != nil {
+		beacon.ReplaceArgs(map[string]string{
+			"--target-peers":          "1",
+			"--subscribe-all-subnets": "true",
+		})
+	}
+
+	// Remove beacon healthmon - doesn't work with --target-peers=1 which is required for builder VM
+	component.RemoveService("beacon_healthmon")
+
 	component.RunContenderIfEnabled(ctx)
 
 	return component

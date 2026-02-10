@@ -254,7 +254,7 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 				}
 
 				// Find existing service
-				existingService := findService(component, serviceName)
+				existingService := component.FindService(serviceName)
 
 				if serviceConfig.Remove {
 					// Remove the service
@@ -309,23 +309,6 @@ func removeComponent(root *Component, name string) {
 		}
 		removeComponent(inner, name)
 	}
-}
-
-// findService finds a service by name in the component tree
-func findService(root *Component, name string) *Service {
-	for _, svc := range root.Services {
-		if svc.Name == name {
-			return svc
-		}
-	}
-
-	for _, inner := range root.Inner {
-		if found := findService(inner, name); found != nil {
-			return found
-		}
-	}
-
-	return nil
 }
 
 // removeService removes a service from the component tree

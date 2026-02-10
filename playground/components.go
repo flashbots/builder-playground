@@ -559,8 +559,7 @@ func (l *LighthouseBeaconNode) Apply(ctx *ExContext) *Component {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithVolume("data", "/data_beacon")
 
-	// TODO: Enable later - doesn't work with --target-peers=1 which is required for builder VM
-	//UseHealthmon(component, svc, healthmonBeacon)
+	UseHealthmon(component, svc, healthmonBeacon)
 
 	if l.MevBoostNode != "" {
 		svc.WithArgs(

@@ -63,58 +63,6 @@ func TestRemoveComponent(t *testing.T) {
 	}
 }
 
-func TestFindService(t *testing.T) {
-	root := &Component{
-		Name:     "root",
-		Services: []*Service{{Name: "root-svc"}},
-		Inner: []*Component{
-			{
-				Name:     "child",
-				Services: []*Service{{Name: "child-svc"}},
-			},
-		},
-	}
-
-	tests := []struct {
-		name     string
-		search   string
-		expected bool
-	}{
-		{"find root service", "root-svc", true},
-		{"find child service", "child-svc", true},
-		{"not found", "nonexistent", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := findService(root, tt.search)
-			if tt.expected {
-				require.NotNil(t, result)
-			} else {
-				require.Nil(t, result)
-			}
-		})
-	}
-}
-
-func TestRemoveService(t *testing.T) {
-	root := &Component{
-		Name: "root",
-		Services: []*Service{
-			{Name: "svc1"},
-			{Name: "svc2"},
-			{Name: "svc3"},
-		},
-	}
-
-	removeService(root, "svc2")
-
-	require.Len(t, root.Services, 2)
-	for _, s := range root.Services {
-		require.NotEqual(t, "svc2", s.Name)
-	}
-}
-
 func TestCollectServiceNames(t *testing.T) {
 	root := &Component{
 		Name:     "root",
@@ -366,26 +314,6 @@ func TestApplyFilesToService(t *testing.T) {
 	require.Len(t, svc.FilesMapped, 2)
 	require.Equal(t, "config.json", svc.FilesMapped["/app/config.json"])
 	require.Equal(t, "genesis.json", svc.FilesMapped["/app/genesis.json"])
-}
-
-func TestRemoveService_Nested(t *testing.T) {
-	root := &Component{
-		Name: "root",
-		Inner: []*Component{
-			{
-				Name: "child",
-				Services: []*Service{
-					{Name: "nested-svc1"},
-					{Name: "nested-svc2"},
-				},
-			},
-		},
-	}
-
-	removeService(root, "nested-svc1")
-
-	require.Len(t, root.Inner[0].Services, 1)
-	require.Equal(t, "nested-svc2", root.Inner[0].Services[0].Name)
 }
 
 func TestApplyServiceOverrides_AllFields(t *testing.T) {
@@ -680,7 +608,7 @@ recipe:
 	component := recipe.Apply(ctx)
 
 	require.NotNil(t, component)
-	require.Nil(t, findService(component, "mev-boost-relay"))
+	require.Nil(t, component.FindService("mev-boost-relay"))
 }
 
 func TestYAMLRecipe_ApplyModifications_AddNewService(t *testing.T) {
@@ -715,7 +643,7 @@ recipe:
 	component := recipe.Apply(ctx)
 
 	require.NotNil(t, component)
-	newSvc := findService(component, "new-svc")
+	newSvc := component.FindService("new-svc")
 	require.NotNil(t, newSvc)
 	require.Equal(t, "new-image", newSvc.Image)
 }

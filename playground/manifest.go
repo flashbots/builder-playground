@@ -72,6 +72,34 @@ func (p *Component) AddService(ctx *ExContext, srv ComponentGen) {
 	p.Inner = append(p.Inner, srv.Apply(ctx))
 }
 
+// FindService finds a service by name in the component tree
+func (p *Component) FindService(name string) *Service {
+	for _, svc := range p.Services {
+		if svc.Name == name {
+			return svc
+		}
+	}
+	for _, inner := range p.Inner {
+		if found := inner.FindService(name); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// RemoveService removes a service by name from the component tree
+func (p *Component) RemoveService(name string) {
+	for i, svc := range p.Services {
+		if svc.Name == name {
+			p.Services = append(p.Services[:i], p.Services[i+1:]...)
+			return
+		}
+	}
+	for _, inner := range p.Inner {
+		inner.RemoveService(name)
+	}
+}
+
 func componentToManifest(p *Component) []*Service {
 	services := p.Services
 
@@ -506,6 +534,18 @@ func (s *Service) WithArgs(args ...string) *Service {
 		s.applyTemplate(arg)
 	}
 	s.Args = append(s.Args, args...)
+	return s
+}
+
+// ReplaceArgs replaces argument values in the service's Args.
+// The replacements map contains flag -> new_value pairs.
+// For each flag found in Args, the following value is replaced.
+func (s *Service) ReplaceArgs(replacements map[string]string) *Service {
+	for i := 0; i < len(s.Args); i++ {
+		if newValue, ok := replacements[s.Args[i]]; ok && i+1 < len(s.Args) {
+			s.Args[i+1] = newValue
+		}
+	}
 	return s
 }
 

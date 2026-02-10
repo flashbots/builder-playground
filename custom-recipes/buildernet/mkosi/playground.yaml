@@ -1,0 +1,2 @@
+base: buildernet
+description: Deploy the stack with the BuilderNet mkosi image (QEMU)
