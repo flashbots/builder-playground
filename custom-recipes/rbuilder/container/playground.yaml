@@ -1,3 +1,4 @@
+# NOTE: Works with Mac - prefer using rbuilder/bin for Linux if this doesn't work.
 base: l1
 description: Use reth and rbuilder containers
 
