@@ -283,18 +283,6 @@ func (d *LocalRunner) sendExitError(err error) {
 }
 
 func (d *LocalRunner) Stop(keepResources bool) error {
-	forceKillCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	// Keep an eye on the force kill requests.
-	go func(ctx context.Context) {
-		select {
-		case <-ctx.Done():
-			return
-		case <-mainctx.GetForceKillCtx().Done():
-			d.stopAllProcessesWithSignal(os.Kill)
-			ForceKillSession(d.manifest.ID, keepResources)
-		}
-	}(forceKillCtx)
 	// Kill all the processes ran by playground on the host.
 	// Possible to make a more graceful exit with os.Interrupt here
 	// but preferring a quick exit for now.
@@ -341,7 +329,7 @@ func StopSession(id string, keepResources bool) error {
 	} else {
 		args = append(args, "down", "-v") // removes containers and volumes
 	}
-	cmd := exec.CommandContext(context.Background(), "docker", args...)
+	cmd := exec.Command("docker", args...)
 	// Isolate terminal signals from the child process and avoid weird force-kill cases
 	// and leftovers.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -356,11 +344,16 @@ func StopSession(id string, keepResources bool) error {
 	return nil
 }
 
-// ForceKillSession stops all containers for a session with a short grace period (SIGTERM, wait, SIGKILL)
+// ForceKillSession immediately stops all containers for a session using SIGKILL with a grace period timeout
 func ForceKillSession(id string, keepResources bool) {
 	cmd := exec.Command("sh", "-c",
-		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -s SIGKILL", id))
-	_ = cmd.Run()
+		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d -s SIGKILL", id, stopGracePeriodSecs))
+	var outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &outBuf
+	if err := cmd.Run(); err != nil {
+		slog.Warn("Failed to force kill containers", "session", id, "error", err, "output", outBuf.String())
+	}
 }
 
 func GetLocalSessions() ([]string, error) {
@@ -1176,6 +1169,22 @@ func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
 }
 
 func (d *LocalRunner) Run(ctx context.Context) error {
+	// Start a force kill handler that runs throughout the entire lifecycle
+	go func() {
+		<-mainctx.GetForceKillCtx().Done()
+		slog.Warn("Force kill triggered, terminating all processes and containers immediately")
+
+		// Kill all host processes
+		d.stopAllProcessesWithSignal(os.Kill)
+
+		// Force kill all containers directly
+		ForceKillSession(d.manifest.ID, false)
+
+		// Give a moment for cleanup to complete, then force exit
+		time.Sleep(2 * time.Second)
+		os.Exit(130)
+	}()
+
 	go d.trackContainerStatusAndLogs()
 
 	yamlData, err := d.generateDockerCompose()
