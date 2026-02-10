@@ -91,10 +91,6 @@ type YAMLServiceConfig struct {
 	// When true, init/start/stop commands are used instead of host_path/release
 	LifecycleHooks bool `yaml:"lifecycle_hooks,omitempty"`
 
-	LifecycleHookParams `yaml:",inline"`
-}
-
-type LifecycleHookParams struct {
 	// Init commands run sequentially before start. Each must return exit code 0.
 	// Only used when lifecycle_hooks is true
 	Init []string `yaml:"init,omitempty"`

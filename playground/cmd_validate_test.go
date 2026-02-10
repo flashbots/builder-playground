@@ -17,41 +17,44 @@ func TestValidateLifecycleConfig(t *testing.T) {
 		{
 			name: "valid lifecycle config with init start and stop",
 			config: &YAMLServiceConfig{
-				LifecycleHooks:      true,
-				LifecycleHookParams: LifecycleHookParams{Init: []string{"echo init"}, Start: "./start.sh", Stop: []string{"echo stop"}},
+				LifecycleHooks: true,
+				Init:           []string{"echo init"},
+				Start:          "./start.sh",
+				Stop:           []string{"echo stop"},
 			},
 			expectedErrors: 0,
 		},
 		{
 			name: "valid lifecycle config with only init",
 			config: &YAMLServiceConfig{
-				LifecycleHooks:      true,
-				LifecycleHookParams: LifecycleHookParams{Init: []string{"echo init"}},
+				LifecycleHooks: true,
+				Init:           []string{"echo init"},
 			},
 			expectedErrors: 0,
 		},
 		{
 			name: "valid lifecycle config with init and stop",
 			config: &YAMLServiceConfig{
-				LifecycleHooks:      true,
-				LifecycleHookParams: LifecycleHookParams{Init: []string{"echo init"}, Stop: []string{"echo stop"}},
+				LifecycleHooks: true,
+				Init:           []string{"echo init"},
+				Stop:           []string{"echo stop"},
 			},
 			expectedErrors: 0,
 		},
 		{
 			name: "valid lifecycle config with only start",
 			config: &YAMLServiceConfig{
-				LifecycleHooks:      true,
-				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+				LifecycleHooks: true,
+				Start:          "./start.sh",
 			},
 			expectedErrors: 0,
 		},
 		{
 			name: "lifecycle_hooks with host_path",
 			config: &YAMLServiceConfig{
-				LifecycleHooks:      true,
-				HostPath:            "/usr/bin/app",
-				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+				LifecycleHooks: true,
+				HostPath:       "/usr/bin/app",
+				Start:          "./start.sh",
 			},
 			expectedErrors: 1,
 			errorContains:  []string{"lifecycle_hooks cannot be used with host_path"},
@@ -65,7 +68,7 @@ func TestValidateLifecycleConfig(t *testing.T) {
 					Org:     "org",
 					Version: "v1.0.0",
 				},
-				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+				Start: "./start.sh",
 			},
 			expectedErrors: 1,
 			errorContains:  []string{"lifecycle_hooks cannot be used with release"},
@@ -73,9 +76,9 @@ func TestValidateLifecycleConfig(t *testing.T) {
 		{
 			name: "lifecycle_hooks with args",
 			config: &YAMLServiceConfig{
-				LifecycleHooks:      true,
-				Args:                []string{"--port", "8080"},
-				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+				LifecycleHooks: true,
+				Args:           []string{"--port", "8080"},
+				Start:          "./start.sh",
 			},
 			expectedErrors: 1,
 			errorContains:  []string{"lifecycle_hooks cannot be used with args"},
@@ -83,8 +86,8 @@ func TestValidateLifecycleConfig(t *testing.T) {
 		{
 			name: "lifecycle_hooks with only stop - invalid",
 			config: &YAMLServiceConfig{
-				LifecycleHooks:      true,
-				LifecycleHookParams: LifecycleHookParams{Stop: []string{"echo stop"}},
+				LifecycleHooks: true,
+				Stop:           []string{"echo stop"},
 			},
 			expectedErrors: 1,
 			errorContains:  []string{"lifecycle_hooks requires at least one of init or start"},
@@ -107,8 +110,8 @@ func TestValidateLifecycleConfig(t *testing.T) {
 					Org:     "org",
 					Version: "v1.0.0",
 				},
-				Args:                []string{"--port", "8080"},
-				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+				Args:  []string{"--port", "8080"},
+				Start: "./start.sh",
 			},
 			expectedErrors: 3,
 			errorContains: []string{
@@ -128,8 +131,8 @@ func TestValidateLifecycleConfig(t *testing.T) {
 		{
 			name: "init without lifecycle_hooks - invalid",
 			config: &YAMLServiceConfig{
-				HostPath:            "/usr/bin/app",
-				LifecycleHookParams: LifecycleHookParams{Init: []string{"echo init"}},
+				HostPath: "/usr/bin/app",
+				Init:     []string{"echo init"},
 			},
 			expectedErrors: 1,
 			errorContains:  []string{"init, start, and stop require lifecycle_hooks: true"},
@@ -137,8 +140,8 @@ func TestValidateLifecycleConfig(t *testing.T) {
 		{
 			name: "start without lifecycle_hooks - invalid",
 			config: &YAMLServiceConfig{
-				HostPath:            "/usr/bin/app",
-				LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+				HostPath: "/usr/bin/app",
+				Start:    "./start.sh",
 			},
 			expectedErrors: 1,
 			errorContains:  []string{"init, start, and stop require lifecycle_hooks: true"},
@@ -146,8 +149,8 @@ func TestValidateLifecycleConfig(t *testing.T) {
 		{
 			name: "stop without lifecycle_hooks - invalid",
 			config: &YAMLServiceConfig{
-				HostPath:            "/usr/bin/app",
-				LifecycleHookParams: LifecycleHookParams{Stop: []string{"echo stop"}},
+				HostPath: "/usr/bin/app",
+				Stop:     []string{"echo stop"},
 			},
 			expectedErrors: 1,
 			errorContains:  []string{"init, start, and stop require lifecycle_hooks: true"},
@@ -183,9 +186,9 @@ func TestValidateLifecycleConfig_InYAMLRecipe(t *testing.T) {
 				"test-component": {
 					Services: map[string]*YAMLServiceConfig{
 						"test-svc": {
-							LifecycleHooks:      true,
-							HostPath:            "/usr/bin/app",
-							LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+							LifecycleHooks: true,
+							HostPath:       "/usr/bin/app",
+							Start:          "./start.sh",
 						},
 					},
 				},
@@ -217,8 +220,8 @@ func TestValidateLifecycleConfig_InYAMLRecipe_WithoutLifecycleHooks(t *testing.T
 				"test-component": {
 					Services: map[string]*YAMLServiceConfig{
 						"test-svc": {
-							HostPath:            "/usr/bin/app",
-							LifecycleHookParams: LifecycleHookParams{Start: "./start.sh"},
+							HostPath: "/usr/bin/app",
+							Start:    "./start.sh",
 						},
 					},
 				},
