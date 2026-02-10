@@ -5,7 +5,7 @@ redacted_telemetry_server_ip = "0.0.0.0"
 full_telemetry_server_port = 6060
 full_telemetry_server_ip = "0.0.0.0"
 
-# Paths relative to artifacts directory
+# Absolute paths inside the container
 chain = "/data/genesis.json"
 reth_datadir = "/data_reth"
 el_node_ipc_path = "/data_reth/reth.ipc"
