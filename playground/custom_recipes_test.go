@@ -24,6 +24,9 @@ recipe:
         image: "test-image:latest"
 `),
 		},
+		"custom-recipes/testdir/sample/extra.toml": &fstest.MapFile{
+			Data: []byte("[section]\nkey = \"value\"\n"),
+		},
 		"custom-recipes/testdir/another/playground.yaml": &fstest.MapFile{
 			Data: []byte(`base: l1
 description: Another test recipe
@@ -166,8 +169,9 @@ func TestListCustomRecipeFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, files)
 
-	// Should include playground.yaml
+	// Should include playground.yaml and non-YAML sibling files
 	require.Contains(t, files, "playground.yaml")
+	require.Contains(t, files, "extra.toml")
 }
 
 func TestListCustomRecipeFiles_InvalidName(t *testing.T) {
@@ -204,6 +208,12 @@ func TestGenerateCustomRecipeToDir(t *testing.T) {
 	content, err := os.ReadFile(yamlPath)
 	require.NoError(t, err)
 	require.Contains(t, string(content), "base: l1")
+
+	// Verify non-YAML sibling file was also extracted
+	extraPath := filepath.Join(tmpDir, "extra.toml")
+	extraContent, err := os.ReadFile(extraPath)
+	require.NoError(t, err)
+	require.Contains(t, string(extraContent), "key = \"value\"")
 }
 
 func TestGenerateCustomRecipeToDir_InvalidName(t *testing.T) {
