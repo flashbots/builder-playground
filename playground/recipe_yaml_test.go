@@ -812,3 +812,174 @@ func TestApplyServiceOverrides_WithReplaceArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestYAMLRecipe_Lifecycle_ParseAndApply(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: l1
+recipe:
+  new-component:
+    services:
+      lifecycle-svc:
+        lifecycle:
+          init:
+            - echo init1
+            - echo init2
+          start: echo start && sleep infinity
+          stop:
+            - echo stop1
+            - echo stop2
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.NoError(t, err)
+
+	out, err := NewOutput(tmpDir)
+	require.NoError(t, err)
+	ctx := &ExContext{
+		LogLevel:  LevelInfo,
+		Contender: &ContenderContext{Enabled: false},
+		Output:    out,
+	}
+
+	component := recipe.Apply(ctx)
+	require.NotNil(t, component)
+
+	svc := component.FindService("lifecycle-svc")
+	require.NotNil(t, svc)
+	require.NotNil(t, svc.Lifecycle)
+	require.Equal(t, []string{"echo init1", "echo init2"}, svc.Lifecycle.Init)
+	require.Equal(t, "echo start && sleep infinity", svc.Lifecycle.Start)
+	require.Equal(t, []string{"echo stop1", "echo stop2"}, svc.Lifecycle.Stop)
+
+	// Verify host execution is enabled by checking the label exists
+	require.NotNil(t, svc.Labels)
+	require.NotEmpty(t, svc.Labels)
+}
+
+func TestYAMLRecipe_Lifecycle_StartOnly(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: l1
+recipe:
+  new-component:
+    services:
+      lifecycle-svc:
+        lifecycle:
+          start: ./run-server.sh
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.NoError(t, err)
+
+	out, err := NewOutput(tmpDir)
+	require.NoError(t, err)
+	ctx := &ExContext{
+		LogLevel:  LevelInfo,
+		Contender: &ContenderContext{Enabled: false},
+		Output:    out,
+	}
+
+	component := recipe.Apply(ctx)
+	require.NotNil(t, component)
+
+	svc := component.FindService("lifecycle-svc")
+	require.NotNil(t, svc)
+	require.NotNil(t, svc.Lifecycle)
+	require.Empty(t, svc.Lifecycle.Init)
+	require.Equal(t, "./run-server.sh", svc.Lifecycle.Start)
+	require.Empty(t, svc.Lifecycle.Stop)
+}
+
+func TestYAMLRecipe_Lifecycle_InitOnly(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: l1
+recipe:
+  new-component:
+    services:
+      lifecycle-svc:
+        lifecycle:
+          init:
+            - echo "setup step 1"
+            - echo "setup step 2"
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.NoError(t, err)
+
+	out, err := NewOutput(tmpDir)
+	require.NoError(t, err)
+	ctx := &ExContext{
+		LogLevel:  LevelInfo,
+		Contender: &ContenderContext{Enabled: false},
+		Output:    out,
+	}
+
+	component := recipe.Apply(ctx)
+	require.NotNil(t, component)
+
+	svc := component.FindService("lifecycle-svc")
+	require.NotNil(t, svc)
+	require.NotNil(t, svc.Lifecycle)
+	require.Equal(t, []string{"echo \"setup step 1\"", "echo \"setup step 2\""}, svc.Lifecycle.Init)
+	require.Empty(t, svc.Lifecycle.Start)
+	require.Empty(t, svc.Lifecycle.Stop)
+}
+
+func TestYAMLRecipe_Lifecycle_InitAndStop(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: l1
+recipe:
+  new-component:
+    services:
+      lifecycle-svc:
+        lifecycle:
+          init:
+            - echo "setup"
+          stop:
+            - echo "cleanup"
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.NoError(t, err)
+
+	out, err := NewOutput(tmpDir)
+	require.NoError(t, err)
+	ctx := &ExContext{
+		LogLevel:  LevelInfo,
+		Contender: &ContenderContext{Enabled: false},
+		Output:    out,
+	}
+
+	component := recipe.Apply(ctx)
+	require.NotNil(t, component)
+
+	svc := component.FindService("lifecycle-svc")
+	require.NotNil(t, svc)
+	require.NotNil(t, svc.Lifecycle)
+	require.Equal(t, []string{"echo \"setup\""}, svc.Lifecycle.Init)
+	require.Empty(t, svc.Lifecycle.Start)
+	require.Equal(t, []string{"echo \"cleanup\""}, svc.Lifecycle.Stop)
+}

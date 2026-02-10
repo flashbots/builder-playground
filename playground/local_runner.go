@@ -59,6 +59,9 @@ type LocalRunner struct {
 	// they are executed sequentially so we do not need to lock the handles
 	handles []*exec.Cmd
 
+	// lifecycleServices tracks services with lifecycle configs for stop command execution
+	lifecycleServices []*Service
+
 	// exitError signals when one of the services fails
 	exitErr     chan error
 	exitErrOnce sync.Once
@@ -128,10 +131,14 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 			if service.HostPath != "" {
 				continue
 			}
+			// If Lifecycle is set, no binary path needed - commands are shell commands
+			if service.Lifecycle != nil {
+				continue
+			}
 			// Otherwise, download the release artifact
 			releaseArtifact := service.release
 			if releaseArtifact == nil {
-				return nil, fmt.Errorf("service '%s' requires either host_path or release configuration", service.Name)
+				return nil, fmt.Errorf("service '%s' requires either host_path, release, or lifecycle configuration", service.Name)
 			}
 			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
 			if err != nil {
@@ -278,6 +285,10 @@ func (d *LocalRunner) Stop(keepResources bool) error {
 	// Possible to make a more graceful exit with os.Interrupt here
 	// but preferring a quick exit for now.
 	d.stopAllProcessesWithSignal(os.Kill)
+
+	// Run lifecycle stop commands for all tracked lifecycle services
+	d.runAllLifecycleStopCommands()
+
 	return StopSession(d.manifest.ID, keepResources)
 }
 
@@ -871,7 +882,12 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 }
 
 // runOnHost runs the service on the host machine
-func (d *LocalRunner) runOnHost(ss *Service) error {
+func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
+	// If this is a lifecycle service, use the lifecycle runner
+	if ss.Lifecycle != nil {
+		return d.runLifecycleService(ctx, ss)
+	}
+
 	// Wait for dependencies to be healthy before starting
 	if err := d.waitForDependencies(ss); err != nil {
 		return fmt.Errorf("failed waiting for dependencies: %w", err)
@@ -1186,7 +1202,7 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 		if d.isHostService(svc.Name) {
 			svc := svc // capture loop variable
 			g.Go(func() error {
-				return d.runOnHost(svc)
+				return d.runOnHost(ctx, svc)
 			})
 		}
 	}

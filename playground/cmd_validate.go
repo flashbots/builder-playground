@@ -95,9 +95,39 @@ func validateYAMLRecipe(recipe *YAMLRecipe, baseRecipes []Recipe, result *Valida
 					if serviceConfig.Remove {
 						result.AddWarning("removing service '%s' from component '%s' - verify names match base recipe", serviceName, componentName)
 					}
+
+					// Validate lifecycle cannot be used with host_path, release, or args
+					validateLifecycleConfig(serviceName, componentName, serviceConfig, result)
 				}
 			}
 		}
+	}
+}
+
+// validateLifecycleConfig checks that lifecycle is not used with incompatible options
+func validateLifecycleConfig(serviceName, componentName string, config *YAMLServiceConfig, result *ValidationResult) {
+	if config.Lifecycle == nil {
+		return
+	}
+
+	if config.HostPath != "" {
+		result.AddError("service '%s' in component '%s': lifecycle cannot be used with host_path", serviceName, componentName)
+	}
+	if config.Release != nil {
+		result.AddError("service '%s' in component '%s': lifecycle cannot be used with release", serviceName, componentName)
+	}
+	if len(config.Args) > 0 {
+		result.AddError("service '%s' in component '%s': lifecycle cannot be used with args", serviceName, componentName)
+	}
+
+	// Validate that at least one of init or start is specified
+	if len(config.Lifecycle.Init) == 0 && config.Lifecycle.Start == "" {
+		result.AddError("service '%s' in component '%s': lifecycle requires at least one of init or start", serviceName, componentName)
+	}
+
+	// Validate that stop alone is not specified (must have init or start)
+	if len(config.Lifecycle.Stop) > 0 && len(config.Lifecycle.Init) == 0 && config.Lifecycle.Start == "" {
+		result.AddError("service '%s' in component '%s': lifecycle.stop cannot be specified without init or start", serviceName, componentName)
 	}
 }
 

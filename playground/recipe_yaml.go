@@ -86,6 +86,10 @@ type YAMLServiceConfig struct {
 	// ReadyCheck is a URL to check for service readiness (used for health checks)
 	// Format: "http://localhost:PORT/path" - the service is ready when this URL returns 200
 	ReadyCheck string `yaml:"ready_check,omitempty"`
+
+	// Lifecycle specifies custom init/start/stop commands for host execution
+	// Cannot be used with host_path, release, or args
+	Lifecycle *YAMLLifecycleConfig `yaml:"lifecycle,omitempty"`
 }
 
 type YAMLVolumeMappedConfig struct {
@@ -102,6 +106,18 @@ type YAMLReleaseConfig struct {
 	// Format specifies the download format: "tar.gz" (default) or "binary"
 	// For "binary", downloads the raw binary directly without extraction
 	Format string `yaml:"format,omitempty"`
+}
+
+// YAMLLifecycleConfig specifies lifecycle commands for a host-executed service
+// This is an alternative to host_path/release for services that need custom init/start/stop logic
+type YAMLLifecycleConfig struct {
+	// Init commands run sequentially before start. Each must return exit code 0.
+	Init []string `yaml:"init,omitempty"`
+	// Start command runs the service. May hang (long-running) or return 0.
+	// Non-zero exit code is a failure.
+	Start string `yaml:"start"`
+	// Stop commands run when playground exits. May return non-zero (best effort).
+	Stop []string `yaml:"stop,omitempty"`
 }
 
 // YAMLRecipe wraps a base recipe and applies YAML-based modifications
@@ -459,6 +475,14 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
 	}
+	if config.Lifecycle != nil {
+		svc.Lifecycle = &Lifecycle{
+			Init:  config.Lifecycle.Init,
+			Start: config.Lifecycle.Start,
+			Stop:  config.Lifecycle.Stop,
+		}
+		svc.UseHostExecution()
+	}
 }
 
 // applyReplaceArgs replaces arguments in the existing args list.
@@ -627,6 +651,14 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 	}
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
+	}
+	if config.Lifecycle != nil {
+		svc.Lifecycle = &Lifecycle{
+			Init:  config.Lifecycle.Init,
+			Start: config.Lifecycle.Start,
+			Stop:  config.Lifecycle.Stop,
+		}
+		svc.UseHostExecution()
 	}
 
 	return svc

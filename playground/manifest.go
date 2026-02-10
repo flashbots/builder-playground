@@ -406,6 +406,9 @@ type Service struct {
 
 	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
+	// Lifecycle defines custom init/start/stop commands for host execution
+	Lifecycle *Lifecycle `json:"lifecycle,omitempty"`
+
 	postHook *postHook
 	release  *release
 }
@@ -607,6 +610,17 @@ type ReadyCheck struct {
 	StartPeriod time.Duration `json:"start_period"`
 	Timeout     time.Duration `json:"timeout"`
 	Retries     int           `json:"retries"`
+}
+
+// Lifecycle defines custom init/start/stop commands for host-executed services
+type Lifecycle struct {
+	// Init commands run sequentially before start. Each must return exit code 0.
+	Init []string `json:"init,omitempty"`
+	// Start command runs the service. May hang (long-running) or return 0.
+	// Non-zero exit code is a failure.
+	Start string `json:"start"`
+	// Stop commands run when playground exits. May return non-zero (best effort).
+	Stop []string `json:"stop,omitempty"`
 }
 
 func (s *Service) WithUngracefulShutdown() *Service {
