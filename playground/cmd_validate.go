@@ -124,11 +124,6 @@ func validateLifecycleConfig(serviceName, componentName string, config *YAMLServ
 	if len(config.Lifecycle.Init) == 0 && config.Lifecycle.Start == "" {
 		result.AddError("service '%s' in component '%s': lifecycle requires at least one of init or start", serviceName, componentName)
 	}
-
-	// Validate that stop alone is not specified (must have init or start)
-	if len(config.Lifecycle.Stop) > 0 && len(config.Lifecycle.Init) == 0 && config.Lifecycle.Start == "" {
-		result.AddError("service '%s' in component '%s': lifecycle.stop cannot be specified without init or start", serviceName, componentName)
-	}
 }
 
 func validateUniqueServiceNames(manifest *Manifest, result *ValidationResult) {

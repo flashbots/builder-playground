@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -150,7 +151,7 @@ func TestValidateLifecycleConfig(t *testing.T) {
 			for _, expected := range tt.errorContains {
 				found := false
 				for _, err := range result.Errors {
-					if contains(err, expected) {
+					if strings.Contains(err, expected) {
 						found = true
 						break
 					}
@@ -159,19 +160,6 @@ func TestValidateLifecycleConfig(t *testing.T) {
 			}
 		})
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func TestValidateLifecycleConfig_InYAMLRecipe(t *testing.T) {
@@ -201,7 +189,7 @@ func TestValidateLifecycleConfig_InYAMLRecipe(t *testing.T) {
 	require.NotEmpty(t, result.Errors)
 	found := false
 	for _, err := range result.Errors {
-		if contains(err, "lifecycle cannot be used with host_path") {
+		if strings.Contains(err, "lifecycle cannot be used with host_path") {
 			found = true
 			break
 		}
