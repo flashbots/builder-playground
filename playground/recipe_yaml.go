@@ -481,7 +481,7 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 // applyReplaceArgs replaces arguments in the existing args list.
 // ReplaceArgs contains flag-value pairs in sequence: ["--flag", "new-value", "--other-flag", "other-value"]
 // For each pair, it finds the flag in args and replaces its following value.
-func applyReplaceArgs(args []string, replaceArgs []string) []string {
+func applyReplaceArgs(args, replaceArgs []string) []string {
 	if len(replaceArgs)%2 != 0 {
 		slog.Warn("replace_args should contain pairs of flag and value", "count", len(replaceArgs))
 	}
@@ -499,7 +499,7 @@ func applyReplaceArgs(args []string, replaceArgs []string) []string {
 }
 
 // applyReplacePair finds flag in args and replaces the following value with newValue.
-func applyReplacePair(flag string, newValue string, args []string) []string {
+func applyReplacePair(flag, newValue string, args []string) []string {
 	for i := 0; i < len(args); i++ {
 		if args[i] == flag && i+1 < len(args) {
 			args[i+1] = newValue

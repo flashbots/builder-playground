@@ -12,8 +12,8 @@ import (
 
 func newTestCustomRecipesFS() fstest.MapFS {
 	return fstest.MapFS{
-		// Recipes in subdirectory (dir/name format)
-		"custom-recipes/testdir/sample.yaml": &fstest.MapFile{
+		// Recipes in group/variant/playground.yaml format
+		"custom-recipes/testdir/sample/playground.yaml": &fstest.MapFile{
 			Data: []byte(`base: l1
 description: A sample test recipe
 
@@ -24,15 +24,15 @@ recipe:
         image: "test-image:latest"
 `),
 		},
-		"custom-recipes/testdir/another.yml": &fstest.MapFile{
+		"custom-recipes/testdir/another/playground.yaml": &fstest.MapFile{
 			Data: []byte(`base: l1
 description: Another test recipe
 `),
 		},
-		// Recipe directly under custom-recipes/ (name format)
-		"custom-recipes/rootrecipe.yaml": &fstest.MapFile{
+		// Another group with a variant
+		"custom-recipes/othergroup/variant1/playground.yaml": &fstest.MapFile{
 			Data: []byte(`base: l1
-description: A root level recipe
+description: Other group recipe
 `),
 		},
 	}
@@ -55,12 +55,10 @@ func TestGetEmbeddedCustomRecipes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, recipes)
 
-	// Should find recipes in subdirectory (dir/name format)
+	// Should find recipes in group/variant format
 	require.Contains(t, recipes, "testdir/sample")
 	require.Contains(t, recipes, "testdir/another")
-
-	// Should find recipes at root level (name format)
-	require.Contains(t, recipes, "rootrecipe")
+	require.Contains(t, recipes, "othergroup/variant1")
 }
 
 func TestGetCustomRecipeInfo(t *testing.T) {
@@ -80,17 +78,17 @@ func TestGetCustomRecipeInfo(t *testing.T) {
 	require.Equal(t, "A sample test recipe", info.Description)
 }
 
-func TestGetCustomRecipeInfo_RootLevel(t *testing.T) {
+func TestGetCustomRecipeInfo_OtherGroup(t *testing.T) {
 	cleanup := setupTestCustomRecipesFS(t)
 	defer cleanup()
 
-	// Test root level recipe (name format without dir/)
-	info, err := GetCustomRecipeInfo("rootrecipe", nil)
+	// Test another group/variant
+	info, err := GetCustomRecipeInfo("othergroup/variant1", nil)
 	require.NoError(t, err)
 	require.NotNil(t, info)
-	require.Equal(t, "rootrecipe", info.Name)
+	require.Equal(t, "othergroup/variant1", info.Name)
 	require.Equal(t, "l1", info.Base)
-	require.Equal(t, "A root level recipe", info.Description)
+	require.Equal(t, "Other group recipe", info.Description)
 }
 
 func TestGetCustomRecipeInfo_NotFound(t *testing.T) {
@@ -100,6 +98,11 @@ func TestGetCustomRecipeInfo_NotFound(t *testing.T) {
 	_, err := GetCustomRecipeInfo("testdir/nonexistent", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "custom recipe not found")
+
+	// Also test invalid format (no slash)
+	_, err = GetCustomRecipeInfo("invalidformat", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid custom recipe name")
 }
 
 func TestParseCustomRecipeName(t *testing.T) {
@@ -115,26 +118,26 @@ func TestParseCustomRecipeName(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name:     "dir/name format",
+			name:     "group/variant format",
 			input:    "testdir/sample",
-			wantDir:  "testdir",
-			wantYAML: "sample.yaml",
-			wantPath: "custom-recipes/testdir",
+			wantDir:  "testdir/sample",
+			wantYAML: "playground.yaml",
+			wantPath: "custom-recipes/testdir/sample",
 		},
 		{
-			name:     "root level recipe (name format)",
-			input:    "rootrecipe",
-			wantDir:  "",
-			wantYAML: "rootrecipe.yaml",
-			wantPath: "custom-recipes",
+			name:     "another group/variant",
+			input:    "othergroup/variant1",
+			wantDir:  "othergroup/variant1",
+			wantYAML: "playground.yaml",
+			wantPath: "custom-recipes/othergroup/variant1",
 		},
 		{
-			name:        "not found - root level",
+			name:        "invalid format - no slash",
 			input:       "nonexistent",
 			expectError: true,
 		},
 		{
-			name:        "not found - subdirectory",
+			name:        "not found - variant doesn't exist",
 			input:       "testdir/nonexistent",
 			expectError: true,
 		},
@@ -163,22 +166,20 @@ func TestListCustomRecipeFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, files)
 
-	// Should include playground.yaml (renamed from sample.yaml)
-	hasPlaygroundYAML := false
-	for _, f := range files {
-		if f == "playground.yaml" {
-			hasPlaygroundYAML = true
-			break
-		}
-	}
-	require.True(t, hasPlaygroundYAML, "expected playground.yaml in files list")
+	// Should include playground.yaml
+	require.Contains(t, files, "playground.yaml")
 }
 
 func TestListCustomRecipeFiles_InvalidName(t *testing.T) {
 	cleanup := setupTestCustomRecipesFS(t)
 	defer cleanup()
 
+	// Invalid format (no slash)
 	_, err := listCustomRecipeFiles("invalid")
+	require.Error(t, err)
+
+	// Valid format but doesn't exist
+	_, err = listCustomRecipeFiles("testdir/nonexistent")
 	require.Error(t, err)
 }
 
@@ -213,7 +214,12 @@ func TestGenerateCustomRecipeToDir_InvalidName(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
+	// Invalid format (no slash)
 	_, err = GenerateCustomRecipeToDir("invalid", tmpDir)
+	require.Error(t, err)
+
+	// Valid format but doesn't exist
+	_, err = GenerateCustomRecipeToDir("testdir/nonexistent", tmpDir)
 	require.Error(t, err)
 }
 
@@ -293,7 +299,13 @@ func TestLoadCustomRecipe_NotFound(t *testing.T) {
 	cleanup := setupTestCustomRecipesFS(t)
 	defer cleanup()
 
+	// Invalid format (no slash)
 	_, cleanupTmp, err := LoadCustomRecipe("nonexistent", nil)
+	require.Error(t, err)
+	require.Nil(t, cleanupTmp)
+
+	// Valid format but doesn't exist
+	_, cleanupTmp, err = LoadCustomRecipe("testdir/nonexistent", nil)
 	require.Error(t, err)
 	require.Nil(t, cleanupTmp)
 }
