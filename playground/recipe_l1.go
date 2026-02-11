@@ -137,6 +137,8 @@ func (l *L1Recipe) Apply(ctx *ExContext) *Component {
 		})
 	}
 
+	component.AddComponent(ctx, &Fileserver{})
+
 	if l.withRbuilder {
 		component.AddComponent(ctx, &Rbuilder{})
 	}

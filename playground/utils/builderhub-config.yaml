@@ -1,0 +1,68 @@
+bidding_service:
+  config: |
+    slot_delta_to_start_bidding_ms = -20000
+    subsidy = "0"
+
+rbuilder:
+  enabled: true
+  # blocklist: ""
+  evm_caching_enable: true
+  ignore_blobs: false
+  extra_data: BuilderNet (playground)
+  require_non_empty_blocklist: false
+  root_hash_threads: 4
+  # BLS secret key for signing relay submissions (matches mev-boost-relay default)
+  relay_secret_key: "0x5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
+  # Builder: 0x74085Fbe5108CF75F91951DDfD06d3f7d6890EF7
+  coinbase_secret_key: "0x6a4254d9cb2f348290f65002d4e45cb7a447f287ef03ac226a3710ee91c9bc80"
+  # 0 for debugging
+  watchdog_timeout_sec: 0
+  max_order_execution_duration_warning_us: 50000
+  time_to_keep_mempool_txs_secs: 300
+  live_builders: '["mgp-ordering", "mp-ordering"]'
+  system_recipient_allowlist: '[]'
+  builders: |
+    [[builders]]
+    name = "mgp-ordering"
+    algo = "ordering-builder"
+    discard_txs = true
+    sorting = "mev-gas-price"
+    failed_order_retries = 1
+    drop_failed_orders = true
+
+    [[builders]]
+    name = "mp-ordering"
+    algo = "ordering-builder"
+    discard_txs = true
+    sorting = "max-profit"
+    failed_order_retries = 1
+    drop_failed_orders = true
+
+  relays: |
+    [[relays]]
+    name = "playground"
+    url = "http://10.0.2.2:5555"
+
+  relay_bid_scrapers: |
+    [[relay_bid_scrapers]]
+    type = "external-ws"
+    name = "playground"
+    url = "ws://10.0.2.2:5555"
+    auth_header = ""
+
+disk_encryption:
+  key: 5d7052c0c3aff5834f45e3f33aca0a55ef9f43ca9cf6c5c8e8375ab82564ddb6  # playground value
+instance_name: buildernet-playground-vm
+
+playground:
+  builder_hub_config:
+    builder_id: "playground_vm_builder"
+    builder_ip: "1.2.3.4"
+    measurement_id: "test1"
+    network: "playground"
+  artifacts_url: http://10.0.2.2:8100
+  # Reth P2P bootnode
+  el_bootnode: "{{EL_BOOTNODE}}"
+  # Lighthouse libp2p multiaddr
+  # Format: /ip4/<IP>/tcp/<PORT>/p2p/<PEER_ID>
+  cl_libp2p_addr: "{{CL_LIBP2P_ADDR}}"
