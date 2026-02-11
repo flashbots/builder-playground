@@ -191,8 +191,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 
 func (d *LocalRunner) checkAndUpdateReadiness() {
 	for name, task := range d.tasks {
-		// ensure the task is not a host service
-		if d.isHostService(name) {
+		// ensure the task is a docker service
+		if !d.isDockerService(name) {
 			continue
 		}
 
@@ -727,6 +727,13 @@ func (d *LocalRunner) isHostService(name string) bool {
 	return d.manifest.MustGetService(name).HostPath != ""
 }
 
+// isDockerService returns true if the service should run in Docker.
+// Services with HostPath or LifecycleHooks run on the host, not in Docker.
+func (d *LocalRunner) isDockerService(name string) bool {
+	svc := d.manifest.MustGetService(name)
+	return svc.HostPath == "" && !svc.LifecycleHooks
+}
+
 func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	compose := map[string]interface{}{
 		// We create a new network to be used by all the services so that
@@ -751,8 +758,8 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 
 	volumes := map[string]struct{}{}
 	for _, svc := range d.manifest.Services {
-		if d.isHostService(svc.Name) {
-			// skip services that are going to be launched on host
+		if !d.isDockerService(svc.Name) {
+			// skip services that run on host (HostPath or LifecycleHooks)
 			continue
 		}
 		var (
@@ -1139,8 +1146,8 @@ func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, svc := range d.manifest.Services {
-		if d.isHostService(svc.Name) {
-			continue // Skip host services
+		if !d.isDockerService(svc.Name) {
+			continue // Skip non-docker services (HostPath or LifecycleHooks)
 		}
 
 		s := svc // Capture loop variable

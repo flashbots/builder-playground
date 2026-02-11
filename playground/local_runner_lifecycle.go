@@ -69,9 +69,15 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 		logPath = logFile.Name()
 	}
 
+	// Use recipe directory for lifecycle hooks if set, otherwise use artifacts dir
+	dir := d.out.dst
+	if svc.RecipeDir != "" {
+		dir = svc.RecipeDir
+	}
+
 	lc := &lifecycleContext{
 		svc:       svc,
-		dir:       d.out.dst,
+		dir:       dir,
 		logWriter: logFile,
 		logPath:   logPath,
 	}
@@ -125,9 +131,15 @@ func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer
 		return
 	}
 
+	// Use recipe directory for lifecycle hooks if set, otherwise use artifacts dir
+	dir := d.out.dst
+	if svc.RecipeDir != "" {
+		dir = svc.RecipeDir
+	}
+
 	lc := &lifecycleContext{
 		svc:       svc,
-		dir:       d.out.dst,
+		dir:       dir,
 		logWriter: logOutput,
 		logPath:   logPath,
 	}

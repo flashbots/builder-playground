@@ -415,6 +415,8 @@ type Service struct {
 	Start string `json:"start,omitempty"`
 	// Stop commands run when playground exits. May return non-zero (best effort).
 	Stop []string `json:"stop,omitempty"`
+	// RecipeDir is the directory containing the recipe file (for lifecycle hooks)
+	RecipeDir string `json:"recipe_dir,omitempty"`
 
 	postHook *postHook
 	release  *release

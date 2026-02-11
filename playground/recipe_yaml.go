@@ -285,10 +285,10 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 
 				if existingService != nil {
 					// Override existing service properties
-					applyServiceOverrides(existingService, serviceConfig, component)
+					applyServiceOverrides(existingService, serviceConfig, component, y.recipeDir)
 				} else {
 					// Create new service
-					newService := createServiceFromConfig(serviceName, serviceConfig, component)
+					newService := createServiceFromConfig(serviceName, serviceConfig, component, y.recipeDir)
 					existingComponent.Services = append(existingComponent.Services, newService)
 				}
 			}
@@ -423,7 +423,7 @@ func containsRemovedServiceRef(arg string, removedServices map[string]bool) bool
 }
 
 // applyServiceOverrides applies YAML config overrides to an existing service
-func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Component) {
+func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Component, recipeDir string) {
 	if config.Image != "" {
 		svc.Image = config.Image
 	}
@@ -480,6 +480,7 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 		svc.Init = config.Init
 		svc.Start = config.Start
 		svc.Stop = config.Stop
+		svc.RecipeDir = recipeDir
 		svc.UseHostExecution()
 	}
 }
@@ -597,7 +598,7 @@ func applyDependsOn(svc *Service, dependsOn []string, root *Component) {
 }
 
 // createServiceFromConfig creates a new service from YAML config
-func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Component) *Service {
+func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Component, recipeDir string) *Service {
 	svc := &Service{
 		Name:     name,
 		Args:     []string{},
@@ -656,6 +657,7 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 		svc.Init = config.Init
 		svc.Start = config.Start
 		svc.Stop = config.Stop
+		svc.RecipeDir = recipeDir
 		svc.UseHostExecution()
 	}
 

@@ -433,7 +433,7 @@ var generateCmd = &cobra.Command{
 						return fmt.Errorf("file %s already exists. Use --force to overwrite", outFile)
 					}
 				}
-				if err := os.WriteFile(outFile, []byte(yamlContent), 0o644); err != nil {
+				if err := os.WriteFile(outFile, []byte(yamlContent), 0o755); err != nil {
 					return fmt.Errorf("failed to write %s: %w", outFile, err)
 				}
 				fmt.Printf("Created %s\n", outFile)
@@ -765,15 +765,19 @@ func runIt(recipe playground.Recipe) error {
 	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	if err := dockerRunner.WaitForReady(waitCtx); err != nil {
+		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
 	// run post hook operations
 	if err := svcManager.ExecutePostHookActions(ctx); err != nil {
+		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to execute post-hook operations: %w", err)
 	}
 
+	slog.Info("Running lifecycle hooks of services... ⏳")
 	if err := dockerRunner.RunLifecycleHooks(ctx); err != nil {
+		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to run lifecycle hooks: %w", err)
 	}
 

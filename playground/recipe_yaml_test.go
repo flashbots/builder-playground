@@ -124,7 +124,7 @@ func TestApplyServiceOverrides(t *testing.T) {
 		Env:   map[string]string{"KEY": "value"},
 	}
 
-	applyServiceOverrides(svc, config, nil)
+	applyServiceOverrides(svc, config, nil, "")
 
 	require.Equal(t, "new-image", svc.Image)
 	require.Equal(t, "new-tag", svc.Tag)
@@ -142,7 +142,7 @@ func TestApplyServiceOverrides_PartialOverride(t *testing.T) {
 
 	config := &YAMLServiceConfig{Tag: "new-tag"}
 
-	applyServiceOverrides(svc, config, nil)
+	applyServiceOverrides(svc, config, nil, "")
 
 	require.Equal(t, "original-image", svc.Image)
 	require.Equal(t, "new-tag", svc.Tag)
@@ -191,7 +191,7 @@ func TestCreateServiceFromConfig(t *testing.T) {
 		DependsOn:  []string{"db:healthy"},
 	}
 
-	svc := createServiceFromConfig("my-service", config, nil)
+	svc := createServiceFromConfig("my-service", config, nil, "")
 
 	require.Equal(t, "my-service", svc.Name)
 	require.Equal(t, "test-image", svc.Image)
@@ -339,7 +339,7 @@ func TestApplyServiceOverrides_AllFields(t *testing.T) {
 		},
 	}
 
-	applyServiceOverrides(svc, config, nil)
+	applyServiceOverrides(svc, config, nil, "")
 
 	require.Equal(t, "new-image", svc.Image)
 	require.Equal(t, "v2.0.0", svc.Tag)
@@ -382,7 +382,7 @@ func TestCreateServiceFromConfig_WithHostPath(t *testing.T) {
 		HostPath: "/usr/local/bin/myapp",
 	}
 
-	svc := createServiceFromConfig("my-service", config, nil)
+	svc := createServiceFromConfig("my-service", config, nil, "")
 
 	require.Equal(t, "/usr/local/bin/myapp", svc.HostPath)
 }
@@ -397,7 +397,7 @@ func TestCreateServiceFromConfig_WithRelease(t *testing.T) {
 		},
 	}
 
-	svc := createServiceFromConfig("my-service", config, nil)
+	svc := createServiceFromConfig("my-service", config, nil, "")
 
 	require.NotNil(t, svc.release)
 	require.Equal(t, "myapp", svc.release.Name)
@@ -411,7 +411,7 @@ func TestCreateServiceFromConfig_WithVolumes(t *testing.T) {
 		}},
 	}
 
-	svc := createServiceFromConfig("my-service", config, nil)
+	svc := createServiceFromConfig("my-service", config, nil, "")
 
 	require.NotNil(t, svc.VolumesMapped)
 	require.Equal(t, "myvolume", svc.VolumesMapped["/data"].Name)
@@ -807,7 +807,7 @@ func TestApplyServiceOverrides_WithReplaceArgs(t *testing.T) {
 			config := &YAMLServiceConfig{
 				ReplaceArgs: tt.replaceArgs,
 			}
-			applyServiceOverrides(svc, config, nil)
+			applyServiceOverrides(svc, config, nil, "")
 			require.Equal(t, tt.expected, svc.Args)
 		})
 	}

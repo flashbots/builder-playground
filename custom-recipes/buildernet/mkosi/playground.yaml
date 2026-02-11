@@ -1,2 +1,14 @@
 base: buildernet
 description: Deploy the stack with the BuilderNet mkosi image (QEMU)
+
+recipe:
+  builder-vm:
+    services:
+      builder:
+        lifecycle_hooks: true
+        init:
+          - rm -rf .runtime/buildernet-vm.qcow2 || true
+          - ./prepare.sh
+        start: ./start.sh
+        stop:
+          - ./stop.sh
