@@ -724,8 +724,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 }
 
 func (d *LocalRunner) isHostService(name string) bool {
-	svc := d.manifest.MustGetService(name)
-	return svc.HostPath != "" || svc.LifecycleHooks
+	return d.manifest.MustGetService(name).HostPath != ""
 }
 
 func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
@@ -1201,13 +1200,24 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	g := new(errgroup.Group)
 	for _, svc := range d.manifest.Services {
 		if d.isHostService(svc.Name) {
-			svc := svc // capture loop variable
-			g.Go(func() error {
-				return d.runOnHost(ctx, svc)
-			})
+			return d.runOnHost(ctx, svc)
 		}
 	}
 
+	return g.Wait()
+}
+
+func (d *LocalRunner) RunLifecycleHooks(ctx context.Context) error {
+	g := new(errgroup.Group)
+	for _, svc := range d.manifest.Services {
+		if !svc.LifecycleHooks {
+			continue
+		}
+		svc := svc // capture loop variable
+		g.Go(func() error {
+			return d.runOnHost(ctx, svc)
+		})
+	}
 	return g.Wait()
 }
 

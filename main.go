@@ -773,6 +773,10 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to execute post-hook operations: %w", err)
 	}
 
+	if err := dockerRunner.RunLifecycleHooks(ctx); err != nil {
+		return fmt.Errorf("failed to run lifecycle hooks: %w", err)
+	}
+
 	if !interactive {
 		log.Println()
 		log.Println("All services started! ✅")
