@@ -49,8 +49,13 @@ type YAMLServiceConfig struct {
 	// Entrypoint overrides the container entrypoint
 	Entrypoint string `yaml:"entrypoint,omitempty"`
 
-	// Args are the arguments to pass to the service
+	// Args are the arguments to pass to the service.
+	// This should be used when ReplaceArgs is not used.
 	Args []string `yaml:"args,omitempty"`
+
+	// ReplaceArgs are the arguments to replace in the service.
+	// This should be used when Args is not used.
+	ReplaceArgs []string `yaml:"replace_args,omitempty"`
 
 	// Env is a map of environment variables
 	Env map[string]string `yaml:"env,omitempty"`
@@ -432,6 +437,9 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 	if len(config.Args) > 0 {
 		svc.Args = config.Args
 	}
+	if len(config.ReplaceArgs) > 0 {
+		svc.Args = applyReplaceArgs(svc.Args, config.ReplaceArgs)
+	}
 	if config.Env != nil {
 		if svc.Env == nil {
 			svc.Env = make(map[string]string)
@@ -468,6 +476,39 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
 	}
+}
+
+// applyReplaceArgs replaces arguments in the existing args list.
+// ReplaceArgs contains flag-value pairs in sequence: ["--flag", "new-value", "--other-flag", "other-value"]
+// For each pair, it finds the flag in args and replaces its following value.
+func applyReplaceArgs(args, replaceArgs []string) []string {
+	if len(replaceArgs)%2 != 0 {
+		slog.Warn("replace_args should contain pairs of flag and value", "count", len(replaceArgs))
+	}
+
+	result := make([]string, len(args))
+	copy(result, args)
+
+	for i := 0; i < len(replaceArgs); i += 2 {
+		flag := replaceArgs[i]
+		newValue := replaceArgs[i+1]
+		result = applyReplacePair(flag, newValue, result)
+	}
+
+	return result
+}
+
+// applyReplacePair finds flag in args and replaces the following value with newValue.
+func applyReplacePair(flag, newValue string, args []string) []string {
+	for i := 0; i < len(args); i++ {
+		if args[i] == flag && i+1 < len(args) {
+			args[i+1] = newValue
+			return args
+		}
+	}
+
+	slog.Warn("replace_args flag not found in service args", "flag", flag)
+	return args
 }
 
 // yamlReleaseToRelease converts a YAMLReleaseConfig to a release struct
