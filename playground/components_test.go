@@ -192,7 +192,7 @@ func TestRecipeBuilderHub_RegisterBuilder(t *testing.T) {
 	apiPort := manifest.MustGetService("builder-hub-api").MustGetPort("admin")
 	endpoint := fmt.Sprintf("http://localhost:%d", apiPort.HostPort)
 
-	err := registerBuilder(endpoint, "", "", &builderHubRegisterBuilderInput{
+	err := registerBuilder(t.Context(), endpoint, "", "", &builderHubRegisterBuilderInput{
 		BuilderID:     "test_builder",
 		BuilderIP:     "1.2.3.4",
 		MeasurementID: "test",

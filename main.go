@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"fmt"
 	"log"
@@ -787,14 +786,6 @@ func runIt(recipe playground.Recipe) error {
 			slog.Info("• "+ss.Name, svcInfo...)
 		}
 		log.Println()
-	}
-
-	log.Println("Waiting for services to get healthy... ⏳")
-	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-	if err := dockerRunner.WaitForReady(waitCtx); err != nil {
-		dockerRunner.Stop(keepFlag)
-		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
 	slog.Info("All services are healthy! Ready to accept transactions. 🚀", "session-id", svcManager.ID)

@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -924,7 +925,7 @@ type BuilderHub struct {
 	BuilderConfig string
 }
 
-func (b *BuilderHub) Apply(ctx *ExContext) *Component {
+func (b *BuilderHub) Apply(exCtx *ExContext) *Component {
 	component := NewComponent("builder-hub")
 
 	// Database service
@@ -970,8 +971,8 @@ func (b *BuilderHub) Apply(ctx *ExContext) *Component {
 		}).
 		WithPostHook(&postHook{
 			Name: "register-builder",
-			Action: func(m *Manifest, s *Service) error {
-				return registerBuilderHook(ctx, m, s, b)
+			Action: func(ctx context.Context, m *Manifest, s *Service) error {
+				return registerBuilderHook(ctx, exCtx, m, s, b)
 			},
 		})
 
@@ -1004,8 +1005,8 @@ type builderHubConfig struct {
 	} `yaml:"playground"`
 }
 
-func registerBuilderHook(ctx *ExContext, manifest *Manifest, s *Service, b *BuilderHub) error {
-	genesis, err := ctx.Output.Read("genesis.json")
+func registerBuilderHook(ctx context.Context, exCtx *ExContext, manifest *Manifest, s *Service, b *BuilderHub) error {
+	genesis, err := exCtx.Output.Read("genesis.json")
 	if err != nil {
 		return err
 	}
@@ -1046,7 +1047,7 @@ func registerBuilderHook(ctx *ExContext, manifest *Manifest, s *Service, b *Buil
 	adminApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("builder-hub-api").MustGetPort("admin").HostPort)
 	beaconApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("beacon").MustGetPort("http").HostPort)
 	rethApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("el").MustGetPort("http").HostPort)
-	if err := registerBuilder(adminApi, beaconApi, rethApi, input); err != nil {
+	if err := registerBuilder(ctx, adminApi, beaconApi, rethApi, input); err != nil {
 		return err
 	}
 	return nil

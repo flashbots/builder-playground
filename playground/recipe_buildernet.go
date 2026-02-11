@@ -2,6 +2,7 @@ package playground
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -58,15 +59,21 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
 		BuilderConfig: b.builderConfig,
 	})
 
-	// Apply beacon service overrides for buildernet
-	// We need these for letting the builder connect to the beacon node
+	component.AddComponent(ctx, &Fileserver{})
+
+	// Apply beacon service overrides for buildernet.
+	// We need these for letting the builder connect to the beacon node.
+	// Basically, the beacon node can never be healthy until the builder
+	// connects.
 	if beacon := component.FindService("beacon"); beacon != nil {
 		beacon.ReplaceArgs(map[string]string{
-			"--target-peers":          "1",
-			"--subscribe-all-subnets": "true",
+			"--target-peers": "1",
 		})
+		beacon.WithArgs("--subscribe-all-subnets")
 	}
-
+	if mevBoostRelay := component.FindService("mev-boost-relay"); mevBoostRelay != nil {
+		mevBoostRelay.DependsOnNone()
+	}
 	// Remove beacon healthmon - doesn't work with --target-peers=1 which is required for builder VM
 	component.RemoveService("beacon_healthmon")
 
@@ -152,7 +159,7 @@ type enodeResponse struct {
 	}
 }
 
-func registerBuilder(builderAdminApi, beaconApi, rethApi string, input *builderHubRegisterBuilderInput) error {
+func registerBuilder(ctx context.Context, builderAdminApi, beaconApi, rethApi string, input *builderHubRegisterBuilderInput) error {
 	builderAdminApi = builderAdminApi + "/api/admin/v1"
 	beaconApi = beaconApi + "/eth/v1/node/identity"
 

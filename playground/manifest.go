@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -588,7 +589,7 @@ func (s *Service) WithReady(check ReadyCheck) *Service {
 
 type postHook struct {
 	Name   string
-	Action func(m *Manifest, s *Service) error
+	Action func(ctx context.Context, m *Manifest, s *Service) error
 }
 
 func (s *Service) WithPostHook(hook *postHook) *Service {
@@ -596,11 +597,11 @@ func (s *Service) WithPostHook(hook *postHook) *Service {
 	return s
 }
 
-func (m *Manifest) ExecutePostHookActions() error {
+func (m *Manifest) ExecutePostHookActions(ctx context.Context) error {
 	for _, svc := range m.Services {
 		if svc.postHook != nil {
 			slog.Info("Executing post-hook operation", "name", svc.postHook.Name)
-			if err := svc.postHook.Action(m, svc); err != nil {
+			if err := svc.postHook.Action(ctx, m, svc); err != nil {
 				return err
 			}
 		}
@@ -620,6 +621,11 @@ type ReadyCheck struct {
 
 func (s *Service) WithUngracefulShutdown() *Service {
 	s.UngracefulShutdown = true
+	return s
+}
+
+func (s *Service) DependsOnNone() *Service {
+	s.DependsOn = nil
 	return s
 }
 

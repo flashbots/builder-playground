@@ -1196,8 +1196,15 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
 	}
 
+	slog.Info("Waiting for services to get healthy... ⏳")
+	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if err := d.WaitForReady(waitCtx); err != nil {
+		return fmt.Errorf("failed to wait for service readiness: %w", err)
+	}
+
 	// run post hook operations
-	if err := d.manifest.ExecutePostHookActions(); err != nil {
+	if err := d.manifest.ExecutePostHookActions(ctx); err != nil {
 		return fmt.Errorf("failed to execute post-hook operations: %w", err)
 	}
 
