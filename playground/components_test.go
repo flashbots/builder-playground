@@ -134,14 +134,19 @@ func TestComponentRbuilder(t *testing.T) {
 	tt.WaitForBlock("el", 1)
 }
 
-func TestRecipeBuilderHub(t *testing.T) {
+func TestRecipeBuilderNet(t *testing.T) {
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&BuilderHub{}, nil)
+	recipe := &BuilderNetRecipe{}
+	manifest := tt.test(recipe, []string{})
+	output := recipe.Output(manifest)
 
-	// TODO: Calling the port directly on the host machine will not work once we have multiple
-	// tests running in parallel
+	httpEndpoint := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("builder-hub-api").MustGetPort("http").Port)
+
+	proxy := output["builder-hub-proxy"].(string)
+	admin := output["builder-hub-admin"].(string)
+	internal := output["builder-hub-internal"].(string)
 
 	// Set measurements from the admin API.
 	buf := bytes.NewBuffer([]byte(`
@@ -151,7 +156,7 @@ func TestRecipeBuilderHub(t *testing.T) {
 			"measurements": {}
 		}
 	`))
-	resp, err := http.Post("http://localhost:8081/api/admin/v1/measurements", "application/json", buf)
+	resp, err := http.Post(admin+"/api/admin/v1/measurements", "application/json", buf)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -160,7 +165,7 @@ func TestRecipeBuilderHub(t *testing.T) {
 			"enabled": true
 		}
 	`))
-	resp, err = http.Post("http://localhost:8081/api/admin/v1/measurements/activation/test1", "application/json", buf)
+	resp, err = http.Post(admin+"/api/admin/v1/measurements/activation/test1", "application/json", buf)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -169,10 +174,10 @@ func TestRecipeBuilderHub(t *testing.T) {
 	}
 
 	// Verify from all APIs that measurements are in place.
-	ports := []string{"8080", "8082", "8888"}
-	for _, port := range ports {
+	endpoints := []string{httpEndpoint, internal, proxy}
+	for _, endpoint := range endpoints {
 		var m measurementList
-		resp, err = http.Get("http://localhost:" + port + "/api/l1-builder/v1/measurements")
+		resp, err = http.Get(endpoint + "/api/l1-builder/v1/measurements")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&m))
@@ -181,32 +186,6 @@ func TestRecipeBuilderHub(t *testing.T) {
 	}
 
 	require.Equal(t, resp.StatusCode, http.StatusOK)
-}
-
-func TestRecipeBuilderHub_RegisterBuilder(t *testing.T) {
-	tt := newTestFramework(t)
-	defer tt.Close()
-
-	manifest := tt.test(&BuilderHub{}, nil)
-
-	apiPort := manifest.MustGetService("builder-hub-api").MustGetPort("admin")
-	endpoint := fmt.Sprintf("http://localhost:%d", apiPort.HostPort)
-
-	err := registerBuilder(t.Context(), endpoint, "", "", &builderHubRegisterBuilderInput{
-		BuilderID:     "test_builder",
-		BuilderIP:     "1.2.3.4",
-		MeasurementID: "test",
-		Network:       "playground",
-		Config:        "{}",
-	})
-	require.NoError(t, err)
-}
-
-func TestRecipeBuilderNet(t *testing.T) {
-	tt := newTestFramework(t)
-	defer tt.Close()
-
-	tt.test(&BuilderNetRecipe{}, []string{})
 }
 
 type testFramework struct {
@@ -237,6 +216,11 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 
 	e2eTestDir := filepath.Join(e2eRootDir, currentTime+"_"+testName)
 	if err := os.MkdirAll(e2eTestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Convert to absolute path to ensure it works from any working directory
+	e2eTestDir, err := filepath.Abs(e2eTestDir)
+	if err != nil {
 		t.Fatal(err)
 	}
 

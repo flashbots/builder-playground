@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"log"
@@ -758,6 +759,18 @@ func runIt(recipe playground.Recipe) error {
 	if err := dockerRunner.Run(ctx); err != nil {
 		dockerRunner.Stop(keepFlag)
 		return fmt.Errorf("failed to run docker: %w", err)
+	}
+
+	slog.Info("Waiting for services to get healthy... ⏳")
+	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if err := dockerRunner.WaitForReady(waitCtx); err != nil {
+		return fmt.Errorf("failed to wait for service readiness: %w", err)
+	}
+
+	// run post hook operations
+	if err := svcManager.ExecutePostHookActions(ctx); err != nil {
+		return fmt.Errorf("failed to execute post-hook operations: %w", err)
 	}
 
 	if !interactive {
