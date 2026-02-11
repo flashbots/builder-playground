@@ -539,7 +539,7 @@ func (s *Service) WithReady(check ReadyCheck) *Service {
 
 type postHook struct {
 	Name   string
-	Action func(m *Manifest, s *Service) error
+	Action func(s *Service) error
 }
 
 func (s *Service) WithPostHook(hook *postHook) *Service {
@@ -551,7 +551,7 @@ func (m *Manifest) ExecutePostHookActions() error {
 	for _, svc := range m.Services {
 		if svc.postHook != nil {
 			slog.Info("Executing post-hook operation", "name", svc.postHook.Name)
-			if err := svc.postHook.Action(m, svc); err != nil {
+			if err := svc.postHook.Action(svc); err != nil {
 				return err
 			}
 		}
