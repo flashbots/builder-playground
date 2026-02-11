@@ -406,6 +406,15 @@ type Service struct {
 
 	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
+	// LifecycleHooks enables lifecycle mode for host execution
+	LifecycleHooks bool `json:"lifecycle_hooks,omitempty"`
+	// Init commands run sequentially before start. Each must return exit code 0.
+	Init []string `json:"init,omitempty"`
+	// Start command runs the service (for lifecycle hooks). May hang or return 0.
+	Start string `json:"start,omitempty"`
+	// Stop commands run when playground exits. May return non-zero (best effort).
+	Stop []string `json:"stop,omitempty"`
+
 	postHook *postHook
 	release  *release
 }

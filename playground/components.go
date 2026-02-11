@@ -637,7 +637,7 @@ func (m *MevBoostRelay) Apply(ctx *ExContext) *Component {
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
 		WithEntrypoint("mev-boost-relay").
 		// TODO: Enable later - doesn't work when beacon healthmon is disabled.
-		//DependsOnHealthy(m.BeaconClient).
+		// DependsOnHealthy(m.BeaconClient).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
 			"--api-listen-port", `{{Port "http" 5555}}`,
