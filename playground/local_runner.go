@@ -1175,32 +1175,42 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 
 	defer utils.StartTimer("docker.up")()
 
+	g, ctx := errgroup.WithContext(ctx)
+
 	// First start the services that are running in docker-compose
-	cmd := exec.CommandContext(
-		ctx, "docker", "compose",
-		"-p", d.manifest.ID, // identify project with id for doing "docker compose down" on it later
-		"-f", d.out.dst+"/docker-compose.yaml",
-		"up",
-		"-d",
-	)
+	g.Go(func() error {
+		cmd := exec.CommandContext(
+			ctx, "docker", "compose",
+			"-p", d.manifest.ID, // identify project with id for doing "docker compose down" on it later
+			"-f", d.out.dst+"/docker-compose.yaml",
+			"up",
+			"-d",
+		)
 
-	var errOut bytes.Buffer
-	cmd.Stderr = &errOut
+		var errOut bytes.Buffer
+		cmd.Stderr = &errOut
 
-	if err := cmd.Run(); err != nil {
-		// Don't return error if context was cancelled
-		if ctx.Err() != nil {
-			return ctx.Err()
+		if err := cmd.Run(); err != nil {
+			// Don't return error if context was cancelled
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
 		}
-		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
-	}
+		return nil
+	})
 
 	// Second, start the services that are running on the host machine
 	// Start them in parallel - each will wait for its own dependencies
-	g := new(errgroup.Group)
 	for _, svc := range d.manifest.Services {
 		if d.isHostService(svc.Name) {
-			return d.runOnHost(ctx, svc)
+			svc := svc
+			g.Go(func() error {
+				if err := d.runOnHost(ctx, svc); err != nil {
+					return fmt.Errorf("failed to run host service: %v", err)
+				}
+				return nil
+			})
 		}
 	}
 

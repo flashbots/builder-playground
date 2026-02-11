@@ -172,9 +172,9 @@ func collectComponentNames(c *Component) []string {
 	return names
 }
 
-// parseCustomRecipeName parses a custom recipe name and returns the recipe directory, yaml filename, and recipe path
+// parseCustomRecipeName parses a custom recipe name and returns the recipe name, yaml filename, and recipe path
 // customRecipeName should be in "group/variant" format (e.g., "rbuilder/bin" -> custom-recipes/rbuilder/bin/playground.yaml)
-func parseCustomRecipeName(customRecipeName string) (recipeDir, yamlFile, recipePath string, err error) {
+func parseCustomRecipeName(customRecipeName string) (recipeName, yamlFile, recipePath string, err error) {
 	parts := strings.SplitN(customRecipeName, "/", 2)
 	if len(parts) != 2 {
 		return "", "", "", fmt.Errorf("custom recipe '%s' not found. Run 'playground recipes' to see available options", customRecipeName)
@@ -245,7 +245,7 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 }
 
 // GenerateFromCustomRecipe extracts a custom recipe and its dependencies to current directory
-// customRecipeName should be in the format "dir/filename" (e.g., "rbuilder/custom")
+// customRecipeName should be in "group/variant" format (e.g., "rbuilder/bin")
 // If force is false, it will error if any files already exist
 func GenerateFromCustomRecipe(customRecipeName string, force bool) error {
 	// Check for existing files if not forcing

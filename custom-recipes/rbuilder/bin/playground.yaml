@@ -1,10 +1,12 @@
 base: l1
-description: Use reth and rbuilder binaries from GitHub releases
+description: Use reth and rbuilder binaries (from GitHub releases or local)
 
 recipe:
   reth:
     services:
       el:
+        # Comment out "release" and use "host_path" if needed
+        # host_path: "/absolute/path/to/reth"
         release:
           name: "reth"
           org: "paradigmxyz"
@@ -13,6 +15,8 @@ recipe:
   builder:
     services:
       rbuilder:
+        # Comment out "release" and use "host_path" if needed
+        # host_path: "/absolute/path/to/rbuilder"
         release:
           name: "rbuilder"
           org: "flashbots"
