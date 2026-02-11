@@ -22,7 +22,7 @@ rm -rf "${RUNTIME_DIR}"
 mkdir -p "${RUNTIME_DIR}"
 
 rm -f "${VM_IMAGE}"
-cp --sparse=never "${QEMU_QCOW2}" "${VM_IMAGE}"
+cp --sparse=always "${QEMU_QCOW2}" "${VM_IMAGE}"
 
 qemu-img create -f raw "${VM_DATA_DISK}" 100G
 

@@ -34,15 +34,15 @@ echo "  rbuilder RPC: localhost:${RBUILDER_RPC_PORT}"
 echo "  Console log: ${CONSOLE_LOG}"
 echo "  Console socket: ${CONSOLE_SOCK}"
 
-# /usr/share/OVMF/... could be different for your system. Please adjust if needed.
+source "${SCRIPT_DIR}/ovmf.sh"
 
 qemu-system-x86_64 \
   -daemonize \
   -pidfile "${PIDFILE}" \
   -serial file:"${CONSOLE_LOG}" \
   -name buildernet-playground \
-  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/x64/OVMF_CODE.4m.fd \
-  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/x64/OVMF_VARS.4m.fd \
+  -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE}" \
+  -drive if=pflash,format=raw,readonly=on,file="${OVMF_VARS}" \
   -drive format=qcow2,if=none,cache=none,id=osdisk,file="${VM_IMAGE}" \
   -device nvme,drive=osdisk,serial=nvme-os,bootindex=0 \
   -enable-kvm -cpu host -m "${RAM}" -smp "${CPU}" -display none \
