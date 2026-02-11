@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,7 +22,6 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 	runner := &LocalRunner{
 		out:               out,
 		lifecycleServices: []*lifecycleServiceInfo{},
-		lifecycleMu:       &sync.Mutex{},
 	}
 
 	// Create a service with init commands that create files
@@ -61,7 +59,6 @@ func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
 	runner := &LocalRunner{
 		out:               out,
 		lifecycleServices: []*lifecycleServiceInfo{},
-		lifecycleMu:       &sync.Mutex{},
 	}
 
 	svc := &Service{
@@ -87,9 +84,7 @@ func TestLocalRunner_LifecycleService_StartCommand(t *testing.T) {
 	runner := &LocalRunner{
 		out:               out,
 		handles:           []*exec.Cmd{},
-		handlesMu:         &sync.Mutex{},
 		lifecycleServices: []*lifecycleServiceInfo{},
-		lifecycleMu:       &sync.Mutex{},
 	}
 
 	startFile := filepath.Join(tmpDir, "start-ran.txt")
@@ -126,9 +121,7 @@ func TestLocalRunner_LifecycleService_InitOnly(t *testing.T) {
 	runner := &LocalRunner{
 		out:               out,
 		handles:           []*exec.Cmd{},
-		handlesMu:         &sync.Mutex{},
 		lifecycleServices: []*lifecycleServiceInfo{},
-		lifecycleMu:       &sync.Mutex{},
 	}
 
 	initFile := filepath.Join(tmpDir, "init-only.txt")

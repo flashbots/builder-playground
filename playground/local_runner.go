@@ -58,11 +58,11 @@ type LocalRunner struct {
 	// handles stores the references to the processes that are running on host machine
 	// they are executed sequentially so we do not need to lock the handles
 	handles   []*exec.Cmd
-	handlesMu *sync.Mutex
+	handlesMu sync.Mutex
 
 	// lifecycleServices tracks services with lifecycle configs for stop command execution
 	lifecycleServices []*lifecycleServiceInfo
-	lifecycleMu       *sync.Mutex
+	lifecycleMu       sync.Mutex
 
 	// exitError signals when one of the services fails
 	exitErr     chan error
