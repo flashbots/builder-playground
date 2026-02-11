@@ -35,7 +35,7 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 		},
 	}
 
-	err = runner.runLifecycleService(context.Background(), svc)
+	err = runner.startWithLifecycleHooks(context.Background(), svc)
 	require.NoError(t, err)
 
 	// Verify init commands ran
@@ -49,7 +49,7 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 	require.Equal(t, "test-lifecycle", runner.lifecycleServices[0].Name)
 }
 
-func TestLocalRunner_LifecycleService_InitFailure_RunsStopCommands(t *testing.T) {
+func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "lifecycle-test")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
@@ -61,26 +61,17 @@ func TestLocalRunner_LifecycleService_InitFailure_RunsStopCommands(t *testing.T)
 		lifecycleServices: []*Service{},
 	}
 
-	stopFile := filepath.Join(tmpDir, "stop-ran.txt")
 	svc := &Service{
 		Name:           "test-lifecycle",
 		LifecycleHooks: true,
 		Init: []string{
 			"exit 1", // This will fail
 		},
-		Stop: []string{
-			"echo 'stopped' > " + stopFile,
-		},
 	}
 
-	err = runner.runLifecycleService(context.Background(), svc)
+	err = runner.startWithLifecycleHooks(context.Background(), svc)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "init command failed")
-
-	// Verify stop commands ran after init failure
-	content, err := os.ReadFile(stopFile)
-	require.NoError(t, err)
-	require.Contains(t, string(content), "stopped")
 }
 
 func TestLocalRunner_LifecycleService_StartCommand(t *testing.T) {
@@ -103,7 +94,7 @@ func TestLocalRunner_LifecycleService_StartCommand(t *testing.T) {
 		Start:          "echo 'started' > " + startFile,
 	}
 
-	err = runner.runLifecycleService(context.Background(), svc)
+	err = runner.startWithLifecycleHooks(context.Background(), svc)
 	require.NoError(t, err)
 
 	// Give the goroutine time to run
@@ -142,7 +133,7 @@ func TestLocalRunner_LifecycleService_InitOnly(t *testing.T) {
 		},
 	}
 
-	err = runner.runLifecycleService(context.Background(), svc)
+	err = runner.startWithLifecycleHooks(context.Background(), svc)
 	require.NoError(t, err)
 
 	// Verify init ran

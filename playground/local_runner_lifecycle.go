@@ -47,22 +47,26 @@ func (lc *lifecycleContext) formatError(phase, command string, err error) string
 	return errMsg
 }
 
-// runLifecycleService runs a service with lifecycle commands (init, start, stop)
-func (d *LocalRunner) runLifecycleService(ctx context.Context, svc *Service) error {
+// startWithLifecycleHooks runs a service with lifecycle commands (init, start)
+func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service) error {
 	if err := d.waitForDependencies(svc); err != nil {
 		return fmt.Errorf("failed waiting for dependencies: %w", err)
 	}
 
 	logFile, err := d.out.LogOutput(svc.Name)
+	var logPath string
 	if err != nil {
 		logFile = os.Stdout
+		logPath = "" // Don't try to read stdout as a file
+	} else {
+		logPath = logFile.Name()
 	}
 
 	lc := &lifecycleContext{
 		svc:       svc,
 		dir:       d.out.dst,
 		logWriter: logFile,
-		logPath:   logFile.Name(),
+		logPath:   logPath,
 	}
 
 	d.lifecycleServices = append(d.lifecycleServices, svc)
@@ -73,7 +77,6 @@ func (d *LocalRunner) runLifecycleService(ctx context.Context, svc *Service) err
 		lc.logHeader("Init", i, cmd)
 
 		if err := lc.newCmd(ctx, cmd).Run(); err != nil {
-			d.runLifecycleStopCommands(svc, logFile)
 			return fmt.Errorf("%s", lc.formatError("init", cmd, err))
 		}
 	}
@@ -93,7 +96,6 @@ func (d *LocalRunner) runLifecycleService(ctx context.Context, svc *Service) err
 				return
 			}
 			slog.Error("Lifecycle service failed", "service", svc.Name, "error", err)
-			d.runLifecycleStopCommands(svc, logFile)
 			d.sendExitError(fmt.Errorf("%s", lc.formatError("start", svc.Start, err)))
 		}
 	}()
@@ -103,7 +105,7 @@ func (d *LocalRunner) runLifecycleService(ctx context.Context, svc *Service) err
 }
 
 // runLifecycleStopCommands runs the stop commands for a lifecycle service
-func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer) {
+func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer, logPath string) {
 	if len(svc.Stop) == 0 {
 		return
 	}
@@ -112,6 +114,7 @@ func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer
 		svc:       svc,
 		dir:       d.out.dst,
 		logWriter: logOutput,
+		logPath:   logPath,
 	}
 
 	for i, stopCmd := range svc.Stop {
@@ -128,9 +131,13 @@ func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer
 func (d *LocalRunner) runAllLifecycleStopCommands() {
 	for _, svc := range d.lifecycleServices {
 		logOutput, err := d.out.LogOutput(svc.Name)
+		var logPath string
 		if err != nil {
 			logOutput = nil
+			logPath = ""
+		} else {
+			logPath = logOutput.Name()
 		}
-		d.runLifecycleStopCommands(svc, logOutput)
+		d.runLifecycleStopCommands(svc, logOutput, logPath)
 	}
 }

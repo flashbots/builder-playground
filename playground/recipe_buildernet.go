@@ -160,6 +160,8 @@ func registerBuilder(builderAdminApi, beaconApi, rethApi string, input *builderH
 	if err != nil {
 		return fmt.Errorf("failed to get beacon node identity: %v", err)
 	}
+	defer resp.Body.Close()
+
 	var identityRespPayload identityResponse
 	if err := json.NewDecoder(resp.Body).Decode(&identityRespPayload); err != nil {
 		return fmt.Errorf("failed to decode identity resp payload: %v", err)
@@ -173,6 +175,9 @@ func registerBuilder(builderAdminApi, beaconApi, rethApi string, input *builderH
 		"method":  "admin_nodeInfo",
 		"id":      1,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to get reth node info: %v", err)
+	}
 	var enodeRespPayload enodeResponse
 	if err := json.Unmarshal(respData, &enodeRespPayload); err != nil {
 		return fmt.Errorf("failed to decode enode resp payload: %v", err)

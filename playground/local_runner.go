@@ -720,7 +720,8 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 }
 
 func (d *LocalRunner) isHostService(name string) bool {
-	return d.manifest.MustGetService(name).HostPath != ""
+	svc := d.manifest.MustGetService(name)
+	return svc.HostPath != "" || svc.LifecycleHooks
 }
 
 func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
@@ -883,9 +884,9 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 
 // runOnHost runs the service on the host machine
 func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
-	// If this is a lifecycle service, use the lifecycle runner
+	// If this service has lifecycle hooks, start with them
 	if ss.LifecycleHooks {
-		return d.runLifecycleService(ctx, ss)
+		return d.startWithLifecycleHooks(ctx, ss)
 	}
 
 	// Wait for dependencies to be healthy before starting
