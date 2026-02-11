@@ -201,13 +201,7 @@ func (d *LocalRunner) checkAndUpdateReadiness() {
 		}
 	}
 
-	select {
-	case <-d.allTasksReadyCh:
-		// Channel is already closed, do nothing
-	default:
-		// Channel is not closed yet, close it
-		close(d.allTasksReadyCh)
-	}
+	close(d.allTasksReadyCh)
 }
 
 func (d *LocalRunner) WaitForReady(ctx context.Context) error {
@@ -1154,34 +1148,39 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 
 	defer utils.StartTimer("docker.up")()
 
-	// First start the services that are running in docker-compose
-	cmd := exec.CommandContext(
-		ctx, "docker", "compose",
-		"-p", d.manifest.ID, // identify project with id for doing "docker compose down" on it later
-		"-f", d.out.dst+"/docker-compose.yaml",
-		"up",
-		"-d",
-	)
-
-	var errOut bytes.Buffer
-	cmd.Stderr = &errOut
-
-	if err := cmd.Run(); err != nil {
-		// Don't return error if context was cancelled
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
-	}
-
-	// Second, start the services that are running on the host machine
-	// Start them in parallel - each will wait for its own dependencies
 	g := new(errgroup.Group)
+
+	// First start the services that are running in docker-compose
+	g.Go(func() error {
+		cmd := exec.CommandContext(
+			ctx, "docker", "compose",
+			"-p", d.manifest.ID, // identify project with id for doing "docker compose down" on it later
+			"-f", d.out.dst+"/docker-compose.yaml",
+			"up",
+			"-d",
+		)
+
+		var errOut bytes.Buffer
+		cmd.Stderr = &errOut
+
+		if err := cmd.Run(); err != nil {
+			// Don't return error if context was cancelled
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("failed to run docker-compose: %w, err: %s", err, errOut.String())
+		}
+		return nil
+	})
+
 	for _, svc := range d.manifest.Services {
+		svc := svc
 		if d.isHostService(svc.Name) {
-			svc := svc // capture loop variable
 			g.Go(func() error {
-				return d.runOnHost(svc)
+				if err := d.runOnHost(svc); err != nil {
+					return fmt.Errorf("failed to run host service: %v", err)
+				}
+				return nil
 			})
 		}
 	}
