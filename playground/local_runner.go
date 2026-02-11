@@ -1179,9 +1179,11 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 		return nil
 	})
 
+	// Second, start the services that are running on the host machine
+	// Start them in parallel - each will wait for its own dependencies
 	for _, svc := range d.manifest.Services {
-		svc := svc
 		if d.isHostService(svc.Name) {
+			svc := svc
 			g.Go(func() error {
 				if err := d.runOnHost(svc); err != nil {
 					return fmt.Errorf("failed to run host service: %v", err)
