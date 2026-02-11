@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,7 +22,8 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 	// Create a minimal LocalRunner - no Docker client needed for lifecycle
 	runner := &LocalRunner{
 		out:               out,
-		lifecycleServices: []*Service{},
+		lifecycleServices: []*lifecycleServiceInfo{},
+		lifecycleMu:       &sync.Mutex{},
 	}
 
 	// Create a service with init commands that create files
@@ -46,7 +48,7 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 
 	// Verify service was tracked for stop commands
 	require.Len(t, runner.lifecycleServices, 1)
-	require.Equal(t, "test-lifecycle", runner.lifecycleServices[0].Name)
+	require.Equal(t, "test-lifecycle", runner.lifecycleServices[0].svc.Name)
 }
 
 func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
@@ -58,7 +60,8 @@ func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
 
 	runner := &LocalRunner{
 		out:               out,
-		lifecycleServices: []*Service{},
+		lifecycleServices: []*lifecycleServiceInfo{},
+		lifecycleMu:       &sync.Mutex{},
 	}
 
 	svc := &Service{
@@ -84,7 +87,9 @@ func TestLocalRunner_LifecycleService_StartCommand(t *testing.T) {
 	runner := &LocalRunner{
 		out:               out,
 		handles:           []*exec.Cmd{},
-		lifecycleServices: []*Service{},
+		handlesMu:         &sync.Mutex{},
+		lifecycleServices: []*lifecycleServiceInfo{},
+		lifecycleMu:       &sync.Mutex{},
 	}
 
 	startFile := filepath.Join(tmpDir, "start-ran.txt")
@@ -121,7 +126,9 @@ func TestLocalRunner_LifecycleService_InitOnly(t *testing.T) {
 	runner := &LocalRunner{
 		out:               out,
 		handles:           []*exec.Cmd{},
-		lifecycleServices: []*Service{},
+		handlesMu:         &sync.Mutex{},
+		lifecycleServices: []*lifecycleServiceInfo{},
+		lifecycleMu:       &sync.Mutex{},
 	}
 
 	initFile := filepath.Join(tmpDir, "init-only.txt")
@@ -165,7 +172,7 @@ func TestLocalRunner_StopCommands(t *testing.T) {
 
 	runner := &LocalRunner{
 		out:               out,
-		lifecycleServices: []*Service{svc},
+		lifecycleServices: []*lifecycleServiceInfo{{svc: svc}},
 	}
 
 	// Run all stop commands
@@ -198,7 +205,7 @@ func TestLocalRunner_StopCommands_ContinueOnError(t *testing.T) {
 
 	runner := &LocalRunner{
 		out:               out,
-		lifecycleServices: []*Service{svc},
+		lifecycleServices: []*lifecycleServiceInfo{{svc: svc}},
 	}
 
 	// Run all stop commands - should not panic or stop on error

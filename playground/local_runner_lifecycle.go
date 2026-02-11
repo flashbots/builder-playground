@@ -19,6 +19,13 @@ type lifecycleContext struct {
 	logPath   string
 }
 
+// lifecycleServiceInfo tracks a lifecycle service with its log file for stop commands
+type lifecycleServiceInfo struct {
+	svc     *Service
+	logFile io.Writer
+	logPath string
+}
+
 func (lc *lifecycleContext) newCmd(ctx context.Context, command string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = lc.dir
@@ -69,7 +76,13 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 		logPath:   logPath,
 	}
 
-	d.lifecycleServices = append(d.lifecycleServices, svc)
+	d.lifecycleMu.Lock()
+	d.lifecycleServices = append(d.lifecycleServices, &lifecycleServiceInfo{
+		svc:     svc,
+		logFile: logFile,
+		logPath: logPath,
+	})
+	d.lifecycleMu.Unlock()
 
 	// Run init commands sequentially - each must return exit code 0
 	for i, cmd := range svc.Init {
@@ -100,6 +113,8 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 		}
 	}()
 
+	d.handlesMu.Lock()
+	defer d.handlesMu.Unlock()
 	d.handles = append(d.handles, startCmd)
 	return nil
 }
@@ -129,15 +144,7 @@ func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer
 
 // runAllLifecycleStopCommands runs stop commands for all lifecycle services
 func (d *LocalRunner) runAllLifecycleStopCommands() {
-	for _, svc := range d.lifecycleServices {
-		logOutput, err := d.out.LogOutput(svc.Name)
-		var logPath string
-		if err != nil {
-			logOutput = nil
-			logPath = ""
-		} else {
-			logPath = logOutput.Name()
-		}
-		d.runLifecycleStopCommands(svc, logOutput, logPath)
+	for _, info := range d.lifecycleServices {
+		d.runLifecycleStopCommands(info.svc, info.logFile, info.logPath)
 	}
 }
