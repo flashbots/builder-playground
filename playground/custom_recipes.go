@@ -14,9 +14,8 @@ import (
 var CustomRecipesFS fs.FS
 
 // GetEmbeddedCustomRecipes returns a list of custom recipe names from the embedded custom recipes
-// Custom recipe names can be:
-// - "name" for recipes directly under custom-recipes/ (e.g., custom-recipes/foo.yaml -> "foo")
-// - "dir/name" for recipes in subdirectories (e.g., custom-recipes/rbuilder/bin.yaml -> "rbuilder/bin")
+// Custom recipe names are in "group/variant" format where the recipe is at:
+// custom-recipes/group/variant/playground.yaml (e.g., custom-recipes/rbuilder/bin/playground.yaml -> "rbuilder/bin")
 func GetEmbeddedCustomRecipes() ([]string, error) {
 	var customRecipes []string
 	entries, err := fs.ReadDir(CustomRecipesFS, "custom-recipes")
@@ -24,23 +23,29 @@ func GetEmbeddedCustomRecipes() ([]string, error) {
 		return nil, err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() {
-			// Recipes in subdirectories: dir/name format
-			dirName := entry.Name()
-			subEntries, err := fs.ReadDir(CustomRecipesFS, filepath.Join("custom-recipes", dirName))
-			if err != nil {
+		if !entry.IsDir() {
+			continue
+		}
+		// First level: group directory (e.g., "rbuilder")
+		groupName := entry.Name()
+		subEntries, err := fs.ReadDir(CustomRecipesFS, filepath.Join("custom-recipes", groupName))
+		if err != nil {
+			continue
+		}
+		for _, subEntry := range subEntries {
+			if !subEntry.IsDir() {
 				continue
 			}
-			for _, subEntry := range subEntries {
-				if !subEntry.IsDir() && (strings.HasSuffix(subEntry.Name(), ".yaml") || strings.HasSuffix(subEntry.Name(), ".yml")) {
-					baseName := strings.TrimSuffix(subEntry.Name(), filepath.Ext(subEntry.Name()))
-					customRecipes = append(customRecipes, dirName+"/"+baseName)
+			// Second level: variant directory (e.g., "bin" or "custom")
+			variantName := subEntry.Name()
+			// Check if playground.yaml exists in this variant directory
+			for _, ext := range []string{".yaml", ".yml"} {
+				yamlPath := filepath.Join("custom-recipes", groupName, variantName, "playground"+ext)
+				if _, err := fs.Stat(CustomRecipesFS, yamlPath); err == nil {
+					customRecipes = append(customRecipes, groupName+"/"+variantName)
+					break
 				}
 			}
-		} else if strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml") {
-			// Recipes directly under custom-recipes/: name format
-			baseName := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-			customRecipes = append(customRecipes, baseName)
 		}
 	}
 	return customRecipes, nil
@@ -56,28 +61,20 @@ type CustomRecipeInfo struct {
 }
 
 // GetCustomRecipeInfo returns metadata about a specific custom recipe
+// customRecipeName should be in "group/variant" format (e.g., "rbuilder/bin")
 func GetCustomRecipeInfo(customRecipeName string, baseRecipes []Recipe) (*CustomRecipeInfo, error) {
 	parts := strings.SplitN(customRecipeName, "/", 2)
-
-	var recipeDir, baseName string
-	if len(parts) == 2 {
-		recipeDir = parts[0]
-		baseName = parts[1]
-	} else {
-		recipeDir = ""
-		baseName = parts[0]
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid custom recipe name: %s (expected group/variant format)", customRecipeName)
 	}
+	groupName := parts[0]
+	variantName := parts[1]
 
-	// Try to read the yaml file
+	// Try to read the playground.yaml file
 	var content []byte
 	var err error
 	for _, ext := range []string{".yaml", ".yml"} {
-		var yamlPath string
-		if recipeDir != "" {
-			yamlPath = filepath.Join("custom-recipes", recipeDir, baseName+ext)
-		} else {
-			yamlPath = filepath.Join("custom-recipes", baseName+ext)
-		}
+		yamlPath := filepath.Join("custom-recipes", groupName, variantName, "playground"+ext)
 		content, err = fs.ReadFile(CustomRecipesFS, yamlPath)
 		if err == nil {
 			break
@@ -175,35 +172,22 @@ func collectComponentNames(c *Component) []string {
 	return names
 }
 
-// parseCustomRecipeName parses a custom recipe name and returns the recipe directory, yaml filename, and recipe path
-// customRecipeName can be:
-// - "name" for recipes directly under custom-recipes/ (e.g., "foo" -> custom-recipes/foo.yaml)
-// - "dir/name" for recipes in subdirectories (e.g., "rbuilder/bin" -> custom-recipes/rbuilder/bin.yaml)
-func parseCustomRecipeName(customRecipeName string) (recipeDir, yamlFile, recipePath string, err error) {
+// parseCustomRecipeName parses a custom recipe name and returns the recipe name, yaml filename, and recipe path
+// customRecipeName should be in "group/variant" format (e.g., "rbuilder/bin" -> custom-recipes/rbuilder/bin/playground.yaml)
+func parseCustomRecipeName(customRecipeName string) (recipeName, yamlFile, recipePath string, err error) {
 	parts := strings.SplitN(customRecipeName, "/", 2)
-
-	var baseName string
-	if len(parts) == 2 {
-		// Format: dir/name
-		recipeDir = parts[0]
-		baseName = parts[1]
-		recipePath = filepath.Join("custom-recipes", recipeDir)
-	} else {
-		// Format: name (directly under custom-recipes/)
-		recipeDir = ""
-		baseName = parts[0]
-		recipePath = "custom-recipes"
+	if len(parts) != 2 {
+		return "", "", "", fmt.Errorf("custom recipe '%s' not found. Run 'playground recipes' to see available options", customRecipeName)
 	}
 
-	// Find the yaml file
+	groupName := parts[0]
+	variantName := parts[1]
+	recipePath = filepath.Join("custom-recipes", groupName, variantName)
+
+	// Find the playground.yaml file
 	for _, ext := range []string{".yaml", ".yml"} {
-		candidate := baseName + ext
-		var yamlPath string
-		if recipeDir != "" {
-			yamlPath = filepath.Join("custom-recipes", recipeDir, candidate)
-		} else {
-			yamlPath = filepath.Join("custom-recipes", candidate)
-		}
+		candidate := "playground" + ext
+		yamlPath := filepath.Join(recipePath, candidate)
 		if _, err := fs.ReadFile(CustomRecipesFS, yamlPath); err == nil {
 			yamlFile = candidate
 			break
@@ -213,7 +197,7 @@ func parseCustomRecipeName(customRecipeName string) (recipeDir, yamlFile, recipe
 		return "", "", "", fmt.Errorf("custom recipe '%s' not found. Run 'playground recipes' to see available options", customRecipeName)
 	}
 
-	return recipeDir, yamlFile, recipePath, nil
+	return groupName + "/" + variantName, yamlFile, recipePath, nil
 }
 
 // GenerateCustomRecipeToDir extracts a custom recipe and its dependencies to the specified directory
@@ -246,14 +230,8 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 			return fmt.Errorf("failed to read %s: %w", path, err)
 		}
 
-		// Determine output filename
-		outPath := fileName
-		if fileName == yamlFile {
-			outPath = "playground.yaml"
-		}
-
-		// Write the file to target directory
-		fullPath := filepath.Join(targetDir, outPath)
+		// Write the file to target directory (playground.yaml is already correctly named)
+		fullPath := filepath.Join(targetDir, fileName)
 		if err := os.WriteFile(fullPath, content, 0o644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", fullPath, err)
 		}
@@ -267,7 +245,7 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 }
 
 // GenerateFromCustomRecipe extracts a custom recipe and its dependencies to current directory
-// customRecipeName should be in the format "dir/filename" (e.g., "rbuilder/custom")
+// customRecipeName should be in "group/variant" format (e.g., "rbuilder/bin")
 // If force is false, it will error if any files already exist
 func GenerateFromCustomRecipe(customRecipeName string, force bool) error {
 	// Check for existing files if not forcing
@@ -349,12 +327,8 @@ func listCustomRecipeFiles(customRecipeName string) ([]string, error) {
 			return nil
 		}
 
-		// Determine output filename
-		outPath := fileName
-		if fileName == yamlFile {
-			outPath = "playground.yaml"
-		}
-		files = append(files, outPath)
+		// playground.yaml is already correctly named
+		files = append(files, fileName)
 		return nil
 	})
 	if err != nil {
