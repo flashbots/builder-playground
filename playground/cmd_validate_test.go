@@ -243,3 +243,35 @@ func TestValidateLifecycleConfig_InYAMLRecipe_WithoutLifecycleHooks(t *testing.T
 	}
 	require.True(t, found, "expected lifecycle validation error not found in %v", result.Errors)
 }
+
+func TestValidateYAMLRecipe_ArgsAndReplaceArgsMutualExclusivity(t *testing.T) {
+	recipe := &YAMLRecipe{
+		config: &YAMLRecipeConfig{
+			Base: "l1",
+			Recipe: map[string]*YAMLComponentConfig{
+				"test-component": {
+					Services: map[string]*YAMLServiceConfig{
+						"test-svc": {
+							Args:        []string{"--port", "8080"},
+							ReplaceArgs: []string{"--host", "localhost"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	result := &ValidationResult{}
+	validateYAMLRecipe(recipe, baseRecipes, result)
+
+	require.NotEmpty(t, result.Errors)
+	found := false
+	for _, err := range result.Errors {
+		if strings.Contains(err, "args and replace_args cannot be used together") {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected mutual exclusivity error not found in %v", result.Errors)
+}
