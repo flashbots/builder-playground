@@ -26,4 +26,5 @@ func init() {
 	register(&WebsocketProxy{})
 	register(&BuilderHub{})
 	register(&ChainMonitor{})
+	register(&Bootnode{})
 }
