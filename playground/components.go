@@ -768,6 +768,7 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithVolume("shared:el-data", "/data_reth", true).
 		DependsOnHealthy("el").
+		DependsOnHealthy("beacon").
 		WithArgs(
 			"run", "/data/rbuilder-config.toml",
 		)

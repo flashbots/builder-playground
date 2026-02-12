@@ -28,3 +28,4 @@ recipe:
             is_local: true
         depends_on:
           - "el:healthy"
+          - "beacon:healthy"
