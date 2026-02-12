@@ -4,6 +4,26 @@ description: Deploy the stack with the BuilderNet mkosi image (QEMU)
 recipe:
   builder-vm:
     services:
+      attested-tls-proxy:
+        image: ghcr.io/flashbots/attested-tls-proxy
+        tag: "1.0.1"
+        args:
+          - server
+          - --listen-addr
+          - 127.0.0.1:7000
+          - --server-attestation-type
+          - none
+          - --allowed-remote-attestation-type
+          - none
+          - --tls-private-key-path
+          - /server.key
+          - --tls-certificate-path
+          - /server.crt
+          - 127.0.0.1:8000
+        files:
+          "/server.key": "server.key"
+          "/server.crt": "server.crt"
+
       builder:
         lifecycle_hooks: true
         init:
