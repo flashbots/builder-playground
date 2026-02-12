@@ -68,6 +68,9 @@ var opStateJovian []byte
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
 
+//go:embed utils/builderhub-config.yaml
+var defaultBuilderHubConfig []byte
+
 // l2ForkConfig holds the selected L2 fork configuration files
 type l2ForkConfig struct {
 	genesis      []byte  // L2 genesis JSON
@@ -249,6 +252,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	genesisTime := time.Now().Add(time.Duration(b.genesisDelay) * time.Second)
 	config := params.BeaconConfig()
+	config.ElectraForkEpoch = 0
 
 	gen := interop.GethTestnetGenesis(genesisTime, config)
 	// HACK: fix this in prysm?

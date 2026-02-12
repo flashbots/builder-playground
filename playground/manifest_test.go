@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNodeRefString(t *testing.T) {
@@ -82,5 +83,77 @@ func TestManifestWriteRead(t *testing.T) {
 		assert.Equal(t, svc.Env, svc2.Env)
 		assert.Equal(t, svc.Labels, svc2.Labels)
 		assert.Equal(t, svc.VolumesMapped, svc2.VolumesMapped)
+	}
+}
+
+func TestComponent_RemoveService(t *testing.T) {
+	root := &Component{
+		Name: "root",
+		Services: []*Service{
+			{Name: "svc1"},
+			{Name: "svc2"},
+			{Name: "svc3"},
+		},
+	}
+
+	root.RemoveService("svc2")
+
+	require.Len(t, root.Services, 2)
+	for _, s := range root.Services {
+		require.NotEqual(t, "svc2", s.Name)
+	}
+}
+
+func TestComponent_RemoveService_Nested(t *testing.T) {
+	root := &Component{
+		Name: "root",
+		Inner: []*Component{
+			{
+				Name: "child",
+				Services: []*Service{
+					{Name: "nested-svc1"},
+					{Name: "nested-svc2"},
+				},
+			},
+		},
+	}
+
+	root.RemoveService("nested-svc1")
+
+	require.Len(t, root.Inner[0].Services, 1)
+	require.Equal(t, "nested-svc2", root.Inner[0].Services[0].Name)
+}
+
+func TestComponent_FindService(t *testing.T) {
+	root := &Component{
+		Name:     "root",
+		Services: []*Service{{Name: "root-svc"}},
+		Inner: []*Component{
+			{
+				Name:     "child",
+				Services: []*Service{{Name: "child-svc"}},
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		search   string
+		expected bool
+	}{
+		{"find root service", "root-svc", true},
+		{"find child service", "child-svc", true},
+		{"not found", "nonexistent", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := root.FindService(tt.search)
+			if tt.expected {
+				require.NotNil(t, result)
+			} else {
+				require.Nil(t, result)
+			}
+		})
 	}
 }

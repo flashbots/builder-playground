@@ -232,7 +232,8 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 
 		// Write the file to target directory (playground.yaml is already correctly named)
 		fullPath := filepath.Join(targetDir, fileName)
-		if err := os.WriteFile(fullPath, content, 0o644); err != nil {
+
+		if err := os.WriteFile(fullPath, content, 0o755); err != nil {
 			return fmt.Errorf("failed to write %s: %w", fullPath, err)
 		}
 		return nil

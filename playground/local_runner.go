@@ -57,7 +57,12 @@ type LocalRunner struct {
 
 	// handles stores the references to the processes that are running on host machine
 	// they are executed sequentially so we do not need to lock the handles
-	handles []*exec.Cmd
+	handles   []*exec.Cmd
+	handlesMu sync.Mutex
+
+	// lifecycleServices tracks services with lifecycle configs for stop command execution
+	lifecycleServices []*lifecycleServiceInfo
+	lifecycleMu       sync.Mutex
 
 	// exitError signals when one of the services fails
 	exitErr     chan error
@@ -128,10 +133,14 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 			if service.HostPath != "" {
 				continue
 			}
+			// If LifecycleHooks is set, no binary path needed - commands are shell commands
+			if service.LifecycleHooks {
+				continue
+			}
 			// Otherwise, download the release artifact
 			releaseArtifact := service.release
 			if releaseArtifact == nil {
-				return nil, fmt.Errorf("service '%s' requires either host_path or release configuration", service.Name)
+				return nil, fmt.Errorf("service '%s' requires either host_path, release, or lifecycle configuration", service.Name)
 			}
 			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
 			if err != nil {
@@ -182,8 +191,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 
 func (d *LocalRunner) checkAndUpdateReadiness() {
 	for name, task := range d.tasks {
-		// ensure the task is not a host service
-		if d.isHostService(name) {
+		// ensure the task is a docker service
+		if !d.isDockerService(name) {
 			continue
 		}
 
@@ -278,10 +287,16 @@ func (d *LocalRunner) Stop(keepResources bool) error {
 	// Possible to make a more graceful exit with os.Interrupt here
 	// but preferring a quick exit for now.
 	d.stopAllProcessesWithSignal(os.Kill)
+
+	// Run lifecycle stop commands for all tracked lifecycle services
+	d.runAllLifecycleStopCommands()
+
 	return StopSession(d.manifest.ID, keepResources)
 }
 
 func (d *LocalRunner) stopAllProcessesWithSignal(signal os.Signal) {
+	d.handlesMu.Lock()
+	defer d.handlesMu.Unlock()
 	for _, handle := range d.handles {
 		stopProcessWithSignal(handle, signal)
 	}
@@ -712,6 +727,13 @@ func (d *LocalRunner) isHostService(name string) bool {
 	return d.manifest.MustGetService(name).HostPath != ""
 }
 
+// isDockerService returns true if the service should run in Docker.
+// Services with HostPath or LifecycleHooks run on the host, not in Docker.
+func (d *LocalRunner) isDockerService(name string) bool {
+	svc := d.manifest.MustGetService(name)
+	return svc.HostPath == "" && !svc.LifecycleHooks
+}
+
 func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 	compose := map[string]interface{}{
 		// We create a new network to be used by all the services so that
@@ -736,8 +758,8 @@ func (d *LocalRunner) generateDockerCompose() ([]byte, error) {
 
 	volumes := map[string]struct{}{}
 	for _, svc := range d.manifest.Services {
-		if d.isHostService(svc.Name) {
-			// skip services that are going to be launched on host
+		if !d.isDockerService(svc.Name) {
+			// skip services that run on host (HostPath or LifecycleHooks)
 			continue
 		}
 		var (
@@ -871,7 +893,12 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 }
 
 // runOnHost runs the service on the host machine
-func (d *LocalRunner) runOnHost(ss *Service) error {
+func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
+	// If this service has lifecycle hooks, start with them
+	if ss.LifecycleHooks {
+		return d.startWithLifecycleHooks(ctx, ss)
+	}
+
 	// Wait for dependencies to be healthy before starting
 	if err := d.waitForDependencies(ss); err != nil {
 		return fmt.Errorf("failed waiting for dependencies: %w", err)
@@ -948,7 +975,8 @@ func (d *LocalRunner) runOnHost(ss *Service) error {
 		}
 	}()
 
-	// we do not need to lock this array because we run the host services sequentially
+	d.handlesMu.Lock()
+	defer d.handlesMu.Unlock()
 	d.handles = append(d.handles, cmd)
 	return nil
 }
@@ -1118,8 +1146,8 @@ func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, svc := range d.manifest.Services {
-		if d.isHostService(svc.Name) {
-			continue // Skip host services
+		if !d.isDockerService(svc.Name) {
+			continue // Skip non-docker services (HostPath or LifecycleHooks)
 		}
 
 		s := svc // Capture loop variable
@@ -1154,7 +1182,7 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 
 	defer utils.StartTimer("docker.up")()
 
-	g := new(errgroup.Group)
+	g, ctx := errgroup.WithContext(ctx)
 
 	// First start the services that are running in docker-compose
 	g.Go(func() error {
@@ -1185,7 +1213,7 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 		if d.isHostService(svc.Name) {
 			svc := svc
 			g.Go(func() error {
-				if err := d.runOnHost(svc); err != nil {
+				if err := d.runOnHost(ctx, svc); err != nil {
 					return fmt.Errorf("failed to run host service: %v", err)
 				}
 				return nil
@@ -1193,6 +1221,20 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 		}
 	}
 
+	return g.Wait()
+}
+
+func (d *LocalRunner) RunLifecycleHooks(ctx context.Context) error {
+	g := new(errgroup.Group)
+	for _, svc := range d.manifest.Services {
+		if !svc.LifecycleHooks {
+			continue
+		}
+		svc := svc // capture loop variable
+		g.Go(func() error {
+			return d.runOnHost(ctx, svc)
+		})
+	}
 	return g.Wait()
 }
 

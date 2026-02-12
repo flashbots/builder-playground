@@ -86,6 +86,22 @@ type YAMLServiceConfig struct {
 	// ReadyCheck is a URL to check for service readiness (used for health checks)
 	// Format: "http://localhost:PORT/path" - the service is ready when this URL returns 200
 	ReadyCheck string `yaml:"ready_check,omitempty"`
+
+	// LifecycleHooks enables lifecycle mode for host execution
+	// When true, init/start/stop commands are used instead of host_path/release
+	LifecycleHooks bool `yaml:"lifecycle_hooks,omitempty"`
+
+	// Init commands run sequentially before start. Each must return exit code 0.
+	// Only used when lifecycle_hooks is true
+	Init []string `yaml:"init,omitempty"`
+
+	// Start command runs the service. May hang (long-running) or return 0.
+	// Only used when lifecycle_hooks is true
+	Start string `yaml:"start,omitempty"`
+
+	// Stop commands run when playground exits. May return non-zero (best effort).
+	// Only used when lifecycle_hooks is true
+	Stop []string `yaml:"stop,omitempty"`
 }
 
 type YAMLVolumeMappedConfig struct {
@@ -254,7 +270,7 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 				}
 
 				// Find existing service
-				existingService := findService(component, serviceName)
+				existingService := component.FindService(serviceName)
 
 				if serviceConfig.Remove {
 					// Remove the service
@@ -269,10 +285,10 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 
 				if existingService != nil {
 					// Override existing service properties
-					applyServiceOverrides(existingService, serviceConfig, component)
+					applyServiceOverrides(existingService, serviceConfig, component, y.recipeDir)
 				} else {
 					// Create new service
-					newService := createServiceFromConfig(serviceName, serviceConfig, component)
+					newService := createServiceFromConfig(serviceName, serviceConfig, component, y.recipeDir)
 					existingComponent.Services = append(existingComponent.Services, newService)
 				}
 			}
@@ -309,23 +325,6 @@ func removeComponent(root *Component, name string) {
 		}
 		removeComponent(inner, name)
 	}
-}
-
-// findService finds a service by name in the component tree
-func findService(root *Component, name string) *Service {
-	for _, svc := range root.Services {
-		if svc.Name == name {
-			return svc
-		}
-	}
-
-	for _, inner := range root.Inner {
-		if found := findService(inner, name); found != nil {
-			return found
-		}
-	}
-
-	return nil
 }
 
 // removeService removes a service from the component tree
@@ -424,7 +423,7 @@ func containsRemovedServiceRef(arg string, removedServices map[string]bool) bool
 }
 
 // applyServiceOverrides applies YAML config overrides to an existing service
-func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Component) {
+func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Component, recipeDir string) {
 	if config.Image != "" {
 		svc.Image = config.Image
 	}
@@ -475,6 +474,14 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 	}
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
+	}
+	if config.LifecycleHooks {
+		svc.LifecycleHooks = true
+		svc.Init = config.Init
+		svc.Start = config.Start
+		svc.Stop = config.Stop
+		svc.RecipeDir = recipeDir
+		svc.UseHostExecution()
 	}
 }
 
@@ -591,7 +598,7 @@ func applyDependsOn(svc *Service, dependsOn []string, root *Component) {
 }
 
 // createServiceFromConfig creates a new service from YAML config
-func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Component) *Service {
+func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Component, recipeDir string) *Service {
 	svc := &Service{
 		Name:     name,
 		Args:     []string{},
@@ -644,6 +651,14 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 	}
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
+	}
+	if config.LifecycleHooks {
+		svc.LifecycleHooks = true
+		svc.Init = config.Init
+		svc.Start = config.Start
+		svc.Stop = config.Stop
+		svc.RecipeDir = recipeDir
+		svc.UseHostExecution()
 	}
 
 	return svc
