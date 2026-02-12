@@ -10,7 +10,7 @@ recipe:
         args:
           - server
           - --listen-addr
-          - 127.0.0.1:7000
+          - 0.0.0.0:7000
           - --server-attestation-type
           - none
           - --allowed-remote-attestation-type
@@ -19,7 +19,11 @@ recipe:
           - /server.key
           - --tls-certificate-path
           - /server.crt
-          - 127.0.0.1:8000
+          - builder-hub-proxy:8888
+        ports:
+          http: 7000
+        depends_on:
+          - builder-hub-proxy:healthy
         files:
           "/server.key": "server.key"
           "/server.crt": "server.crt"
