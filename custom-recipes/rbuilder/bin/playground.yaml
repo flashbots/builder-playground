@@ -29,3 +29,4 @@ recipe:
           "rbuilder.toml": "rbuilder.toml"
         depends_on:
           - "el:healthy"
+          - "beacon:healthy"
