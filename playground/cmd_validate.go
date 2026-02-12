@@ -95,8 +95,10 @@ func validateYAMLRecipe(recipe *YAMLRecipe, baseRecipes []Recipe, result *Valida
 					if serviceConfig.Remove {
 						result.AddWarning("removing service '%s' from component '%s' - verify names match base recipe", serviceName, componentName)
 					}
+
 					// Validate lifecycle cannot be used with host_path, release, or args
 					validateLifecycleConfig(serviceName, componentName, serviceConfig, result)
+
 					// Validate args and replace_args are mutually exclusive
 					if len(serviceConfig.Args) > 0 && len(serviceConfig.ReplaceArgs) > 0 {
 						result.AddError("service '%s' in component '%s': args and replace_args cannot be used together", serviceName, componentName)
