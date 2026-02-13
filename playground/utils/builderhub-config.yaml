@@ -8,7 +8,7 @@ rbuilder:
   # blocklist: ""
   evm_caching_enable: true
   ignore_blobs: false
-  extra_data: BuilderNet (playground)
+  extra_data: Playground VM Builder ⚡🤖
   require_non_empty_blocklist: false
   root_hash_threads: 4
   # BLS secret key for signing relay submissions (matches mev-boost-relay default)
@@ -52,11 +52,12 @@ rbuilder:
 
 disk_encryption:
   key: 5d7052c0c3aff5834f45e3f33aca0a55ef9f43ca9cf6c5c8e8375ab82564ddb6  # playground value
-instance_name: buildernet-playground-vm
+# Must match builder_id below (dashes become underscores via config-watchdog)
+instance_name: playground-vm-builder
 
 playground:
   builder_hub_config:
-    builder_id: "playground_vm_builder"
+    builder_id: "playground_vm_builder"  # Must match instance_name (with _ instead of -)
     builder_ip: "1.2.3.4"
     measurement_id: "test1"
     network: "playground"
