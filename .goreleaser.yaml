@@ -12,6 +12,8 @@ builds:
       - CXX=o64-clang++
     flags:
       - -trimpath
+    ldflags:
+      - -X main.version={{ .Version }}
   - id: builder-playground-darwin-arm64
     binary: builder-playground
     goarch:
@@ -23,6 +25,8 @@ builds:
       - CXX=oa64-clang++
     flags:
       - -trimpath
+    ldflags:
+      - -X main.version={{ .Version }}
   - id: builder-playground-linux-amd64
     binary: builder-playground
     env:
@@ -35,6 +39,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
+      - -X main.version={{ .Version }}
       - -extldflags "-Wl,-z,stack-size=0x800000 --static"
     tags:
       - netgo
@@ -51,6 +56,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
+      - -X main.version={{ .Version }}
       - -extldflags "-Wl,-z,stack-size=0x800000 --static"
     tags:
       - netgo
