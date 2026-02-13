@@ -7,9 +7,9 @@ jobs:
   run-builder-playground-action:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Install builder-playground
+      - name: Run builder-playground
         uses: flashbots/builder-playground-action@v1
         with:
           version: latest
