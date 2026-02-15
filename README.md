@@ -130,6 +130,12 @@ Flags:
 
 - `--external-builder`: URL of an external builder to use (enables rollup-boost)
 - `--enable-latest-fork` (int): Enables the latest fork (jovian) at startup (0) or n blocks after genesis.
+- `--proxyd`: Enable proxyd for routing `eth_sendRawTransaction` (and bundle methods) to ingress RPC while routing other methods to standard execution layer
+- `--ingress-rpc <service-name>`: Specify the service name for the ingress RPC endpoint (default: "ingress-rpc")
+- `--proxyd-ingress-methods <methods>`: Additional RPC methods to route to ingress (comma-separated)
+- `--proxyd-standard-methods <methods>`: Additional RPC methods to route to standard EL (comma-separated)
+
+Note: When `--flashblocks` is enabled, proxyd automatically routes `base_meter*` methods (base_meterBundle, base_meterBlockByHash, base_meterBlockByNumber, base_meteredPriorityFeePerGas) to flashblocks-rpc.
 
 ### Example Commands
 

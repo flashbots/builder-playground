@@ -128,6 +128,13 @@ type ArtifactsBuilder struct {
 	// Extra files to copy to artifacts (artifactName -> sourcePath)
 	extraFiles     map[string]string
 	predeploysFile string
+
+	// Proxyd options
+	proxydEnabled         bool
+	proxydIngressURL      string
+	proxydStandardURL     string
+	proxydIngressMethods  []string
+	proxydStandardMethods []string
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -184,6 +191,23 @@ func (b *ArtifactsBuilder) WithExtraFile(artifactName, sourcePath string) *Artif
 
 func (b *ArtifactsBuilder) PredeployFile(filePath string) *ArtifactsBuilder {
 	b.predeploysFile = filePath
+	return b
+}
+
+func (b *ArtifactsBuilder) WithProxyd(ingressURL, standardURL string) *ArtifactsBuilder {
+	b.proxydEnabled = true
+	b.proxydIngressURL = ingressURL
+	b.proxydStandardURL = standardURL
+	return b
+}
+
+func (b *ArtifactsBuilder) ProxydIngressMethods(methods []string) *ArtifactsBuilder {
+	b.proxydIngressMethods = methods
+	return b
+}
+
+func (b *ArtifactsBuilder) ProxydStandardMethods(methods []string) *ArtifactsBuilder {
+	b.proxydStandardMethods = methods
 	return b
 }
 
@@ -424,7 +448,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		}
 	}
 
-	// Copy extra files from recipe directory
+// Copy extra files from recipe directory
 	for artifactName, sourcePath := range b.extraFiles {
 		data, err := os.ReadFile(sourcePath)
 		if err != nil {
@@ -432,6 +456,13 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		}
 		if err := out.WriteFile(artifactName, data); err != nil {
 			return fmt.Errorf("failed to write extra file %s: %w", artifactName, err)
+		}
+	}
+
+	// Generate proxyd config if enabled
+	if b.proxydEnabled {
+		if err := b.GenerateProxydConfig(out, b.proxydIngressURL, b.proxydStandardURL); err != nil {
+			return err
 		}
 	}
 
@@ -822,4 +853,109 @@ func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.Genesi
 		(*allocs)[addr] = account
 	}
 	return nil
+}
+
+// GenerateProxydConfig generates proxyd TOML configuration for routing RPC methods
+func (b *ArtifactsBuilder) GenerateProxydConfig(out *output, ingressURL, standardELURL string) error {
+	// Build additional method mappings
+	var additionalMappings string
+	for _, method := range b.proxydIngressMethods {
+		additionalMappings += fmt.Sprintf("%s = \"ingress\"\n", method)
+	}
+	for _, method := range b.proxydStandardMethods {
+		additionalMappings += fmt.Sprintf("%s = \"standard\"\n", method)
+	}
+
+	config := fmt.Sprintf(`[server]
+rpc_host = "0.0.0.0"
+rpc_port = 8545
+
+[backend]
+response_timeout_seconds = 30
+max_response_size_bytes = 5242880
+
+[backends]
+[backends.ingress]
+rpc_url = "%s"
+
+[backends.standard]
+rpc_url = "%s"
+
+[backend_groups]
+[backend_groups.ingress]
+backends = ["ingress"]
+
+[backend_groups.standard]
+backends = ["standard"]
+
+[rpc_method_mappings]
+# Transaction submission methods routed to ingress
+eth_sendRawTransaction = "ingress"
+eth_sendBundle = "ingress"
+eth_sendBackrunBundle = "ingress"
+eth_cancelBundle = "ingress"
+eth_sendUserOperation = "ingress"
+
+# All other methods routed to standard EL
+eth_getBlockByHash = "standard"
+eth_getBlockByNumber = "standard"
+eth_getBlockTransactionCountByHash = "standard"
+eth_getBlockTransactionCountByNumber = "standard"
+eth_getUncleCountByBlockHash = "standard"
+eth_getUncleCountByBlockNumber = "standard"
+eth_chainId = "standard"
+eth_syncing = "standard"
+eth_coinbase = "standard"
+eth_accounts = "standard"
+eth_blockNumber = "standard"
+eth_call = "standard"
+eth_estimateGas = "standard"
+eth_createAccessList = "standard"
+eth_gasPrice = "standard"
+eth_maxPriorityFeePerGas = "standard"
+eth_blobBaseFee = "standard"
+eth_feeHistory = "standard"
+eth_newFilter = "standard"
+eth_newBlockFilter = "standard"
+eth_newPendingTransactionFilter = "standard"
+eth_uninstallFilter = "standard"
+eth_getFilterChanges = "standard"
+eth_getFilterLogs = "standard"
+eth_getLogs = "standard"
+eth_mining = "standard"
+eth_hashrate = "standard"
+eth_getWork = "standard"
+eth_submitWork = "standard"
+eth_submitHashrate = "standard"
+eth_sign = "standard"
+eth_signTransaction = "standard"
+eth_getBalance = "standard"
+eth_getStorageAt = "standard"
+eth_getTransactionCount = "standard"
+eth_getCode = "standard"
+eth_getProof = "standard"
+eth_getTransactionByHash = "standard"
+eth_getTransactionByBlockHashAndIndex = "standard"
+eth_getTransactionByBlockNumberAndIndex = "standard"
+eth_getTransactionReceipt = "standard"
+net_version = "standard"
+web3_clientVersion = "standard"
+web3_sha3 = "standard"
+debug_getRawHeader = "standard"
+debug_getRawBlock = "standard"
+debug_getRawTransaction = "standard"
+debug_getRawReceipts = "standard"
+debug_getBadBlocks = "standard"
+
+# Base-specific RPC methods
+base_transactionStatus = "standard"
+base_meterBundle = "standard"
+base_meterBlockByHash = "standard"
+base_meterBlockByNumber = "standard"
+base_meteredPriorityFeePerGas = "standard"
+
+# Additional custom method mappings
+%s`, ingressURL, standardELURL, additionalMappings)
+
+	return out.WriteFile("proxyd-config.toml", config)
 }
