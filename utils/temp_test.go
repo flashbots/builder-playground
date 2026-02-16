@@ -107,7 +107,7 @@ func TestGetSessionTempDirCount(t *testing.T) {
 
 	playgroundDir := MustGetPlaygroundTempDir()
 
-	// Get initial count (may be non-zero if other tests left temp dirs)
+	// Get initial count (may be non-zero from previous playground runs)
 	initialCount := GetSessionTempDirCount()
 
 	// Create some test session directories
