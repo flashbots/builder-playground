@@ -1,6 +1,8 @@
 package playground
 
 import (
+	"fmt"
+
 	flag "github.com/spf13/pflag"
 )
 
@@ -45,6 +47,18 @@ type OpRecipe struct {
 	// predeploysFile is the path to a JSON file containing additional contracts
 	// to predeploy in the L2 genesis
 	predeploysFile string
+
+	// enableProxyd enables proxyd for routing transactions to ingress RPC
+	enableProxyd bool
+
+	// ingressRPC is the URL of the ingress RPC endpoint
+	ingressRPC string
+
+	// proxydIngressMethods are additional RPC methods to route to ingress
+	proxydIngressMethods []string
+
+	// proxydStandardMethods are additional RPC methods to route to standard EL
+	proxydStandardMethods []string
 }
 
 func (o *OpRecipe) Name() string {
@@ -67,6 +81,10 @@ func (o *OpRecipe) Flags() *flag.FlagSet {
 	flags.BoolVar(&o.enableWebsocketProxy, "enable-websocket-proxy", false, "Whether to enable websocket proxy")
 	flags.BoolVar(&o.enableChainMonitor, "chain-monitor", false, "Whether to enable chain-monitor")
 	flags.StringVar(&o.predeploysFile, "use-predeploys", "", "Path to JSON file with additional contracts to predeploy in L2 genesis")
+	flags.BoolVar(&o.enableProxyd, "proxyd", false, "Enable proxyd for routing eth_sendRawTransaction to ingress RPC")
+	flags.StringVar(&o.ingressRPC, "ingress-rpc", "http://ingress-rpc:8080", "Ingress RPC URL")
+	flags.StringSliceVar(&o.proxydIngressMethods, "proxyd-ingress-methods", nil, "Additional RPC methods to route to ingress (comma-separated)")
+	flags.StringSliceVar(&o.proxydStandardMethods, "proxyd-standard-methods", nil, "Additional RPC methods to route to standard EL (comma-separated)")
 	return flags
 }
 
@@ -76,6 +94,25 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 	builder.ApplyLatestL2Fork(o.enableLatestFork)
 	builder.OpBlockTime(o.blockTime)
 	builder.PredeployFile(o.predeploysFile)
+
+	// Generate proxyd config if proxyd is enabled
+	if o.enableProxyd {
+		// When flashblocks is enabled, use flashblocks-rpc as standard backend
+		// (it handles both standard RPC methods and base_meter* methods)
+		// Otherwise use op-geth
+		standardELURL := "http://op-geth:8545"
+		if o.flashblocks {
+			standardELURL = "http://flashblocks-rpc:8545"
+		}
+		builder.WithProxyd(o.ingressRPC, standardELURL)
+		if len(o.proxydIngressMethods) > 0 {
+			builder.ProxydIngressMethods(o.proxydIngressMethods)
+		}
+		if len(o.proxydStandardMethods) > 0 {
+			builder.ProxydStandardMethods(o.proxydStandardMethods)
+		}
+	}
+
 	return builder
 }
 
@@ -192,6 +229,19 @@ func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 		})
 	}
 
+	// If proxyd is enabled, add it
+	if o.enableProxyd {
+		elNode := "op-geth"
+		if o.externalBuilder != "" {
+			elNode = "rollup-boost"
+		}
+
+		component.AddComponent(ctx, &Proxyd{
+			IngressRPC: o.ingressRPC,
+			StandardEL: elNode,
+		})
+	}
+
 	if ctx.Contender.TargetChain == "" {
 		ctx.Contender.TargetChain = "op-geth"
 	}
@@ -201,14 +251,21 @@ func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 }
 
 func (o *OpRecipe) Output(manifest *Manifest) map[string]interface{} {
+	output := map[string]interface{}{}
+
+	if o.enableProxyd {
+		proxydService := manifest.MustGetService("proxyd")
+		httpPort := proxydService.MustGetPort("http")
+		output["proxyd-rpc"] = fmt.Sprintf("http://localhost:%d", httpPort.HostPort)
+	}
+
 	/*
 		opGeth := manifest.MustGetService("op-geth").component.(*OpGeth)
 		if opGeth.Enode != "" {
 			// Only output if enode was set
-			return map[string]interface{}{
-				"op-geth-enode": opGeth.Enode,
-			}
+			output["op-geth-enode"] = opGeth.Enode
 		}
 	*/
-	return map[string]interface{}{}
+
+	return output
 }

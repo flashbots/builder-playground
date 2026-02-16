@@ -232,6 +232,10 @@ type WebsocketProxy struct {
 func (w *WebsocketProxy) Apply(ctx *ExContext) *Component {
 	component := NewComponent("webproxy")
 
+	// NOTE: The mikawamp/websocket-rpc image is amd64-only.
+	// For other architectures, build from https://github.com/flashbots/rollup-boost with:
+	//   docker build --build-arg SERVICE_NAME=flashblocks-websocket-proxy -t websocket-proxy:<tag> .
+	// and use: --override websocket-proxy=websocket-proxy:<tag>
 	component.NewService("websocket-proxy").
 		WithImage("docker.io/mikawamp/websocket-rpc").
 		WithTag("latest").
@@ -624,6 +628,31 @@ func (c *ClProxy) Apply(ctx *ExContext) *Component {
 			"--secondary-builder", c.SecondaryBuilder,
 			"--port", `{{Port "authrpc" 5656}}`,
 		)
+
+	return component
+}
+
+type Proxyd struct {
+	IngressRPC string // URL for ingress RPC (e.g., "http://ingress-rpc:8080")
+	StandardEL string // URL for standard EL (e.g., "http://op-geth:8545")
+}
+
+func (p *Proxyd) Apply(ctx *ExContext) *Component {
+	component := NewComponent("proxyd")
+
+	// NOTE: The upstream OP Labs proxyd image is amd64-only.
+	// For other architectures, build from https://github.com/ethereum-optimism/infra with:
+	//   docker build -t proxyd:<tag> -f proxyd/Dockerfile .
+	// and use: --override proxyd=proxyd:<tag>
+	component.NewService("proxyd").
+		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/proxyd").
+		WithTag("latest").
+		WithArgs(
+			"/bin/proxyd",
+			"/config/proxyd.toml",
+		).
+		WithArtifact("/config/proxyd.toml", "proxyd-config.toml").
+		WithPort("http", 8545)
 
 	return component
 }
