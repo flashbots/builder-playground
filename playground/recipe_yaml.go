@@ -2,6 +2,7 @@ package playground
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,9 @@ import (
 type YAMLRecipeConfig struct {
 	// Base is the name of the base recipe (l1, opstack, buildernet)
 	Base string `yaml:"base"`
+
+	// BaseArgs are arguments to pass to the base recipe's flags
+	BaseArgs []string `yaml:"base_args,omitempty"`
 
 	// Description is an optional description of the recipe
 	Description string `yaml:"description,omitempty"`
@@ -45,8 +49,13 @@ type YAMLServiceConfig struct {
 	// Entrypoint overrides the container entrypoint
 	Entrypoint string `yaml:"entrypoint,omitempty"`
 
-	// Args are the arguments to pass to the service
+	// Args are the arguments to pass to the service.
+	// This should be used when ReplaceArgs is not used.
 	Args []string `yaml:"args,omitempty"`
+
+	// ReplaceArgs are the arguments to replace in the service.
+	// This should be used when Args is not used.
+	ReplaceArgs []string `yaml:"replace_args,omitempty"`
 
 	// Env is a map of environment variables
 	Env map[string]string `yaml:"env,omitempty"`
@@ -61,7 +70,7 @@ type YAMLServiceConfig struct {
 	Files map[string]string `yaml:"files,omitempty"`
 
 	// Volumes is a map of container path to volume name
-	Volumes map[string]string `yaml:"volumes,omitempty"`
+	Volumes map[string]*YAMLVolumeMappedConfig `yaml:"volumes,omitempty"`
 
 	// DependsOn is a list of services this service depends on
 	// Format: "service_name" or "service_name:condition" where condition is "healthy" or "running"
@@ -73,6 +82,31 @@ type YAMLServiceConfig struct {
 
 	// Release specifies a GitHub release to download for host execution
 	Release *YAMLReleaseConfig `yaml:"release,omitempty"`
+
+	// ReadyCheck is a URL to check for service readiness (used for health checks)
+	// Format: "http://localhost:PORT/path" - the service is ready when this URL returns 200
+	ReadyCheck string `yaml:"ready_check,omitempty"`
+
+	// LifecycleHooks enables lifecycle mode for host execution
+	// When true, init/start/stop commands are used instead of host_path/release
+	LifecycleHooks bool `yaml:"lifecycle_hooks,omitempty"`
+
+	// Init commands run sequentially before start. Each must return exit code 0.
+	// Only used when lifecycle_hooks is true
+	Init []string `yaml:"init,omitempty"`
+
+	// Start command runs the service. May hang (long-running) or return 0.
+	// Only used when lifecycle_hooks is true
+	Start string `yaml:"start,omitempty"`
+
+	// Stop commands run when playground exits. May return non-zero (best effort).
+	// Only used when lifecycle_hooks is true
+	Stop []string `yaml:"stop,omitempty"`
+}
+
+type YAMLVolumeMappedConfig struct {
+	Name    string `yaml:"name"`
+	IsLocal bool   `yaml:"is_local"`
 }
 
 // YAMLReleaseConfig specifies a GitHub release to download
@@ -123,6 +157,14 @@ func ParseYAMLRecipe(filePath string, baseRecipes []Recipe) (*YAMLRecipe, error)
 
 	if baseRecipe == nil {
 		return nil, fmt.Errorf("unknown base recipe: %s", config.Base)
+	}
+
+	// Parse base_args into the base recipe's flags
+	if len(config.BaseArgs) > 0 {
+		flags := baseRecipe.Flags()
+		if err := flags.Parse(config.BaseArgs); err != nil {
+			return nil, fmt.Errorf("failed to parse base_args: %w", err)
+		}
 	}
 
 	return &YAMLRecipe{
@@ -206,9 +248,10 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 		if componentConfig.Remove {
 			// Remove the component and all its services
 			if existingComponent != nil {
-				// Track all services in this component as removed
 				collectServiceNames(existingComponent, removedServices)
 				removeComponent(component, componentName)
+			} else {
+				slog.Warn("cannot remove component: not found", "name", componentName)
 			}
 			continue
 		}
@@ -227,23 +270,25 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 				}
 
 				// Find existing service
-				existingService := findService(component, serviceName)
+				existingService := component.FindService(serviceName)
 
 				if serviceConfig.Remove {
 					// Remove the service
 					if existingService != nil {
 						removeService(component, serviceName)
 						removedServices[serviceName] = true
+					} else {
+						slog.Warn("cannot remove service: not found", "name", serviceName, "component", componentName)
 					}
 					continue
 				}
 
 				if existingService != nil {
 					// Override existing service properties
-					applyServiceOverrides(existingService, serviceConfig)
+					applyServiceOverrides(existingService, serviceConfig, component, y.recipeDir)
 				} else {
 					// Create new service
-					newService := createServiceFromConfig(serviceName, serviceConfig)
+					newService := createServiceFromConfig(serviceName, serviceConfig, component, y.recipeDir)
 					existingComponent.Services = append(existingComponent.Services, newService)
 				}
 			}
@@ -280,23 +325,6 @@ func removeComponent(root *Component, name string) {
 		}
 		removeComponent(inner, name)
 	}
-}
-
-// findService finds a service by name in the component tree
-func findService(root *Component, name string) *Service {
-	for _, svc := range root.Services {
-		if svc.Name == name {
-			return svc
-		}
-	}
-
-	for _, inner := range root.Inner {
-		if found := findService(inner, name); found != nil {
-			return found
-		}
-	}
-
-	return nil
 }
 
 // removeService removes a service from the component tree
@@ -395,7 +423,7 @@ func containsRemovedServiceRef(arg string, removedServices map[string]bool) bool
 }
 
 // applyServiceOverrides applies YAML config overrides to an existing service
-func applyServiceOverrides(svc *Service, config *YAMLServiceConfig) {
+func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Component, recipeDir string) {
 	if config.Image != "" {
 		svc.Image = config.Image
 	}
@@ -407,6 +435,9 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig) {
 	}
 	if len(config.Args) > 0 {
 		svc.Args = config.Args
+	}
+	if len(config.ReplaceArgs) > 0 {
+		svc.Args = applyReplaceArgs(svc.Args, config.ReplaceArgs)
 	}
 	if config.Env != nil {
 		if svc.Env == nil {
@@ -425,12 +456,12 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig) {
 		applyFilesToService(svc, config.Files)
 	}
 	if config.Volumes != nil {
-		for containerPath, volumeName := range config.Volumes {
-			svc.WithVolume(volumeName, containerPath)
+		for containerPath, volumeMapping := range config.Volumes {
+			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
 		}
 	}
 	if config.DependsOn != nil {
-		applyDependsOn(svc, config.DependsOn)
+		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
 		svc.HostPath = config.HostPath
@@ -441,6 +472,50 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig) {
 		svc.WithRelease(rel)
 		svc.UseHostExecution()
 	}
+	if config.ReadyCheck != "" {
+		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
+	}
+	if config.LifecycleHooks {
+		svc.LifecycleHooks = true
+		svc.Init = config.Init
+		svc.Start = config.Start
+		svc.Stop = config.Stop
+		svc.RecipeDir = recipeDir
+		svc.UseHostExecution()
+	}
+}
+
+// applyReplaceArgs replaces arguments in the existing args list.
+// ReplaceArgs contains flag-value pairs in sequence: ["--flag", "new-value", "--other-flag", "other-value"]
+// For each pair, it finds the flag in args and replaces its following value.
+func applyReplaceArgs(args, replaceArgs []string) []string {
+	if len(replaceArgs)%2 != 0 {
+		slog.Warn("replace_args should contain pairs of flag and value", "count", len(replaceArgs))
+	}
+
+	result := make([]string, len(args))
+	copy(result, args)
+
+	for i := 0; i < len(replaceArgs); i += 2 {
+		flag := replaceArgs[i]
+		newValue := replaceArgs[i+1]
+		result = applyReplacePair(flag, newValue, result)
+	}
+
+	return result
+}
+
+// applyReplacePair finds flag in args and replaces the following value with newValue.
+func applyReplacePair(flag, newValue string, args []string) []string {
+	for i := 0; i < len(args); i++ {
+		if args[i] == flag && i+1 < len(args) {
+			args[i+1] = newValue
+			return args
+		}
+	}
+
+	slog.Warn("replace_args flag not found in service args", "flag", flag)
+	return args
 }
 
 // yamlReleaseToRelease converts a YAMLReleaseConfig to a release struct
@@ -483,7 +558,9 @@ func applyFilesToService(svc *Service, files map[string]string) {
 }
 
 // applyDependsOn parses depends_on entries and adds them to the service
-func applyDependsOn(svc *Service, dependsOn []string) {
+// Supports formats: "service", "service:condition", "component.service", "component.service:condition"
+// The root parameter is used to validate component names when using the component.service format.
+func applyDependsOn(svc *Service, dependsOn []string, root *Component) {
 	for _, dep := range dependsOn {
 		parts := strings.SplitN(dep, ":", 2)
 		serviceName := parts[0]
@@ -491,6 +568,24 @@ func applyDependsOn(svc *Service, dependsOn []string) {
 		if len(parts) == 2 {
 			condition = parts[1]
 		}
+
+		// Handle component.service format - extract just the service name
+		if strings.Contains(serviceName, ".") {
+			componentParts := strings.SplitN(serviceName, ".", 2)
+			if len(componentParts) == 2 {
+				componentName := componentParts[0]
+				serviceName = componentParts[1]
+
+				// Validate that the component exists
+				if root != nil && findComponent(root, componentName) == nil {
+					slog.Warn("depends_on references unknown component",
+						"component", componentName,
+						"service", serviceName,
+						"full_reference", dep)
+				}
+			}
+		}
+
 		switch condition {
 		case "healthy":
 			svc.DependsOnHealthy(serviceName)
@@ -503,7 +598,7 @@ func applyDependsOn(svc *Service, dependsOn []string) {
 }
 
 // createServiceFromConfig creates a new service from YAML config
-func createServiceFromConfig(name string, config *YAMLServiceConfig) *Service {
+func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Component, recipeDir string) *Service {
 	svc := &Service{
 		Name:     name,
 		Args:     []string{},
@@ -538,12 +633,12 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig) *Service {
 		applyFilesToService(svc, config.Files)
 	}
 	if config.Volumes != nil {
-		for containerPath, volumeName := range config.Volumes {
-			svc.WithVolume(volumeName, containerPath)
+		for containerPath, volumeMapping := range config.Volumes {
+			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
 		}
 	}
 	if config.DependsOn != nil {
-		applyDependsOn(svc, config.DependsOn)
+		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
 		svc.HostPath = config.HostPath
@@ -552,6 +647,17 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig) *Service {
 	if config.Release != nil {
 		rel := yamlReleaseToRelease(config.Release)
 		svc.WithRelease(rel)
+		svc.UseHostExecution()
+	}
+	if config.ReadyCheck != "" {
+		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
+	}
+	if config.LifecycleHooks {
+		svc.LifecycleHooks = true
+		svc.Init = config.Init
+		svc.Start = config.Start
+		svc.Stop = config.Stop
+		svc.RecipeDir = recipeDir
 		svc.UseHostExecution()
 	}
 

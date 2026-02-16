@@ -1,0 +1,31 @@
+# NOTE: Works with Mac - prefer using rbuilder/bin for Linux if this doesn't work.
+base: l1
+description: Use reth and rbuilder containers
+
+recipe:
+  # TODO: Already included as a container in the base recipe.
+  # Uncomment and modify only if you need to override.
+  # reth:
+  #   services:
+  #     el:
+  #       image: ghcr.io/paradigmxyz/reth
+  #       tag: v1.10.2
+
+  builder:
+    services:
+      rbuilder:
+        image: ghcr.io/flashbots/rbuilder
+        tag: sha-7efdc0b
+        args:
+          - "run"
+          - "/data/rbuilder.toml"
+        files:
+          "/data/rbuilder.toml": "rbuilder.toml"
+          "/data/genesis.json": "artifact:genesis.json"
+        volumes:
+          "/data_reth":
+            name: "shared:el-data"
+            is_local: true
+        depends_on:
+          - "el:healthy"
+          - "beacon:healthy"

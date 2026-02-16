@@ -30,6 +30,7 @@ test: ## Run tests
 .PHONY: integration-test
 integration-test: ## Run integration tests
 	INTEGRATION_TESTS=true go test -v -count=1 ./playground/... -run TestRecipe
+	INTEGRATION_TESTS=true go test -v -count=1 ./playground/... -run TestComponent
 
 .PHONY: generate-docs
 generate-docs: ## Auto-generate recipe docs

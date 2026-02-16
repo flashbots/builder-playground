@@ -36,6 +36,33 @@ $ go install .
 
 or do `go build .` and run from the repository like `./builder-playground`.
 
+## CI / GitHub Actions
+
+Use [`flashbots/builder-playground-action`](https://github.com/flashbots/builder-playground-action) to spin up devnets in your CI pipelines:
+
+```yaml
+- name: Start Builder Playground
+  uses: flashbots/builder-playground-action@v1
+  with:
+    recipe: l1
+
+- name: Run tests
+  run: |
+    # Your tests here
+```
+
+You can also use a custom recipe file and pin a specific version:
+
+```yaml
+- name: Start Builder Playground
+  uses: flashbots/builder-playground-action@v1
+  with:
+    version: v1.0.0
+    recipe: ./configs/my-recipe.yaml
+```
+
+See the [builder-playground-action README](https://github.com/flashbots/builder-playground-action) for full documentation.
+
 ## Getting started
 
 See the available recipes from the `recipes` command:
@@ -233,6 +260,16 @@ metrics: 9091
 rpc: 30303
 ws: 8546
 ```
+
+## Validate
+
+Check a recipe for errors before running:
+
+```bash
+$ builder-playground validate my-recipe.yaml
+```
+
+This validates dependencies, host paths, port conflicts, and service name uniqueness without starting any containers. Useful for catching configuration errors early, especially with custom recipes.
 
 ## Stop
 

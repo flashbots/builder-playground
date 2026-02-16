@@ -63,58 +63,6 @@ func TestRemoveComponent(t *testing.T) {
 	}
 }
 
-func TestFindService(t *testing.T) {
-	root := &Component{
-		Name:     "root",
-		Services: []*Service{{Name: "root-svc"}},
-		Inner: []*Component{
-			{
-				Name:     "child",
-				Services: []*Service{{Name: "child-svc"}},
-			},
-		},
-	}
-
-	tests := []struct {
-		name     string
-		search   string
-		expected bool
-	}{
-		{"find root service", "root-svc", true},
-		{"find child service", "child-svc", true},
-		{"not found", "nonexistent", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := findService(root, tt.search)
-			if tt.expected {
-				require.NotNil(t, result)
-			} else {
-				require.Nil(t, result)
-			}
-		})
-	}
-}
-
-func TestRemoveService(t *testing.T) {
-	root := &Component{
-		Name: "root",
-		Services: []*Service{
-			{Name: "svc1"},
-			{Name: "svc2"},
-			{Name: "svc3"},
-		},
-	}
-
-	removeService(root, "svc2")
-
-	require.Len(t, root.Services, 2)
-	for _, s := range root.Services {
-		require.NotEqual(t, "svc2", s.Name)
-	}
-}
-
 func TestCollectServiceNames(t *testing.T) {
 	root := &Component{
 		Name:     "root",
@@ -176,7 +124,7 @@ func TestApplyServiceOverrides(t *testing.T) {
 		Env:   map[string]string{"KEY": "value"},
 	}
 
-	applyServiceOverrides(svc, config)
+	applyServiceOverrides(svc, config, nil, "")
 
 	require.Equal(t, "new-image", svc.Image)
 	require.Equal(t, "new-tag", svc.Tag)
@@ -194,7 +142,7 @@ func TestApplyServiceOverrides_PartialOverride(t *testing.T) {
 
 	config := &YAMLServiceConfig{Tag: "new-tag"}
 
-	applyServiceOverrides(svc, config)
+	applyServiceOverrides(svc, config, nil, "")
 
 	require.Equal(t, "original-image", svc.Image)
 	require.Equal(t, "new-tag", svc.Tag)
@@ -206,7 +154,7 @@ func TestApplyDependsOn(t *testing.T) {
 
 	dependsOn := []string{"db:healthy", "cache:running", "other"}
 
-	applyDependsOn(svc, dependsOn)
+	applyDependsOn(svc, dependsOn, nil)
 
 	require.Len(t, svc.DependsOn, 3)
 	require.Equal(t, "db", svc.DependsOn[0].Name)
@@ -215,6 +163,21 @@ func TestApplyDependsOn(t *testing.T) {
 	require.Equal(t, DependsOnConditionRunning, svc.DependsOn[1].Condition)
 	require.Equal(t, "other", svc.DependsOn[2].Name)
 	require.Equal(t, DependsOnConditionHealthy, svc.DependsOn[2].Condition)
+}
+
+func TestApplyDependsOn_ComponentServiceFormat(t *testing.T) {
+	svc := &Service{Name: "test-svc"}
+
+	// Test component.service format - should extract just the service name
+	dependsOn := []string{"reth.el:healthy", "merger.merger-builder:running"}
+
+	applyDependsOn(svc, dependsOn, nil)
+
+	require.Len(t, svc.DependsOn, 2)
+	require.Equal(t, "el", svc.DependsOn[0].Name)
+	require.Equal(t, DependsOnConditionHealthy, svc.DependsOn[0].Condition)
+	require.Equal(t, "merger-builder", svc.DependsOn[1].Name)
+	require.Equal(t, DependsOnConditionRunning, svc.DependsOn[1].Condition)
 }
 
 func TestCreateServiceFromConfig(t *testing.T) {
@@ -228,7 +191,7 @@ func TestCreateServiceFromConfig(t *testing.T) {
 		DependsOn:  []string{"db:healthy"},
 	}
 
-	svc := createServiceFromConfig("my-service", config)
+	svc := createServiceFromConfig("my-service", config, nil, "")
 
 	require.Equal(t, "my-service", svc.Name)
 	require.Equal(t, "test-image", svc.Image)
@@ -353,26 +316,6 @@ func TestApplyFilesToService(t *testing.T) {
 	require.Equal(t, "genesis.json", svc.FilesMapped["/app/genesis.json"])
 }
 
-func TestRemoveService_Nested(t *testing.T) {
-	root := &Component{
-		Name: "root",
-		Inner: []*Component{
-			{
-				Name: "child",
-				Services: []*Service{
-					{Name: "nested-svc1"},
-					{Name: "nested-svc2"},
-				},
-			},
-		},
-	}
-
-	removeService(root, "nested-svc1")
-
-	require.Len(t, root.Inner[0].Services, 1)
-	require.Equal(t, "nested-svc2", root.Inner[0].Services[0].Name)
-}
-
 func TestApplyServiceOverrides_AllFields(t *testing.T) {
 	svc := &Service{
 		Name:  "test-svc",
@@ -384,9 +327,11 @@ func TestApplyServiceOverrides_AllFields(t *testing.T) {
 		Tag:        "v2.0.0",
 		Entrypoint: "/bin/bash",
 		Ports:      map[string]int{"http": 8080, "https": 8443},
-		Volumes:    map[string]string{"/data": "myvolume"},
-		DependsOn:  []string{"db:healthy"},
-		HostPath:   "/usr/local/bin/app",
+		Volumes: map[string]*YAMLVolumeMappedConfig{"/data": {
+			Name: "myvolume",
+		}},
+		DependsOn: []string{"db:healthy"},
+		HostPath:  "/usr/local/bin/app",
 		Release: &YAMLReleaseConfig{
 			Name:    "myapp",
 			Org:     "myorg",
@@ -394,7 +339,7 @@ func TestApplyServiceOverrides_AllFields(t *testing.T) {
 		},
 	}
 
-	applyServiceOverrides(svc, config)
+	applyServiceOverrides(svc, config, nil, "")
 
 	require.Equal(t, "new-image", svc.Image)
 	require.Equal(t, "v2.0.0", svc.Tag)
@@ -437,7 +382,7 @@ func TestCreateServiceFromConfig_WithHostPath(t *testing.T) {
 		HostPath: "/usr/local/bin/myapp",
 	}
 
-	svc := createServiceFromConfig("my-service", config)
+	svc := createServiceFromConfig("my-service", config, nil, "")
 
 	require.Equal(t, "/usr/local/bin/myapp", svc.HostPath)
 }
@@ -452,7 +397,7 @@ func TestCreateServiceFromConfig_WithRelease(t *testing.T) {
 		},
 	}
 
-	svc := createServiceFromConfig("my-service", config)
+	svc := createServiceFromConfig("my-service", config, nil, "")
 
 	require.NotNil(t, svc.release)
 	require.Equal(t, "myapp", svc.release.Name)
@@ -460,14 +405,16 @@ func TestCreateServiceFromConfig_WithRelease(t *testing.T) {
 
 func TestCreateServiceFromConfig_WithVolumes(t *testing.T) {
 	config := &YAMLServiceConfig{
-		Image:   "test-image",
-		Volumes: map[string]string{"/data": "myvolume"},
+		Image: "test-image",
+		Volumes: map[string]*YAMLVolumeMappedConfig{"/data": {
+			Name: "myvolume",
+		}},
 	}
 
-	svc := createServiceFromConfig("my-service", config)
+	svc := createServiceFromConfig("my-service", config, nil, "")
 
 	require.NotNil(t, svc.VolumesMapped)
-	require.Equal(t, "myvolume", svc.VolumesMapped["/data"])
+	require.Equal(t, "myvolume", svc.VolumesMapped["/data"].Name)
 }
 
 func TestParseYAMLRecipe(t *testing.T) {
@@ -661,7 +608,7 @@ recipe:
 	component := recipe.Apply(ctx)
 
 	require.NotNil(t, component)
-	require.Nil(t, findService(component, "mev-boost-relay"))
+	require.Nil(t, component.FindService("mev-boost-relay"))
 }
 
 func TestYAMLRecipe_ApplyModifications_AddNewService(t *testing.T) {
@@ -696,7 +643,7 @@ recipe:
 	component := recipe.Apply(ctx)
 
 	require.NotNil(t, component)
-	newSvc := findService(component, "new-svc")
+	newSvc := component.FindService("new-svc")
 	require.NotNil(t, newSvc)
 	require.Equal(t, "new-image", newSvc.Image)
 }
@@ -805,9 +752,234 @@ func TestApplyDependsOn_UnknownCondition(t *testing.T) {
 
 	dependsOn := []string{"db:unknown-condition"}
 
-	applyDependsOn(svc, dependsOn)
+	applyDependsOn(svc, dependsOn, nil)
 
 	require.Len(t, svc.DependsOn, 1)
 	require.Equal(t, "db", svc.DependsOn[0].Name)
 	require.Equal(t, DependsOnConditionHealthy, svc.DependsOn[0].Condition)
+}
+
+func TestApplyServiceOverrides_WithReplaceArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		replaceArgs []string
+		expected    []string
+	}{
+		{
+			name:        "replace single pair",
+			args:        []string{"--port", "8080", "--host", "localhost"},
+			replaceArgs: []string{"--port", "9090"},
+			expected:    []string{"--port", "9090", "--host", "localhost"},
+		},
+		{
+			name:        "replace multiple pairs",
+			args:        []string{"--port", "8080", "--host", "localhost", "--timeout", "30"},
+			replaceArgs: []string{"--port", "9090", "--timeout", "60"},
+			expected:    []string{"--port", "9090", "--host", "localhost", "--timeout", "60"},
+		},
+		{
+			name:        "replace with subcommand present",
+			args:        []string{"node", "--datadir", "/old", "--port", "8080"},
+			replaceArgs: []string{"--datadir", "/new", "--port", "9090"},
+			expected:    []string{"node", "--datadir", "/new", "--port", "9090"},
+		},
+		{
+			name:        "replace last flag",
+			args:        []string{"--first", "value1", "--second", "value2"},
+			replaceArgs: []string{"--second", "newvalue2"},
+			expected:    []string{"--first", "value1", "--second", "newvalue2"},
+		},
+		{
+			name:        "empty replace args",
+			args:        []string{"--port", "8080"},
+			replaceArgs: []string{},
+			expected:    []string{"--port", "8080"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &Service{
+				Name: "test-svc",
+				Args: tt.args,
+			}
+			config := &YAMLServiceConfig{
+				ReplaceArgs: tt.replaceArgs,
+			}
+			applyServiceOverrides(svc, config, nil, "")
+			require.Equal(t, tt.expected, svc.Args)
+		})
+	}
+}
+
+func TestYAMLRecipe_Lifecycle_ParseAndApply(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: l1
+recipe:
+  new-component:
+    services:
+      lifecycle-svc:
+        lifecycle_hooks: true
+        init:
+          - echo init1
+          - echo init2
+        start: echo start && sleep infinity
+        stop:
+          - echo stop1
+          - echo stop2
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.NoError(t, err)
+
+	out, err := NewOutput(tmpDir)
+	require.NoError(t, err)
+	ctx := &ExContext{
+		LogLevel:  LevelInfo,
+		Contender: &ContenderContext{Enabled: false},
+		Output:    out,
+	}
+
+	component := recipe.Apply(ctx)
+	require.NotNil(t, component)
+
+	svc := component.FindService("lifecycle-svc")
+	require.NotNil(t, svc)
+	require.True(t, svc.LifecycleHooks)
+	require.Equal(t, []string{"echo init1", "echo init2"}, svc.Init)
+	require.Equal(t, "echo start && sleep infinity", svc.Start)
+	require.Equal(t, []string{"echo stop1", "echo stop2"}, svc.Stop)
+
+	// Verify host execution is enabled by checking the label exists
+	require.NotNil(t, svc.Labels)
+	require.NotEmpty(t, svc.Labels)
+}
+
+func TestYAMLRecipe_Lifecycle_StartOnly(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: l1
+recipe:
+  new-component:
+    services:
+      lifecycle-svc:
+        lifecycle_hooks: true
+        start: ./run-server.sh
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.NoError(t, err)
+
+	out, err := NewOutput(tmpDir)
+	require.NoError(t, err)
+	ctx := &ExContext{
+		LogLevel:  LevelInfo,
+		Contender: &ContenderContext{Enabled: false},
+		Output:    out,
+	}
+
+	component := recipe.Apply(ctx)
+	require.NotNil(t, component)
+
+	svc := component.FindService("lifecycle-svc")
+	require.NotNil(t, svc)
+	require.True(t, svc.LifecycleHooks)
+	require.Empty(t, svc.Init)
+	require.Equal(t, "./run-server.sh", svc.Start)
+	require.Empty(t, svc.Stop)
+}
+
+func TestYAMLRecipe_Lifecycle_InitOnly(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: l1
+recipe:
+  new-component:
+    services:
+      lifecycle-svc:
+        lifecycle_hooks: true
+        init:
+          - echo "setup step 1"
+          - echo "setup step 2"
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.NoError(t, err)
+
+	out, err := NewOutput(tmpDir)
+	require.NoError(t, err)
+	ctx := &ExContext{
+		LogLevel:  LevelInfo,
+		Contender: &ContenderContext{Enabled: false},
+		Output:    out,
+	}
+
+	component := recipe.Apply(ctx)
+	require.NotNil(t, component)
+
+	svc := component.FindService("lifecycle-svc")
+	require.NotNil(t, svc)
+	require.True(t, svc.LifecycleHooks)
+	require.Equal(t, []string{"echo \"setup step 1\"", "echo \"setup step 2\""}, svc.Init)
+	require.Empty(t, svc.Start)
+	require.Empty(t, svc.Stop)
+}
+
+func TestYAMLRecipe_Lifecycle_InitAndStop(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: l1
+recipe:
+  new-component:
+    services:
+      lifecycle-svc:
+        lifecycle_hooks: true
+        init:
+          - echo "setup"
+        stop:
+          - echo "cleanup"
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := []Recipe{&L1Recipe{}}
+	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.NoError(t, err)
+
+	out, err := NewOutput(tmpDir)
+	require.NoError(t, err)
+	ctx := &ExContext{
+		LogLevel:  LevelInfo,
+		Contender: &ContenderContext{Enabled: false},
+		Output:    out,
+	}
+
+	component := recipe.Apply(ctx)
+	require.NotNil(t, component)
+
+	svc := component.FindService("lifecycle-svc")
+	require.NotNil(t, svc)
+	require.True(t, svc.LifecycleHooks)
+	require.Equal(t, []string{"echo \"setup\""}, svc.Init)
+	require.Empty(t, svc.Start)
+	require.Equal(t, []string{"echo \"cleanup\""}, svc.Stop)
 }

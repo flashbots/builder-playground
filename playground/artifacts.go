@@ -68,6 +68,9 @@ var opStateJovian []byte
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
 
+//go:embed utils/builderhub-config.yaml
+var defaultBuilderHubConfig []byte
+
 // l2ForkConfig holds the selected L2 fork configuration files
 type l2ForkConfig struct {
 	genesis      []byte  // L2 genesis JSON
@@ -249,6 +252,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 
 	genesisTime := time.Now().Add(time.Duration(b.genesisDelay) * time.Second)
 	config := params.BeaconConfig()
+	config.ElectraForkEpoch = 0
 
 	gen := interop.GethTestnetGenesis(genesisTime, config)
 	// HACK: fix this in prysm?
@@ -515,24 +519,20 @@ type output struct {
 }
 
 func NewOutput(dst string) (*output, error) {
-	homeDir, err := GetHomeDir()
+	playgroundDir, err := utils.GetPlaygroundDir()
 	if err != nil {
 		return nil, err
 	}
 	if dst == "" {
 		// Use the $HOMEDIR/devnet as the default output
-		dst = filepath.Join(homeDir, "devnet")
-	} else {
-		// Convert relative paths to absolute paths
-		if !filepath.IsAbs(dst) {
-			dst, err = filepath.Abs(dst)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert relative path to absolute: %w", err)
-			}
-		}
+		dst = filepath.Join(playgroundDir, "devnet")
+	}
+	dst, err = filepath.Abs(dst)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert path %s to absolute: %w", dst, err)
 	}
 
-	out := &output{dst: dst, homeDir: homeDir}
+	out := &output{dst: dst, homeDir: playgroundDir}
 
 	// check if the output directory exists
 	if out.Exists("") {
@@ -721,33 +721,6 @@ type encObject interface {
 
 type sszObject interface {
 	MarshalSSZ() ([]byte, error)
-}
-
-func GetHomeDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("error getting user home directory: %w", err)
-	}
-
-	// if legacy .playground dir is present, remove it
-	if err := os.RemoveAll(filepath.Join(homeDir, ".playground")); err != nil {
-		return "", err
-	}
-
-	stateHomeDir := os.Getenv("XDG_STATE_HOME")
-	if stateHomeDir == "" {
-		stateHomeDir = filepath.Join(homeDir, ".local", "state")
-	}
-
-	// Define the path for our custom home directory
-	customHomeDir := filepath.Join(stateHomeDir, "builder-playground")
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(customHomeDir, 0o755); err != nil {
-		return "", fmt.Errorf("error creating output directory: %v", err)
-	}
-
-	return customHomeDir, nil
 }
 
 type EnodeAddr struct {

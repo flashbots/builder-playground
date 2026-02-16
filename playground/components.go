@@ -1,16 +1,20 @@
 package playground
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	_ "embed"
+
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-boost-utils/bls"
 	"github.com/flashbots/go-boost-utils/utils"
+	"github.com/goccy/go-yaml"
 )
 
 var (
@@ -130,7 +134,7 @@ func (f *FlashblocksRPC) Apply(ctx *ExContext) *Component {
 		service = component.NewService("flashblocks-rpc").
 			WithImage("ghcr.io/base/node-reth-dev").
 			WithTag("main").
-			WithEntrypoint("/app/base-reth-node").
+			WithEntrypoint("/app/base-client").
 			WithArgs(
 				"node",
 				"--websocket-url", websocketURL,
@@ -503,7 +507,7 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 		WithRelease(rethELRelease).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithArtifact("/data/jwtsecret", "jwtsecret").
-		WithVolume("data", "/data_reth")
+		WithVolume("data", "/data_reth", true)
 
 	UseHealthmon(component, svc, healthmonExecution)
 
@@ -746,6 +750,32 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 	return component
 }
 
+//go:embed utils/rbuilder-config.toml.tmpl
+var rbuilderConfigToml string
+
+type Rbuilder struct{}
+
+func (r *Rbuilder) Apply(ctx *ExContext) *Component {
+	component := NewComponent("rbuilder")
+
+	// TODO: Handle error
+	ctx.Output.WriteFile("rbuilder-config.toml", rbuilderConfigToml)
+
+	component.NewService("rbuilder").
+		WithImage("ghcr.io/flashbots/rbuilder").
+		WithTag("sha-7efdc0b").
+		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
+		WithArtifact("/data/genesis.json", "genesis.json").
+		WithVolume("shared:el-data", "/data_reth", true).
+		DependsOnHealthy("el").
+		DependsOnHealthy("beacon").
+		WithArgs(
+			"run", "/data/rbuilder-config.toml",
+		)
+
+	return component
+}
+
 type nullService struct{}
 
 func (n *nullService) Apply(ctx *ExContext) *Component {
@@ -895,7 +925,7 @@ type BuilderHub struct {
 	BuilderConfig string
 }
 
-func (b *BuilderHub) Apply(ctx *ExContext) *Component {
+func (b *BuilderHub) Apply(exCtx *ExContext) *Component {
 	component := NewComponent("builder-hub")
 
 	// Database service
@@ -915,8 +945,8 @@ func (b *BuilderHub) Apply(ctx *ExContext) *Component {
 			StartPeriod: 2 * time.Second,
 		})
 
-	// API service
-	apiSrv := component.NewService("builder-hub-api").
+		// API service
+	component.NewService("builder-hub-api").
 		WithImage("docker.io/flashbots/builder-hub").
 		WithTag("0.3.1-alpha1").
 		DependsOnHealthy("builder-hub-db").
@@ -938,14 +968,13 @@ func (b *BuilderHub) Apply(ctx *ExContext) *Component {
 			Timeout:     30 * time.Second,
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
+		}).
+		WithPostHook(&postHook{
+			Name: "register-builder",
+			Action: func(ctx context.Context, m *Manifest, s *Service) error {
+				return registerBuilderHook(ctx, exCtx, m, s, b)
+			},
 		})
-
-	apiSrv.WithPostHook(&postHook{
-		Name: "register-builder",
-		Action: func(s *Service) error {
-			return registerBuilderHook(ctx, s, b)
-		},
-	})
 
 	// Proxy service
 	component.NewService("builder-hub-proxy").
@@ -965,14 +994,33 @@ func (b *BuilderHub) Apply(ctx *ExContext) *Component {
 	return component
 }
 
-func registerBuilderHook(ctx *ExContext, s *Service, b *BuilderHub) error {
-	genesis, err := ctx.Output.Read("genesis.json")
+type builderHubConfig struct {
+	Playground struct {
+		BuilderHubConfig struct {
+			BuilderID     string `yaml:"builder_id"`
+			BuilderIP     string `yaml:"builder_ip"`
+			MeasurementID string `yaml:"measurement_id"`
+			Network       string `yaml:"network"`
+		} `yaml:"builder_hub_config"`
+	} `yaml:"playground"`
+}
+
+func registerBuilderHook(ctx context.Context, exCtx *ExContext, manifest *Manifest, s *Service, b *BuilderHub) error {
+	genesis, err := exCtx.Output.Read("genesis.json")
 	if err != nil {
 		return err
 	}
 
-	configYaml, err := os.ReadFile(b.BuilderConfig)
-	if err != nil {
+	configYaml := defaultBuilderHubConfig
+	if len(b.BuilderConfig) > 0 {
+		configYaml, err = os.ReadFile(b.BuilderConfig)
+		if err != nil {
+			return err
+		}
+	}
+
+	var config builderHubConfig
+	if err := yaml.Unmarshal([]byte(configYaml), &config); err != nil {
 		return err
 	}
 
@@ -989,15 +1037,17 @@ func registerBuilderHook(ctx *ExContext, s *Service, b *BuilderHub) error {
 		return err
 	}
 
-	endpoint := fmt.Sprintf("http://localhost:%d", s.MustGetPort("admin").HostPort)
 	input := &builderHubRegisterBuilderInput{
-		BuilderID:     "builder",
-		BuilderIP:     b.BuilderIP,
-		MeasurementID: "test",
-		Network:       "playground",
+		BuilderID:     config.Playground.BuilderHubConfig.BuilderID,
+		BuilderIP:     config.Playground.BuilderHubConfig.BuilderIP,
+		MeasurementID: config.Playground.BuilderHubConfig.MeasurementID,
+		Network:       config.Playground.BuilderHubConfig.Network,
 		Config:        string(configJSON),
 	}
-	if err := registerBuilder(endpoint, input); err != nil {
+	adminApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("builder-hub-api").MustGetPort("admin").HostPort)
+	beaconApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("beacon").MustGetPort("http").HostPort)
+	rethApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("el").MustGetPort("http").HostPort)
+	if err := registerBuilder(ctx, adminApi, beaconApi, rethApi, input); err != nil {
 		return err
 	}
 	return nil
@@ -1024,4 +1074,26 @@ func UseHealthmon(component *Component, s *Service, chain string) {
 			Retries:     20,
 			StartPeriod: 1 * time.Second,
 		})
+}
+
+// Fileserver serves genesis and testnet files over HTTP using Caddy.
+// This allows VMs or external clients to fetch configuration files.
+type Fileserver struct{}
+
+func (f *Fileserver) Apply(ctx *ExContext) *Component {
+	component := NewComponent("fileserver")
+
+	component.NewService("server").
+		WithImage("caddy").
+		WithTag("2-alpine").
+		WithArgs(
+			"caddy", "file-server",
+			"--root", "/data",
+			"--listen", `:{{Port "http" 8100}}`,
+			"--browse",
+		).
+		WithArtifact("/data/genesis.json", "genesis.json").
+		WithArtifact("/data/testnet", "testnet")
+
+	return component
 }
