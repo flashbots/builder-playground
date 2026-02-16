@@ -1,14 +1,27 @@
 package playground
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	flag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
+
+// getRepoRootFS returns an fs.FS rooted at the repository root for testing real custom-recipes
+func getRepoRootFS(t *testing.T) fs.FS {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok, "failed to get caller info")
+	// Go up from playground/ to repo root
+	repoRoot := filepath.Dir(filepath.Dir(filename))
+	return os.DirFS(repoRoot)
+}
 
 func newTestCustomRecipesFS() fstest.MapFS {
 	return fstest.MapFS{
@@ -416,4 +429,36 @@ func (m *mockRecipe) Apply(ctx *ExContext) *Component {
 
 func (m *mockRecipe) Output(manifest *Manifest) map[string]interface{} {
 	return nil
+}
+
+func TestValidateShippedCustomRecipes(t *testing.T) {
+	// Validate real custom-recipes that ship with the binary
+	original := CustomRecipesFS
+	CustomRecipesFS = getRepoRootFS(t)
+	defer func() { CustomRecipesFS = original }()
+
+	baseRecipes := GetBaseRecipes()
+
+	customRecipes, err := GetEmbeddedCustomRecipes()
+	require.NoError(t, err)
+	require.NotEmpty(t, customRecipes)
+
+	for _, name := range customRecipes {
+		t.Run(name, func(t *testing.T) {
+			recipe, cleanup, err := LoadCustomRecipe(name, baseRecipes)
+			require.NoError(t, err)
+			defer cleanup()
+
+			result := ValidateRecipe(recipe, baseRecipes)
+
+			// Filter host_path errors (environment-specific)
+			var errs []string
+			for _, e := range result.Errors {
+				if !strings.Contains(e, "host_path does not exist") {
+					errs = append(errs, e)
+				}
+			}
+			require.Empty(t, errs, "validation errors: %v", errs)
+		})
+	}
 }

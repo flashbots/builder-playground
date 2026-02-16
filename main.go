@@ -538,11 +538,7 @@ var testCmd = &cobra.Command{
 	},
 }
 
-var recipes = []playground.Recipe{
-	&playground.L1Recipe{},
-	&playground.OpRecipe{},
-	&playground.BuilderNetRecipe{},
-}
+var recipes = playground.GetBaseRecipes()
 
 func main() {
 	// Set the embedded custom recipes filesystem for the playground package

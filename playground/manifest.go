@@ -28,6 +28,15 @@ type Recipe interface {
 	Output(manifest *Manifest) map[string]interface{}
 }
 
+// GetBaseRecipes returns all available base recipes
+func GetBaseRecipes() []Recipe {
+	return []Recipe{
+		&L1Recipe{},
+		&OpRecipe{},
+		&BuilderNetRecipe{},
+	}
+}
+
 // Manifest describes a list of services and their dependencies
 type Manifest struct {
 	ID string `json:"session_id"`

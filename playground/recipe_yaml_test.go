@@ -505,7 +505,7 @@ recipe:
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 
@@ -529,7 +529,7 @@ func TestParseYAMLRecipe_MissingBase(t *testing.T) {
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	_, err = ParseYAMLRecipe(yamlFile, baseRecipes)
 
@@ -548,7 +548,7 @@ recipe: {}
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	_, err = ParseYAMLRecipe(yamlFile, baseRecipes)
 
@@ -557,7 +557,7 @@ recipe: {}
 }
 
 func TestParseYAMLRecipe_FileNotFound(t *testing.T) {
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	_, err := ParseYAMLRecipe("/nonexistent/path/recipe.yaml", baseRecipes)
 
@@ -575,7 +575,7 @@ recipe: {}
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
@@ -599,7 +599,7 @@ recipe:
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
@@ -630,7 +630,7 @@ recipe:
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
@@ -664,7 +664,7 @@ recipe:
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
@@ -699,7 +699,7 @@ recipe:
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
@@ -780,7 +780,7 @@ recipe: {}
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
@@ -810,7 +810,7 @@ recipe:
 	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
 
-	baseRecipes := []Recipe{&L1Recipe{}}
+	baseRecipes := GetBaseRecipes()
 
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
