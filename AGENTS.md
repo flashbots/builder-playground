@@ -77,3 +77,17 @@ Available recipes: L1 (`recipe_l1.go`), OpStack (`recipe_opstack.go`), BuilderNe
 2. Implement: Name, Description, Flags, Artifacts, Apply, Output
 3. Register in `main.go` recipes slice
 4. Run `make generate-docs` to update documentation
+
+
+## Implementation Workflow
+
+IMPORTANT: When asked to implement something, always follow through completely:
+1.. Create a feature branch
+- based on the latest `main` branch
+- use descriptive branch names like `claude/issue-123-add-feature`
+2. Make the code changes
+3. Commit the changes
+4. Push the branch
+5. Create the PR with `gh pr create --title "..." --body "..."` and reference the issue number in the PR description (e.g., "Closes #123")
+
+Do NOT stop at providing links — complete the entire workflow automatically.

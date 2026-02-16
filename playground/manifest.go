@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -35,6 +36,8 @@ type Manifest struct {
 	// list of Services
 	Services []*Service `json:"services"`
 
+	Bootnode *BootnodeRef `json:"bootnode,omitempty"`
+
 	// overrides is a map of service name to the path of the executable to run
 	// on the host machine instead of a container.
 	overrides map[string]string
@@ -68,6 +71,34 @@ func (p *Component) AddComponent(ctx *ExContext, gen ComponentGen) {
 
 func (p *Component) AddService(ctx *ExContext, srv ComponentGen) {
 	p.Inner = append(p.Inner, srv.Apply(ctx))
+}
+
+// FindService finds a service by name in the component tree
+func (p *Component) FindService(name string) *Service {
+	for _, svc := range p.Services {
+		if svc.Name == name {
+			return svc
+		}
+	}
+	for _, inner := range p.Inner {
+		if found := inner.FindService(name); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// RemoveService removes a service by name from the component tree
+func (p *Component) RemoveService(name string) {
+	for i, svc := range p.Services {
+		if svc.Name == name {
+			p.Services = append(p.Services[:i], p.Services[i+1:]...)
+			return
+		}
+	}
+	for _, inner := range p.Inner {
+		inner.RemoveService(name)
+	}
 }
 
 func componentToManifest(p *Component) []*Service {
@@ -230,9 +261,15 @@ func (s *Manifest) Validate(out *output) error {
 	for _, ss := range s.Services {
 		// override ready checks that use the QueryURL feature
 		if ss.ReadyCheck != nil && ss.ReadyCheck.QueryURL != "" {
-			// this is a sugar coat syntax for the components, if a component wants to perform
-			// a raw ready check on a url (this is, only validate it exists) we convert that into
-			// a sidecar container with curl installed that performs the check.
+			// For host-executed services, keep the ReadyCheck on the service itself
+			// so that local_runner can poll it directly. Don't create a sidecar.
+			if ss.HostPath != "" {
+				// Host services are polled directly by local_runner.go waitForDependencies()
+				// Keep the ReadyCheck intact for that polling logic
+				continue
+			}
+
+			// For Docker services, create a sidecar container with curl to perform the check.
 			// Note that we have to remove the ready check from the main service.
 			sidecarName := ss.Name + "_readycheck"
 
@@ -241,8 +278,9 @@ func (s *Manifest) Validate(out *output) error {
 			ss.WithLabel(healthCheckSidecarLabel, sidecarName)
 
 			// the url supplied by the service will bind to localhost, we have to change it
-			// to point to the main service name so that the sidecar can reach it
-			readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", ss.Name)
+			// to point to the main service name so that the sidecar can reach it.
+			targetHost := ss.Name
+			readyCheck.QueryURL = strings.ReplaceAll(readyCheck.QueryURL, "localhost", targetHost)
 			readyCheck.Test = []string{"CMD", "curl", readyCheck.QueryURL}
 
 			s.NewService(sidecarName).
@@ -371,8 +409,8 @@ type Service struct {
 	Ports    []*Port    `json:"ports,omitempty"`
 	NodeRefs []*NodeRef `json:"node_refs,omitempty"`
 
-	FilesMapped   map[string]string `json:"files_mapped,omitempty"`
-	VolumesMapped map[string]string `json:"volumes_mapped,omitempty"`
+	FilesMapped   map[string]string        `json:"files_mapped,omitempty"`
+	VolumesMapped map[string]*VolumeMapped `json:"volumes_mapped,omitempty"`
 
 	Tag        string `json:"tag,omitempty"`
 	Image      string `json:"image,omitempty"`
@@ -381,8 +419,24 @@ type Service struct {
 
 	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 
+	// LifecycleHooks enables lifecycle mode for host execution
+	LifecycleHooks bool `json:"lifecycle_hooks,omitempty"`
+	// Init commands run sequentially before start. Each must return exit code 0.
+	Init []string `json:"init,omitempty"`
+	// Start command runs the service (for lifecycle hooks). May hang or return 0.
+	Start string `json:"start,omitempty"`
+	// Stop commands run when playground exits. May return non-zero (best effort).
+	Stop []string `json:"stop,omitempty"`
+	// RecipeDir is the directory containing the recipe file (for lifecycle hooks)
+	RecipeDir string `json:"recipe_dir,omitempty"`
+
 	postHook *postHook
 	release  *release
+}
+
+type VolumeMapped struct {
+	Name    string
+	IsLocal bool
 }
 
 type DependsOnCondition string
@@ -469,7 +523,7 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 	for _, p := range s.Ports {
 		if p.Name == name {
 			if p.Port != portNumber {
-				panic(fmt.Sprintf("port %s already defined with different port number", name))
+				panic(fmt.Sprintf("port %s already defined with different port number (existing: %d, new: %d) on service %s", name, p.Port, portNumber, s.Name))
 			}
 			if p.Protocol != protocol {
 				// If they have different protocols they are different ports
@@ -507,11 +561,30 @@ func (s *Service) WithArgs(args ...string) *Service {
 	return s
 }
 
-func (s *Service) WithVolume(name, localPath string) *Service {
-	if s.VolumesMapped == nil {
-		s.VolumesMapped = make(map[string]string)
+// ReplaceArgs replaces argument values in the service's Args.
+// The replacements map contains flag -> new_value pairs.
+// For each flag found in Args, the following value is replaced.
+func (s *Service) ReplaceArgs(replacements map[string]string) *Service {
+	for i := 0; i < len(s.Args); i++ {
+		if newValue, ok := replacements[s.Args[i]]; ok && i+1 < len(s.Args) {
+			s.Args[i+1] = newValue
+		}
 	}
-	s.VolumesMapped[localPath] = name
+	return s
+}
+
+func (s *Service) WithVolume(name, localPath string, isLocalTri ...bool) *Service {
+	isLocal := false
+	if len(isLocalTri) == 1 {
+		isLocal = isLocalTri[0]
+	}
+	if s.VolumesMapped == nil {
+		s.VolumesMapped = make(map[string]*VolumeMapped)
+	}
+	s.VolumesMapped[localPath] = &VolumeMapped{
+		Name:    name,
+		IsLocal: isLocal,
+	}
 	return s
 }
 
@@ -530,7 +603,7 @@ func (s *Service) WithReady(check ReadyCheck) *Service {
 
 type postHook struct {
 	Name   string
-	Action func(s *Service) error
+	Action func(ctx context.Context, m *Manifest, s *Service) error
 }
 
 func (s *Service) WithPostHook(hook *postHook) *Service {
@@ -538,11 +611,11 @@ func (s *Service) WithPostHook(hook *postHook) *Service {
 	return s
 }
 
-func (m *Manifest) ExecutePostHookActions() error {
+func (m *Manifest) ExecutePostHookActions(ctx context.Context) error {
 	for _, svc := range m.Services {
 		if svc.postHook != nil {
 			slog.Info("Executing post-hook operation", "name", svc.postHook.Name)
-			if err := svc.postHook.Action(svc); err != nil {
+			if err := svc.postHook.Action(ctx, m, svc); err != nil {
 				return err
 			}
 		}
@@ -562,6 +635,11 @@ type ReadyCheck struct {
 
 func (s *Service) WithUngracefulShutdown() *Service {
 	s.UngracefulShutdown = true
+	return s
+}
+
+func (s *Service) DependsOnNone() *Service {
+	s.DependsOn = nil
 	return s
 }
 

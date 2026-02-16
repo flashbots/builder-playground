@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -94,14 +95,57 @@ func TestRecipeL1UseNativeReth(t *testing.T) {
 	})
 }
 
-func TestRecipeBuilderHub(t *testing.T) {
+type rbuilderRecipe struct {
+	*mockRecipe
+	l1 *L1Recipe
+}
+
+func (r *rbuilderRecipe) Artifacts() *ArtifactsBuilder {
+	return r.l1.Artifacts()
+}
+
+func (r *rbuilderRecipe) Apply(ctx *ExContext) *Component {
+	c := NewComponent("rbuilder-test-recipe")
+
+	c.AddService(ctx, r.l1)
+	c.AddComponent(ctx, &Rbuilder{})
+
+	return c
+}
+
+func TestComponentRbuilder(t *testing.T) {
+	// TODO: Re-enable this for all architectures when the rbuilder container flow works.
+	if runtime.GOARCH != "arm64" {
+		t.Skip("Skipping rbuilder component test on non-arm64 architecture for now")
+	}
 	tt := newTestFramework(t)
 	defer tt.Close()
 
-	tt.test(&BuilderHub{}, nil)
+	recipe := &rbuilderRecipe{
+		l1: &L1Recipe{
+			// TODO: We might have to change things from rbuilder-config
+			// if the time is lower than 12 seconds.
+			blockTime: 12 * time.Second,
+		},
+	}
 
-	// TODO: Calling the port directly on the host machine will not work once we have multiple
-	// tests running in parallel
+	tt.test(recipe, nil)
+	tt.WaitForBlock("el", 1)
+}
+
+func TestRecipeBuilderNet(t *testing.T) {
+	tt := newTestFramework(t)
+	defer tt.Close()
+
+	recipe := &BuilderNetRecipe{}
+	manifest := tt.test(recipe, []string{})
+	output := recipe.Output(manifest)
+
+	httpEndpoint := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("builder-hub-api").MustGetPort("http").Port)
+
+	proxy := output["builder-hub-proxy"].(string)
+	admin := output["builder-hub-admin"].(string)
+	internal := output["builder-hub-internal"].(string)
 
 	// Set measurements from the admin API.
 	buf := bytes.NewBuffer([]byte(`
@@ -111,7 +155,7 @@ func TestRecipeBuilderHub(t *testing.T) {
 			"measurements": {}
 		}
 	`))
-	resp, err := http.Post("http://localhost:8081/api/admin/v1/measurements", "application/json", buf)
+	resp, err := http.Post(admin+"/api/admin/v1/measurements", "application/json", buf)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -120,7 +164,7 @@ func TestRecipeBuilderHub(t *testing.T) {
 			"enabled": true
 		}
 	`))
-	resp, err = http.Post("http://localhost:8081/api/admin/v1/measurements/activation/test1", "application/json", buf)
+	resp, err = http.Post(admin+"/api/admin/v1/measurements/activation/test1", "application/json", buf)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -129,10 +173,10 @@ func TestRecipeBuilderHub(t *testing.T) {
 	}
 
 	// Verify from all APIs that measurements are in place.
-	ports := []string{"8080", "8082", "8888"}
-	for _, port := range ports {
+	endpoints := []string{httpEndpoint, internal, proxy}
+	for _, endpoint := range endpoints {
 		var m measurementList
-		resp, err = http.Get("http://localhost:" + port + "/api/l1-builder/v1/measurements")
+		resp, err = http.Get(endpoint + "/api/l1-builder/v1/measurements")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&m))
@@ -141,32 +185,6 @@ func TestRecipeBuilderHub(t *testing.T) {
 	}
 
 	require.Equal(t, resp.StatusCode, http.StatusOK)
-}
-
-func TestRecipeBuilderHub_RegisterBuilder(t *testing.T) {
-	tt := newTestFramework(t)
-	defer tt.Close()
-
-	manifest := tt.test(&BuilderHub{}, nil)
-
-	apiPort := manifest.MustGetService("builder-hub-api").MustGetPort("admin")
-	endpoint := fmt.Sprintf("http://localhost:%d", apiPort.HostPort)
-
-	err := registerBuilder(endpoint, &builderHubRegisterBuilderInput{
-		BuilderID:     "test_builder",
-		BuilderIP:     "1.2.3.4",
-		MeasurementID: "test",
-		Network:       "playground",
-		Config:        "{}",
-	})
-	require.NoError(t, err)
-}
-
-func TestRecipeBuilderNet(t *testing.T) {
-	tt := newTestFramework(t)
-	defer tt.Close()
-
-	tt.test(&BuilderNetRecipe{}, []string{})
 }
 
 type testFramework struct {
@@ -199,11 +217,14 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 	if err := os.MkdirAll(e2eTestDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-
-	o := &output{
-		dst:     e2eTestDir,
-		homeDir: filepath.Join(e2eTestDir, "artifacts"),
+	// Convert to absolute path to ensure it works from any working directory
+	e2eTestDir, err := filepath.Abs(e2eTestDir)
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	o, err := NewOutput(e2eTestDir)
+	require.NoError(t, err)
 
 	exCtx := &ExContext{
 		Output:   o,
@@ -261,6 +282,28 @@ func (tt *testFramework) Close() {
 		if err := tt.runner.Stop(false); err != nil {
 			tt.t.Log(err)
 		}
+	}
+}
+
+// WaitForBlock waits for the specified service to reach the given block number.
+// It polls the service's HTTP endpoint and fails the test if the block isn't
+// reached within 1 minute or if the runner exits with an error.
+func (tt *testFramework) WaitForBlock(service string, num uint64) {
+	elService := tt.runner.manifest.MustGetService(service)
+	rethURL := fmt.Sprintf("http://localhost:%d", elService.MustGetPort("http").HostPort)
+
+	waitForBlockCh := make(chan error)
+	go func() {
+		waitForBlockCh <- waitForBlock(rethURL, num, 1*time.Minute)
+	}()
+
+	select {
+	case err := <-waitForBlockCh:
+		if err != nil {
+			tt.t.Fatal(err)
+		}
+	case err := <-tt.runner.ExitErr():
+		tt.t.Fatal(err)
 	}
 }
 
