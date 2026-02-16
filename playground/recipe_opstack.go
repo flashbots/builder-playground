@@ -81,7 +81,7 @@ func (o *OpRecipe) Artifacts() *ArtifactsBuilder {
 
 func (o *OpRecipe) Apply(ctx *ExContext) *Component {
 	component := NewComponent("op-recipe")
-	component.AddService(ctx, ctx.UseBootnode())
+	component.AddComponent(ctx, &Bootnode{})
 
 	component.AddComponent(ctx, &RethEL{})
 	component.AddComponent(ctx, &LighthouseBeaconNode{

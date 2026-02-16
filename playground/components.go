@@ -1089,6 +1089,12 @@ func (b *Bootnode) Apply(ctx *ExContext) *Component {
 		svc.WithArgs("--v5")
 	}
 
+	// Mutate the execution context by setting the bootnode.
+	ctx.Bootnode = &BootnodeRef{
+		Service: "bootnode",
+		ID:      b.Enode.NodeID(),
+	}
+
 	return component
 }
 
