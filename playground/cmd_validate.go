@@ -33,12 +33,27 @@ func ValidateRecipe(recipe Recipe, baseRecipes []Recipe) *ValidationResult {
 		validateYAMLRecipe(yamlRecipe, baseRecipes, result)
 	}
 
+	// Create a temp output directory for validation
+	tmpDir, err := os.MkdirTemp("", "playground-validate-")
+	if err != nil {
+		result.AddError("failed to create temp directory: %v", err)
+		return result
+	}
+	defer os.RemoveAll(tmpDir)
+
+	out, err := NewOutput(tmpDir)
+	if err != nil {
+		result.AddError("failed to create output: %v", err)
+		return result
+	}
+
 	// Build a minimal manifest to validate structure
 	exCtx := &ExContext{
 		LogLevel: LevelInfo,
 		Contender: &ContenderContext{
 			Enabled: false,
 		},
+		Output: out,
 	}
 
 	component := recipe.Apply(exCtx)

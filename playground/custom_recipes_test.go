@@ -431,6 +431,18 @@ func (m *mockRecipe) Output(manifest *Manifest) map[string]interface{} {
 	return nil
 }
 
+func TestValidateBaseRecipes(t *testing.T) {
+	baseRecipes := GetBaseRecipes()
+	require.NotEmpty(t, baseRecipes)
+
+	for _, recipe := range baseRecipes {
+		t.Run(recipe.Name(), func(t *testing.T) {
+			result := ValidateRecipe(recipe, baseRecipes)
+			require.Empty(t, result.Errors, "base recipe %s has validation errors: %v", recipe.Name(), result.Errors)
+		})
+	}
+}
+
 func TestValidateShippedCustomRecipes(t *testing.T) {
 	// Validate real custom-recipes that ship with the binary
 	original := CustomRecipesFS
