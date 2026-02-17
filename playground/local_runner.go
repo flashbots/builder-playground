@@ -38,6 +38,10 @@ const (
 	stopGracePeriodSecs = 30
 )
 
+// portOffsetMultiplier is the port offset between concurrent playground sessions.
+// Each concurrent session gets ports offset by (sessionIndex * portOffsetMultiplier).
+const portOffsetMultiplier = 5
+
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
 // But, some services (if they are configured to do so) can be run on the host machine instead.
@@ -50,6 +54,9 @@ type LocalRunner struct {
 	out      *output
 	manifest *Manifest
 	client   *client.Client
+
+	// portOffset is the offset to apply to all ports based on concurrent sessions
+	portOffset int
 
 	// reservedPorts is a map of port numbers reserved for each service to avoid conflicts
 	// since we reserve ports for all the services before they are used
@@ -174,11 +181,15 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		cfg.Callbacks = []Callback{func(serviceName string, update TaskStatus) {}} // noop
 	}
 
+	// Calculate port offset based on concurrent playground sessions
+	portOffset := utils.CountConcurrentPlaygroundSessions() * portOffsetMultiplier
+
 	d := &LocalRunner{
 		config:          cfg,
 		out:             cfg.Out,
 		manifest:        cfg.Manifest,
 		client:          client,
+		portOffset:      portOffset,
 		reservedPorts:   map[int]bool{},
 		handles:         []*exec.Cmd{},
 		tasks:           tasks,
@@ -396,8 +407,11 @@ func GetSessionServices(session string) ([]string, error) {
 // reservePort finds the first available port from the startPort and reserves it
 // Note that we have to keep track of the port in 'reservedPorts' because
 // the port allocation happens before the services uses it and binds to it.
+// The port search starts from startPort + portOffset to avoid conflicts with
+// other concurrent playground sessions.
 func (d *LocalRunner) reservePort(startPort int, protocol string) int {
-	for i := startPort; i < startPort+1000; i++ {
+	offsetStartPort := startPort + d.portOffset
+	for i := offsetStartPort; i < offsetStartPort+1000; i++ {
 		if _, ok := d.reservedPorts[i]; ok {
 			continue
 		}
