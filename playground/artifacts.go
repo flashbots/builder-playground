@@ -518,14 +518,14 @@ type output struct {
 	enodeAddrSeq *big.Int
 }
 
-func NewOutput(dst string) (*output, error) {
+func NewOutput(sessionID, dst string) (*output, error) {
 	playgroundDir, err := utils.GetPlaygroundDir()
 	if err != nil {
 		return nil, err
 	}
 	if dst == "" {
-		// Use the $HOMEDIR/devnet as the default output
-		dst = filepath.Join(playgroundDir, "devnet")
+		// Use the $HOMEDIR/<session-id> as the default output
+		dst = filepath.Join(playgroundDir, sessionID)
 	}
 	dst, err = filepath.Abs(dst)
 	if err != nil {

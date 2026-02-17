@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/flashbots/builder-playground/utils"
 	flag "github.com/spf13/pflag"
 )
 
@@ -17,13 +18,14 @@ func GenerateDocs(recipes []Recipe) error {
 	}
 
 	for _, recipe := range recipes {
-		out, err := NewOutput("/tmp/docs-output")
+		genDocsSessionName := "gen-docs-" + utils.GeneratePetName()
+		out, err := NewOutput(genDocsSessionName, "/tmp/docs-output")
 		if err != nil {
 			return err
 		}
 
 		components := recipe.Apply(&ExContext{Contender: &ContenderContext{}, Output: out})
-		manifest := NewManifest("", components)
+		manifest := NewManifest(genDocsSessionName, components)
 
 		// Generate markdown content
 		var md strings.Builder

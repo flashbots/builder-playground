@@ -639,7 +639,7 @@ func runIt(recipe playground.Recipe) error {
 	logging.ConfigureSlog(logLevelFlag)
 	sessionID := utils.GeneratePetName()
 
-	out, err := playground.NewOutput(outputFlag)
+	out, err := playground.NewOutput(sessionID, outputFlag)
 	if err != nil {
 		return err
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/flashbots/builder-playground/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -223,7 +224,9 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 		t.Fatal(err)
 	}
 
-	o, err := NewOutput(e2eTestDir)
+	sessionID := "component-test-" + utils.GeneratePetName()
+
+	o, err := NewOutput(sessionID, e2eTestDir)
 	require.NoError(t, err)
 
 	exCtx := &ExContext{
@@ -245,7 +248,7 @@ func (tt *testFramework) test(component ComponentGen, args []string) *Manifest {
 	}
 
 	components := component.Apply(exCtx)
-	svcManager := NewManifest("", components)
+	svcManager := NewManifest(sessionID, components)
 
 	require.NoError(t, svcManager.Validate(o))
 

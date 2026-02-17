@@ -36,11 +36,10 @@ func GetPlaygroundDir() (string, error) {
 }
 
 // GetLogsDir returns the directory where service logs are stored.
-// Returns <PlaygroundDir>/devnet/logs
-func GetLogsDir() (string, error) {
+func GetLogsDir(sessionID string) (string, error) {
 	playgroundDir, err := GetPlaygroundDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(playgroundDir, "devnet", "logs"), nil
+	return filepath.Join(playgroundDir, sessionID, "logs"), nil
 }

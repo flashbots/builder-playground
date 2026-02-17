@@ -44,7 +44,7 @@ func Logs(ctx context.Context, sessionName, serviceName string, follow bool) err
 	}
 
 	// Container not found - try to read from log file (for host services or failed services)
-	logPath, err := findServiceLogFile(serviceName)
+	logPath, err := findServiceLogFile(sessionName, serviceName)
 	if err != nil {
 		return fmt.Errorf("no container or log file found for service %s", serviceName)
 	}
@@ -53,23 +53,13 @@ func Logs(ctx context.Context, sessionName, serviceName string, follow bool) err
 }
 
 // findServiceLogFile looks for a log file for the given service
-func findServiceLogFile(serviceName string) (string, error) {
-	logsDir, err := utils.GetLogsDir()
+func findServiceLogFile(sessionID, serviceName string) (string, error) {
+	logsDir, err := utils.GetLogsDir(sessionID)
 	if err != nil {
 		return "", err
 	}
 
 	logPath := filepath.Join(logsDir, serviceName+".log")
-	if _, err := os.Stat(logPath); err == nil {
-		return logPath, nil
-	}
-
-	// Fallback: legacy location
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	logPath = filepath.Join(homeDir, "devnet", "logs", serviceName+".log")
 	if _, err := os.Stat(logPath); err == nil {
 		return logPath, nil
 	}
