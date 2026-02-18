@@ -510,9 +510,9 @@ func ConnectWs(service, port string) string {
 }
 
 type output struct {
-	dst string
-
-	homeDir        string
+	sessionDir     string
+	sessionsDir    string
+	playgroundDir  string
 	lock           sync.Mutex
 	createSymlinks bool
 	symlinksOnce   sync.Once
@@ -520,22 +520,31 @@ type output struct {
 	enodeAddrSeq *big.Int
 }
 
-func NewOutput(sessionID, dst string) (*output, error) {
+func NewOutput(sessionID, sessionDir string) (*output, error) {
 	playgroundDir, err := utils.GetPlaygroundDir()
 	if err != nil {
 		return nil, err
 	}
-	useDefaultPath := dst == ""
-	if useDefaultPath {
-		// Use the $HOMEDIR/<session-id> as the default output
-		dst = filepath.Join(playgroundDir, sessionID)
-	}
-	dst, err = filepath.Abs(dst)
+	sessionsDir, err := utils.GetSessionsDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert path %s to absolute: %w", dst, err)
+		return nil, err
+	}
+	useDefaultPath := sessionDir == ""
+	if useDefaultPath {
+		// Use the $HOMEDIR/sessions/<session-id> as the default output
+		sessionDir = filepath.Join(sessionsDir, sessionID)
+	}
+	sessionDir, err = filepath.Abs(sessionDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert path %s to absolute: %w", sessionDir, err)
 	}
 
-	out := &output{dst: dst, homeDir: playgroundDir, createSymlinks: useDefaultPath}
+	out := &output{
+		sessionDir:     sessionDir,
+		sessionsDir:    sessionsDir,
+		playgroundDir:  playgroundDir,
+		createSymlinks: useDefaultPath,
+	}
 
 	// check if the output directory exists
 	if out.Exists("") {
@@ -548,11 +557,11 @@ func NewOutput(sessionID, dst string) (*output, error) {
 }
 
 func (o *output) Dst() string {
-	return o.dst
+	return o.sessionDir
 }
 
 func (o *output) Read(path string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(o.dst, path))
+	data, err := os.ReadFile(filepath.Join(o.sessionDir, path))
 	if err != nil {
 		return "", err
 	}
@@ -560,18 +569,18 @@ func (o *output) Read(path string) (string, error) {
 }
 
 func (o *output) Exists(path string) bool {
-	_, err := os.Stat(filepath.Join(o.dst))
+	_, err := os.Stat(filepath.Join(o.sessionDir))
 	return err == nil
 }
 
 func (o *output) Remove(path string) error {
-	return os.RemoveAll(filepath.Join(o.dst, path))
+	return os.RemoveAll(filepath.Join(o.sessionDir, path))
 }
 
 // CreateDir creates a new dir in the output folder and returns the
 // absolute file path
 func (o *output) CreateDir(path string) (string, error) {
-	absPath, err := filepath.Abs(filepath.Join(o.dst, path))
+	absPath, err := filepath.Abs(filepath.Join(o.sessionDir, path))
 	if err != nil {
 		return "", err
 	}
@@ -588,13 +597,13 @@ func (o *output) maybeCreateSymlinks() {
 	}
 	o.symlinksOnce.Do(func() {
 		for _, name := range []string{"latest", "devnet"} {
-			link := filepath.Join(o.homeDir, name)
+			link := filepath.Join(o.sessionsDir, name)
 			// Remove existing file, directory, or symlink
 			if err := os.RemoveAll(link); err != nil {
 				slog.Warn("failed to remove existing path for symlink", "path", link, "error", err)
 			}
-			if err := os.Symlink(o.dst, link); err != nil {
-				slog.Warn("failed to create symlink", "link", link, "target", o.dst, "error", err)
+			if err := os.Symlink(o.sessionDir, link); err != nil {
+				slog.Warn("failed to create symlink", "link", link, "target", o.sessionDir, "error", err)
 			}
 		}
 	})
@@ -609,7 +618,7 @@ func (o *output) CopyFile(src, dst string) error {
 	defer sourceFile.Close()
 
 	// Create the destination directory if it doesn't exist
-	dstPath := filepath.Join(o.dst, dst)
+	dstPath := filepath.Join(o.sessionDir, dst)
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
@@ -649,7 +658,7 @@ func (o *output) WriteBatch(data map[string]interface{}) error {
 }
 
 func (o *output) WriteDir(src string) error {
-	return copy.Copy(src, o.dst)
+	return copy.Copy(src, o.sessionDir)
 }
 
 func (o *output) LogOutput(name string) (*os.File, error) {
@@ -657,7 +666,7 @@ func (o *output) LogOutput(name string) (*os.File, error) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
-	path := filepath.Join(o.dst, "logs", name+".log")
+	path := filepath.Join(o.sessionDir, "logs", name+".log")
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
@@ -670,7 +679,7 @@ func (o *output) LogOutput(name string) (*os.File, error) {
 }
 
 func (o *output) WriteFile(dst string, data interface{}) error {
-	dst = filepath.Join(o.dst, dst)
+	dst = filepath.Join(o.sessionDir, dst)
 
 	var dataRaw []byte
 	var err error
@@ -685,7 +694,7 @@ func (o *output) WriteFile(dst string, data interface{}) error {
 		}
 	} else if encObj, ok := data.(encObject); ok {
 		// create a new output for this sub-object and delegate the full encoding to it
-		if err = encObj.Encode(&output{dst: dst}); err != nil {
+		if err = encObj.Encode(&output{sessionDir: dst}); err != nil {
 			return err
 		}
 		return nil

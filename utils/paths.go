@@ -37,9 +37,18 @@ func GetPlaygroundDir() (string, error) {
 
 // GetLogsDir returns the directory where service logs are stored.
 func GetLogsDir(sessionID string) (string, error) {
+	sessionsDir, err := GetSessionsDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(sessionsDir, sessionID, "logs"), nil
+}
+
+// GetSessionsDir returns the directory for all sessions.
+func GetSessionsDir() (string, error) {
 	playgroundDir, err := GetPlaygroundDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(playgroundDir, sessionID, "logs"), nil
+	return filepath.Join(playgroundDir, "sessions"), nil
 }

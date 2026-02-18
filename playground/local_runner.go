@@ -149,7 +149,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 			if releaseArtifact == nil {
 				return nil, fmt.Errorf("service '%s' requires either host_path, release, or lifecycle configuration", service.Name)
 			}
-			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
+			bin, err := DownloadRelease(cfg.Out.playgroundDir, releaseArtifact)
 			if err != nil {
 				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", service.Name, err)
 			}
@@ -938,7 +938,7 @@ func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 		// If any of the args contains any of the files mapped, we need to replace it
 		for pathInDocker, artifactName := range ss.FilesMapped {
 			if strings.Contains(arg, pathInDocker) {
-				args[i] = strings.ReplaceAll(arg, pathInDocker, filepath.Join(d.out.dst, artifactName))
+				args[i] = strings.ReplaceAll(arg, pathInDocker, filepath.Join(d.out.sessionDir, artifactName))
 			}
 		}
 		// If any of the args contains any of the volumes mapped, we need to create
@@ -952,7 +952,7 @@ func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 
 	execPath := ss.HostPath
 	cmd := exec.Command(execPath, args...)
-	cmd.Dir = d.out.dst // Run from artifacts directory so relative paths work
+	cmd.Dir = d.out.sessionDir // Run from artifacts directory so relative paths work
 
 	logOutput, err := d.out.LogOutput(ss.Name)
 	if err != nil {
@@ -1201,7 +1201,7 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 		cmd := exec.CommandContext(
 			ctx, "docker", "compose",
 			"-p", d.manifest.ID, // identify project with id for doing "docker compose down" on it later
-			"-f", d.out.dst+"/docker-compose.yaml",
+			"-f", d.out.sessionDir+"/docker-compose.yaml",
 			"up",
 			"-d",
 		)

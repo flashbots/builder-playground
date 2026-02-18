@@ -12,7 +12,7 @@ import (
 func RecipeToYAML(recipe Recipe) (string, error) {
 	// Create a minimal output for the context (needed by some components)
 	out := &output{
-		dst:          "/tmp/playground-generate",
+		sessionDir:   "/tmp/playground-generate",
 		enodeAddrSeq: big.NewInt(0),
 	}
 
