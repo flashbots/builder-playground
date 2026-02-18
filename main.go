@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -508,12 +509,22 @@ var testCmd = &cobra.Command{
 	Short: "Send a test transaction to the local EL node",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
+
 		ctx := mainctx.Get()
 		cfg := playground.DefaultTestTxConfig()
 		cfg.RPCURL = testRPCURL
 		cfg.ELRPCURL = testELRPCURL
 		cfg.Timeout = testTimeout
 		cfg.Insecure = testInsecure
+
+		// Suggest --insecure flag if any RPC URL uses https without insecure mode
+		for _, rpcURL := range []string{cfg.RPCURL, cfg.ELRPCURL} {
+			if parsed, err := url.Parse(rpcURL); err == nil && parsed.Scheme == "https" && !cfg.Insecure {
+				color.Yellow("Tip: If using self-signed certificates, consider adding --insecure flag")
+				break
+			}
+		}
+
 		return playground.SendTestTransaction(ctx, cfg)
 	},
 }
