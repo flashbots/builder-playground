@@ -596,8 +596,10 @@ func (o *output) maybeCreateSymlinks() {
 		return
 	}
 	o.symlinksOnce.Do(func() {
-		for _, name := range []string{"latest", "devnet"} {
-			link := filepath.Join(o.sessionsDir, name)
+		for _, link := range []string{
+			filepath.Join(o.sessionsDir, "latest"),   // new link for convenience
+			filepath.Join(o.playgroundDir, "devnet"), // supporting legacy path
+		} {
 			// Remove existing file, directory, or symlink
 			if err := os.RemoveAll(link); err != nil {
 				slog.Warn("failed to remove existing path for symlink", "path", link, "error", err)
