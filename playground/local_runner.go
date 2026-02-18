@@ -174,7 +174,8 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	if cfg.NetworkName == "" {
-		cfg.NetworkName = defaultNetworkName
+		// Use session-specific network name to isolate parallel runs
+		cfg.NetworkName = fmt.Sprintf("builder-playground-%s", cfg.Manifest.ID)
 	}
 
 	if cfg.Callbacks == nil {

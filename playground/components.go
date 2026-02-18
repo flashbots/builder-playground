@@ -967,7 +967,7 @@ func (b *BuilderHub) Apply(exCtx *ExContext) *Component {
 		WithEnv("DISABLE_ADMIN_AUTH", "1").
 		WithEnv("ALLOW_EMPTY_MEASUREMENTS", "1").
 		WithReady(ReadyCheck{
-			QueryURL:    "http://localhost:8080",
+			QueryURL:    "http://localhost:8081/readyz",
 			Interval:    1 * time.Second,
 			Timeout:     30 * time.Second,
 			Retries:     3,
@@ -1138,7 +1138,14 @@ func (f *Fileserver) Apply(ctx *ExContext) *Component {
 			"--browse",
 		).
 		WithArtifact("/data/genesis.json", "genesis.json").
-		WithArtifact("/data/testnet", "testnet")
+		WithArtifact("/data/testnet", "testnet").
+		WithReady(ReadyCheck{
+			QueryURL:    "http://localhost:8100",
+			Interval:    1 * time.Second,
+			Timeout:     30 * time.Second,
+			Retries:     3,
+			StartPeriod: 1 * time.Second,
+		})
 
 	return component
 }

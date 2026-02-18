@@ -32,6 +32,11 @@ integration-test: ## Run integration tests
 	INTEGRATION_TESTS=true go test -v -count=1 ./playground/... -run TestRecipe
 	INTEGRATION_TESTS=true go test -v -count=1 ./playground/... -run TestComponent
 
+.PHONY: e2e-test
+e2e-test:
+	go build .
+	E2E_TESTS=true go test -v -count=1 ./e2e/...
+
 .PHONY: generate-docs
 generate-docs: ## Auto-generate recipe docs
 	go run main.go generate-docs
