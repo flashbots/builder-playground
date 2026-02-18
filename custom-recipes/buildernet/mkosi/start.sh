@@ -16,6 +16,8 @@ RAM=32G
 SSH_PORT=2222
 OPERATOR_API_PORT=13535
 RBUILDER_RPC_PORT=18645
+HAPROXY_HTTP_PORT=10080
+HAPROXY_HTTPS_PORT=10443
 
 if [[ ! -f "${VM_IMAGE}" ]]; then
     echo "Error: VM image not found. Run ./prepare.sh first."
@@ -31,6 +33,8 @@ echo "Starting VM..."
 echo "  SSH: localhost:${SSH_PORT}"
 echo "  Operator API: localhost:${OPERATOR_API_PORT}"
 echo "  rbuilder RPC: localhost:${RBUILDER_RPC_PORT}"
+echo "  HAProxy HTTP: localhost:${HAPROXY_HTTP_PORT}"
+echo "  HAProxy HTTPS: localhost:${HAPROXY_HTTPS_PORT}"
 echo "  Console log: ${CONSOLE_LOG}"
 echo "  Console socket: ${CONSOLE_SOCK}"
 
@@ -50,7 +54,7 @@ qemu-system-x86_64 \
   -drive file="${VM_DATA_DISK}",format=raw,if=none,id=datadisk \
   -device nvme,id=nvme0,serial=nvme-data \
   -device nvme-ns,drive=datadisk,bus=nvme0,nsid=12 \
-  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:40192,hostfwd=tcp:127.0.0.1:${OPERATOR_API_PORT}-:3535,hostfwd=tcp:127.0.0.1:${RBUILDER_RPC_PORT}-:8645 \
+  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:40192,hostfwd=tcp:127.0.0.1:${OPERATOR_API_PORT}-:3535,hostfwd=tcp:127.0.0.1:${RBUILDER_RPC_PORT}-:8645,hostfwd=tcp:127.0.0.1:${HAPROXY_HTTP_PORT}-:80,hostfwd=tcp:127.0.0.1:${HAPROXY_HTTPS_PORT}-:443 \
   -chardev socket,id=virtcon,path="${CONSOLE_SOCK}",server=on,wait=off \
   -device virtio-serial-pci \
   -device virtconsole,chardev=virtcon,name=org.qemu.console.0

@@ -50,6 +50,31 @@ rbuilder:
     url = "ws://10.0.2.2:5555"
     auth_header = ""
 
+flowproxy:
+  builderhub_endpoint: http://127.0.0.1:7937
+  builder_endpoint: http://127.0.0.1:8645
+  # Uncomment to enable ClickHouse:
+  # clickhouse_host: https://your-clickhouse-host:port
+  # clickhouse_username: your_username
+  # clickhouse_password: your_password
+  # clickhouse_database: db_name
+  # clickhouse_bundles_table_name: table_name
+  flashbots_orderflow_signing_address: "0x0000000000000000000000000000000000000000"
+  system_listen_addr: 127.0.0.1:5542
+  user_listen_addr: 127.0.0.1:5543
+
+haproxy:
+  rate_limit_privileged_ips:
+    - 10.0.2.2
+  rate_limit_conn_rate_regular: "1000"
+  rate_limit_conn_rate_privileged: "100000"
+  rate_limit_total_conn_regular: "1000"
+  rate_limit_total_conn_privileged: "100000"
+  rate_limit_bytes_in_rate_regular: "10000000000"
+  rate_limit_bytes_in_rate_privileged: "100000000000"
+  rate_limit_http_req_rate_regular: "10000"
+  rate_limit_http_req_rate_privileged: "1000000"
+
 disk_encryption:
   key: 5d7052c0c3aff5834f45e3f33aca0a55ef9f43ca9cf6c5c8e8375ab82564ddb6  # playground value
 # Must match builder_id below (dashes become underscores via config-watchdog)
