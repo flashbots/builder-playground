@@ -3,14 +3,17 @@ package playground
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/tls"
 	"fmt"
 	"math/big"
+	"net/http"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // TestTxConfig holds configuration for the test transaction
@@ -23,6 +26,7 @@ type TestTxConfig struct {
 	GasLimit   uint64
 	GasPrice   *big.Int
 	Timeout    time.Duration // Timeout for waiting for receipt. If 0, defaults to 2 minutes
+	Insecure   bool          // Skip TLS certificate verification
 }
 
 // DefaultTestTxConfig returns the default test transaction configuration
@@ -69,8 +73,25 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 		elRPCURL = cfg.RPCURL
 	}
 
+	// dialRPC connects to an RPC endpoint, optionally skipping TLS verification
+	dialRPC := func(url string) (*ethclient.Client, error) {
+		if cfg.Insecure {
+			httpClient := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				},
+			}
+			rpcClient, err := rpc.DialOptions(ctx, url, rpc.WithHTTPClient(httpClient))
+			if err != nil {
+				return nil, err
+			}
+			return ethclient.NewClient(rpcClient), nil
+		}
+		return ethclient.Dial(url)
+	}
+
 	// Connect to the EL RPC endpoint (for chain queries)
-	elClient, err := ethclient.Dial(elRPCURL)
+	elClient, err := dialRPC(elRPCURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to EL RPC: %w", err)
 	}
@@ -79,7 +100,7 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 	// Connect to the target RPC endpoint (for sending transactions)
 	var targetClient *ethclient.Client
 	if cfg.RPCURL != elRPCURL {
-		targetClient, err = ethclient.Dial(cfg.RPCURL)
+		targetClient, err = dialRPC(cfg.RPCURL)
 		if err != nil {
 			return fmt.Errorf("failed to connect to target RPC: %w", err)
 		}

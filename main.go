@@ -59,6 +59,7 @@ var (
 	testRPCURL        string
 	testELRPCURL      string
 	testTimeout       time.Duration
+	testInsecure      bool
 	portListFlag      bool
 )
 
@@ -512,6 +513,7 @@ var testCmd = &cobra.Command{
 		cfg.RPCURL = testRPCURL
 		cfg.ELRPCURL = testELRPCURL
 		cfg.Timeout = testTimeout
+		cfg.Insecure = testInsecure
 		return playground.SendTestTransaction(ctx, cfg)
 	},
 }
@@ -621,6 +623,7 @@ func main() {
 	testCmd.Flags().StringVar(&testRPCURL, "rpc", "http://localhost:8545", "Target RPC URL for sending transactions")
 	testCmd.Flags().StringVar(&testELRPCURL, "el-rpc", "", "EL RPC URL for chain queries (default: same as --rpc)")
 	testCmd.Flags().DurationVar(&testTimeout, "timeout", 2*time.Minute, "Timeout for waiting for transaction receipt")
+	testCmd.Flags().BoolVar(&testInsecure, "insecure", false, "Skip TLS certificate verification (for self-signed certs)")
 	rootCmd.AddCommand(testCmd)
 
 	if err := rootCmd.Execute(); err != nil {
