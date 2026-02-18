@@ -105,12 +105,12 @@ func TestBuilderNet(t *testing.T) {
 	}`
 	resp, err := http.Post(admin+"/api/admin/v1/measurements", "application/json", strings.NewReader(measurementPayload))
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	resp.Body.Close()
 
 	activationPayload := `{"enabled": true}`
 	resp, err = http.Post(admin+"/api/admin/v1/measurements/activation/test1", "application/json", strings.NewReader(activationPayload))
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	resp.Body.Close()
 
 	type measurementList []struct {
 		MeasurementID string `json:"measurement_id"`
@@ -118,14 +118,15 @@ func TestBuilderNet(t *testing.T) {
 
 	endpoints := []string{httpEndpoint, internal, proxy}
 	for _, endpoint := range endpoints {
-		var m measurementList
-		resp, err = http.Get(endpoint + "/api/l1-builder/v1/measurements")
+		resp, err := http.Get(endpoint + "/api/l1-builder/v1/measurements")
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var m measurementList
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&m))
+		resp.Body.Close()
+
 		require.Equal(t, 1, len(m))
 		require.Equal(t, "test1", m[0].MeasurementID)
 	}
-
-	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
