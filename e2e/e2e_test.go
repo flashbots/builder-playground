@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,7 +78,7 @@ func newPlaygroundInstance(t *testing.T) *playgroundInstance {
 		t.Skip("e2e tests not enabled")
 	}
 	t.Parallel()
-	outputDir := filepath.Join("/tmp", "e2e-test", fmt.Sprintf("%d", time.Now().UnixNano()))
+	outputDir := t.TempDir()
 	return &playgroundInstance{
 		t:            t,
 		outputDir:    outputDir,
