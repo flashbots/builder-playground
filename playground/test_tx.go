@@ -30,11 +30,11 @@ type buildernetSigningTransport struct {
 }
 
 func (t *buildernetSigningTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	defer req.Body.Close()
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
 	}
-	req.Body.Close()
 
 	// Sign: keccak256(body) → hex string → EIP-191 hash → ECDSA sign
 	bodyHash := crypto.Keccak256(body)
