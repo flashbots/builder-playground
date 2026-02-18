@@ -60,7 +60,10 @@ type playgroundInstance struct {
 	manifestPath   string
 	manifest       *playground.Manifest
 	manifestLoaded bool
-	cmdErrChan     chan error
+	processCtx     context.Context
+	processCancel  context.CancelFunc
+	processErr     error
+	processErrMu   sync.Mutex
 	outputBuffer   *lineBuffer
 }
 
@@ -94,9 +97,9 @@ func (p *playgroundInstance) cleanup() {
 
 	if p.cmd != nil && p.cmd.Process != nil {
 		p.cmd.Process.Signal(os.Interrupt)
-		if p.cmdErrChan != nil {
+		if p.processCtx != nil {
 			select {
-			case <-p.cmdErrChan:
+			case <-p.processCtx.Done():
 			case <-time.After(10 * time.Second):
 				p.cmd.Process.Kill()
 			}
@@ -125,9 +128,13 @@ func (p *playgroundInstance) launchPlayground(args []string) {
 
 	p.cmd = cmd
 
-	p.cmdErrChan = make(chan error, 1)
+	p.processCtx, p.processCancel = context.WithCancel(context.Background())
 	go func() {
-		p.cmdErrChan <- cmd.Wait()
+		err := cmd.Wait()
+		p.processErrMu.Lock()
+		p.processErr = err
+		p.processErrMu.Unlock()
+		p.processCancel()
 	}()
 
 	// Wait until "Waiting for services to get healthy" appears - this means ports have been allocated
@@ -139,8 +146,14 @@ func (p *playgroundInstance) runPlayground(args ...string) {
 	p.launchPlayground(append(args, "--timeout", "10s"))
 
 	// Wait for process to complete (it has --timeout so it will exit)
-	err := <-p.cmdErrChan
-	require.NoError(p.t, err, "playground exited with error")
+	<-p.processCtx.Done()
+	require.NoError(p.t, p.getProcessErr(), "playground exited with error")
+}
+
+func (p *playgroundInstance) getProcessErr() error {
+	p.processErrMu.Lock()
+	defer p.processErrMu.Unlock()
+	return p.processErr
 }
 
 func (p *playgroundInstance) startPlayground(args ...string) {
@@ -155,8 +168,8 @@ func (p *playgroundInstance) waitForOutput(message string, timeout time.Duration
 
 	for {
 		select {
-		case err := <-p.cmdErrChan:
-			p.t.Fatalf("playground process exited before '%s': %v", message, err)
+		case <-p.processCtx.Done():
+			p.t.Fatalf("playground process exited before '%s': %v", message, p.getProcessErr())
 		case <-timeoutCh:
 			p.t.Fatalf("timeout waiting for '%s' message", message)
 		case <-ticker.C:
@@ -177,8 +190,8 @@ func (p *playgroundInstance) waitForReady() {
 
 	for {
 		select {
-		case err := <-p.cmdErrChan:
-			if err != nil {
+		case <-p.processCtx.Done():
+			if err := p.getProcessErr(); err != nil {
 				p.t.Fatalf("playground process exited with error: %v", err)
 			}
 			if !p.outputBuffer.Contains("All services are healthy") {
