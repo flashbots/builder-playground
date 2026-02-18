@@ -31,7 +31,7 @@ func TestDownloadRelease_TarGz(t *testing.T) {
 
 		header := &tar.Header{
 			Name: "test-binary",
-			Mode: 0755,
+			Mode: 0o755,
 			Size: int64(len(binaryContent)),
 		}
 		tarWriter.WriteHeader(header)
@@ -64,7 +64,7 @@ func TestDownloadRelease_TarGz(t *testing.T) {
 	// Verify permissions
 	info, err := os.Stat(outPath)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0755), info.Mode().Perm())
+	require.Equal(t, os.FileMode(0o755), info.Mode().Perm())
 }
 
 func TestDownloadRelease_Binary(t *testing.T) {
@@ -105,7 +105,7 @@ func TestDownloadRelease_Binary(t *testing.T) {
 	// Verify permissions
 	info, err := os.Stat(outPath)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0755), info.Mode().Perm())
+	require.Equal(t, os.FileMode(0o755), info.Mode().Perm())
 }
 
 func TestDownloadRelease_RepoDefaultsToName(t *testing.T) {
@@ -143,7 +143,7 @@ func TestDownloadRelease_CachesExisting(t *testing.T) {
 
 	// Pre-create the binary file
 	outPath := filepath.Join(tmpDir, "cached-binary-v1.0.0")
-	err := os.WriteFile(outPath, []byte("cached content"), 0755)
+	err := os.WriteFile(outPath, []byte("cached content"), 0o755)
 	require.NoError(t, err)
 
 	serverCalled := false
