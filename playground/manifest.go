@@ -332,7 +332,7 @@ func (s *Manifest) Validate(out *output) error {
 	// validate that the mounts are correct
 	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
-			fileLoc := filepath.Join(out.dst, fileNameRef)
+			fileLoc := filepath.Join(out.sessionDir, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
 				if os.IsNotExist(err) {
@@ -346,7 +346,7 @@ func (s *Manifest) Validate(out *output) error {
 	// validate that the mounts are correct
 	for _, ss := range s.Services {
 		for _, fileNameRef := range ss.FilesMapped {
-			fileLoc := filepath.Join(out.dst, fileNameRef)
+			fileLoc := filepath.Join(out.sessionDir, fileNameRef)
 
 			if _, err := os.Stat(fileLoc); err != nil {
 				if os.IsNotExist(err) {

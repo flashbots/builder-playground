@@ -16,7 +16,7 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	out := &output{dst: tmpDir}
+	out := &output{sessionDir: tmpDir}
 
 	// Create a minimal LocalRunner - no Docker client needed for lifecycle
 	runner := &LocalRunner{
@@ -54,7 +54,7 @@ func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	out := &output{dst: tmpDir}
+	out := &output{sessionDir: tmpDir}
 
 	runner := &LocalRunner{
 		out:               out,
@@ -79,7 +79,7 @@ func TestLocalRunner_LifecycleService_StartCommand(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	out := &output{dst: tmpDir}
+	out := &output{sessionDir: tmpDir}
 
 	runner := &LocalRunner{
 		out:               out,
@@ -116,7 +116,7 @@ func TestLocalRunner_LifecycleService_InitOnly(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	out := &output{dst: tmpDir}
+	out := &output{sessionDir: tmpDir}
 
 	runner := &LocalRunner{
 		out:               out,
@@ -150,7 +150,7 @@ func TestLocalRunner_StopCommands(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	out := &output{dst: tmpDir}
+	out := &output{sessionDir: tmpDir}
 
 	stopFile := filepath.Join(tmpDir, "stop.txt")
 	svc := &Service{
@@ -183,7 +183,7 @@ func TestLocalRunner_StopCommands_ContinueOnError(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	out := &output{dst: tmpDir}
+	out := &output{sessionDir: tmpDir}
 
 	stopFile := filepath.Join(tmpDir, "stop.txt")
 	svc := &Service{

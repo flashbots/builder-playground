@@ -70,7 +70,7 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 	}
 
 	// Use recipe directory for lifecycle hooks if set, otherwise use artifacts dir
-	dir := d.out.dst
+	dir := d.out.sessionDir
 	if svc.RecipeDir != "" {
 		dir = svc.RecipeDir
 	}
@@ -132,7 +132,7 @@ func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer
 	}
 
 	// Use recipe directory for lifecycle hooks if set, otherwise use artifacts dir
-	dir := d.out.dst
+	dir := d.out.sessionDir
 	if svc.RecipeDir != "" {
 		dir = svc.RecipeDir
 	}

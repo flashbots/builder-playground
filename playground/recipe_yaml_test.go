@@ -532,7 +532,7 @@ recipe:
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
 
-	out, err := NewOutput(tmpDir)
+	out, err := NewOutput("recipe-test", tmpDir)
 	require.NoError(t, err)
 	ctx := &ExContext{
 		LogLevel:  LevelInfo,
@@ -563,7 +563,7 @@ recipe:
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
 
-	out, err := NewOutput(tmpDir)
+	out, err := NewOutput("recipe-test", tmpDir)
 	require.NoError(t, err)
 	ctx := &ExContext{
 		LogLevel:  LevelInfo,
@@ -597,7 +597,7 @@ recipe:
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
 
-	out, err := NewOutput(tmpDir)
+	out, err := NewOutput("recipe-test", tmpDir)
 	require.NoError(t, err)
 	ctx := &ExContext{
 		LogLevel:  LevelInfo,
@@ -632,7 +632,7 @@ recipe:
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
 
-	out, err := NewOutput(tmpDir)
+	out, err := NewOutput("recipe-test", tmpDir)
 	require.NoError(t, err)
 	ctx := &ExContext{
 		LogLevel:  LevelInfo,
@@ -839,7 +839,7 @@ recipe:
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
 
-	out, err := NewOutput(tmpDir)
+	out, err := NewOutput("recipe-test", tmpDir)
 	require.NoError(t, err)
 	ctx := &ExContext{
 		LogLevel:  LevelInfo,
@@ -882,7 +882,7 @@ recipe:
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
 
-	out, err := NewOutput(tmpDir)
+	out, err := NewOutput("recipe-test", tmpDir)
 	require.NoError(t, err)
 	ctx := &ExContext{
 		LogLevel:  LevelInfo,
@@ -923,7 +923,7 @@ recipe:
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
 
-	out, err := NewOutput(tmpDir)
+	out, err := NewOutput("recipe-test", tmpDir)
 	require.NoError(t, err)
 	ctx := &ExContext{
 		LogLevel:  LevelInfo,
@@ -965,7 +965,7 @@ recipe:
 	recipe, err := ParseYAMLRecipe(yamlFile, baseRecipes)
 	require.NoError(t, err)
 
-	out, err := NewOutput(tmpDir)
+	out, err := NewOutput("recipe-test", tmpDir)
 	require.NoError(t, err)
 	ctx := &ExContext{
 		LogLevel:  LevelInfo,

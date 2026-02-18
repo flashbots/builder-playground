@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/flashbots/builder-playground/utils"
 )
 
 // ValidationResult holds the results of recipe validation
@@ -41,7 +43,9 @@ func ValidateRecipe(recipe Recipe, baseRecipes []Recipe) *ValidationResult {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	out, err := NewOutput(tmpDir)
+	sessionID := "validation-test-" + utils.GeneratePetName()
+
+	out, err := NewOutput(sessionID, tmpDir)
 	if err != nil {
 		result.AddError("failed to create output: %v", err)
 		return result
@@ -57,7 +61,7 @@ func ValidateRecipe(recipe Recipe, baseRecipes []Recipe) *ValidationResult {
 	}
 
 	component := recipe.Apply(exCtx)
-	manifest := NewManifest("validation-test", component)
+	manifest := NewManifest(sessionID, component)
 
 	// Validate service names are unique
 	validateUniqueServiceNames(manifest, result)
