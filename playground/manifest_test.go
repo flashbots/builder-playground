@@ -73,7 +73,7 @@ func TestManifestWriteRead(t *testing.T) {
 	manifest := NewManifest("", components)
 	assert.NoError(t, manifest.SaveJson(out))
 
-	manifest2, err := ReadManifest(out.dst)
+	manifest2, err := ReadManifest(out.sessionDir)
 	assert.NoError(t, err)
 
 	for _, svc := range manifest.Services {

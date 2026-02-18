@@ -38,6 +38,10 @@ const (
 	stopGracePeriodSecs = 30
 )
 
+// portOffsetMultiplier is the port offset between concurrent playground sessions.
+// Each concurrent session gets ports offset by (sessionIndex * portOffsetMultiplier).
+const portOffsetMultiplier = 5
+
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
 // But, some services (if they are configured to do so) can be run on the host machine instead.
@@ -50,6 +54,9 @@ type LocalRunner struct {
 	out      *output
 	manifest *Manifest
 	client   *client.Client
+
+	// portOffset is the offset to apply to all ports based on concurrent sessions
+	portOffset int
 
 	// reservedPorts is a map of port numbers reserved for each service to avoid conflicts
 	// since we reserve ports for all the services before they are used
@@ -142,7 +149,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 			if releaseArtifact == nil {
 				return nil, fmt.Errorf("service '%s' requires either host_path, release, or lifecycle configuration", service.Name)
 			}
-			bin, err := DownloadRelease(cfg.Out.homeDir, releaseArtifact)
+			bin, err := DownloadRelease(cfg.Out.playgroundDir, releaseArtifact)
 			if err != nil {
 				return nil, fmt.Errorf("failed to download release artifact for service '%s': %w", service.Name, err)
 			}
@@ -167,18 +174,23 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	if cfg.NetworkName == "" {
-		cfg.NetworkName = defaultNetworkName
+		// Use session-specific network name to isolate parallel runs
+		cfg.NetworkName = fmt.Sprintf("builder-playground-%s", cfg.Manifest.ID)
 	}
 
 	if cfg.Callbacks == nil {
 		cfg.Callbacks = []Callback{func(serviceName string, update TaskStatus) {}} // noop
 	}
 
+	// Calculate port offset based on concurrent playground sessions
+	portOffset := utils.CountConcurrentPlaygroundSessions() * portOffsetMultiplier
+
 	d := &LocalRunner{
 		config:          cfg,
 		out:             cfg.Out,
 		manifest:        cfg.Manifest,
 		client:          client,
+		portOffset:      portOffset,
 		reservedPorts:   map[int]bool{},
 		handles:         []*exec.Cmd{},
 		tasks:           tasks,
@@ -396,8 +408,11 @@ func GetSessionServices(session string) ([]string, error) {
 // reservePort finds the first available port from the startPort and reserves it
 // Note that we have to keep track of the port in 'reservedPorts' because
 // the port allocation happens before the services uses it and binds to it.
+// The port search starts from startPort + portOffset to avoid conflicts with
+// other concurrent playground sessions.
 func (d *LocalRunner) reservePort(startPort int, protocol string) int {
-	for i := startPort; i < startPort+1000; i++ {
+	offsetStartPort := startPort + d.portOffset
+	for i := offsetStartPort; i < offsetStartPort+1000; i++ {
 		if _, ok := d.reservedPorts[i]; ok {
 			continue
 		}
@@ -923,7 +938,7 @@ func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 		// If any of the args contains any of the files mapped, we need to replace it
 		for pathInDocker, artifactName := range ss.FilesMapped {
 			if strings.Contains(arg, pathInDocker) {
-				args[i] = strings.ReplaceAll(arg, pathInDocker, filepath.Join(d.out.dst, artifactName))
+				args[i] = strings.ReplaceAll(arg, pathInDocker, filepath.Join(d.out.sessionDir, artifactName))
 			}
 		}
 		// If any of the args contains any of the volumes mapped, we need to create
@@ -937,7 +952,7 @@ func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 
 	execPath := ss.HostPath
 	cmd := exec.Command(execPath, args...)
-	cmd.Dir = d.out.dst // Run from artifacts directory so relative paths work
+	cmd.Dir = d.out.sessionDir // Run from artifacts directory so relative paths work
 
 	logOutput, err := d.out.LogOutput(ss.Name)
 	if err != nil {
@@ -1186,7 +1201,7 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 		cmd := exec.CommandContext(
 			ctx, "docker", "compose",
 			"-p", d.manifest.ID, // identify project with id for doing "docker compose down" on it later
-			"-f", d.out.dst+"/docker-compose.yaml",
+			"-f", d.out.sessionDir+"/docker-compose.yaml",
 			"up",
 			"-d",
 		)

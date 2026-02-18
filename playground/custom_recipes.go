@@ -131,7 +131,7 @@ func GetRecipeComponents(recipe Recipe) []string {
 		LogLevel:  LevelInfo,
 		Contender: &ContenderContext{Enabled: false},
 		Output: &output{
-			dst: "/tmp/playground-list",
+			sessionDir: "/tmp/playground-list",
 		},
 	}
 	component := recipe.Apply(ctx)

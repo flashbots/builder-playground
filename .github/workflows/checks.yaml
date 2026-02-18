@@ -8,19 +8,9 @@ on:
     branches: [main]
 
 jobs:
-  e2e-test:
-    name: E2E test (${{ matrix.flags }})
+  e2e-tests:
+    name: E2E tests
     runs-on: warp-ubuntu-latest-x64-8x
-    strategy:
-      matrix:
-        flags:
-          - "l1"
-          - "l1 --use-native-reth"
-          - "l1 --with-prometheus"
-          - "opstack"
-          - "opstack --external-builder http://host.docker.internal:4444"
-          - "opstack --enable-latest-fork=0"
-          - "opstack --enable-latest-fork=10"
     steps:
       - name: Check out code
         uses: actions/checkout@v6
@@ -36,20 +26,8 @@ jobs:
       - name: Build playground utils
         run: ./scripts/ci-build-playground-utils.sh
 
-      - name: Run playground
-        run: go run main.go start ${{ matrix.flags }} --output /tmp/playground --timeout 10s --watchdog
-
-      - name: Copy playground logs
-        if: ${{ failure() }}
-        run: ./scripts/ci-copy-playground-logs.sh /tmp/playground /tmp/playground-logs
-
-      - name: Archive playground logs
-        uses: actions/upload-artifact@v4
-        if: ${{ failure() }}
-        with:
-          name: playground-logs-${{ matrix.flags }}
-          path: /tmp/playground-logs
-          retention-days: 5
+      - name: Run E2E tests
+        run: make e2e-test
 
   unit-test:
     name: Unit test
@@ -68,27 +46,6 @@ jobs:
 
       - name: Run unit tests
         run: go test -v ./playground/...
-
-  integration-test:
-    name: Integration test
-    runs-on: warp-ubuntu-latest-x64-8x
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 1.25
-
-      - name: Install docker compose
-        run: ./scripts/ci-setup-docker-compose.sh
-
-      - name: Build playground utils
-        run: ./scripts/ci-build-playground-utils.sh
-
-      - name: Run unit tests
-        run: make integration-test
 
   lint:
     name: Lint

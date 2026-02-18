@@ -112,7 +112,7 @@ func newTestOutput(t *testing.T) *output {
 	defer os.RemoveAll(dir)
 
 	o := &output{
-		dst: dir,
+		sessionDir: dir,
 	}
 	return o
 }
