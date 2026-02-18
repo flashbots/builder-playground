@@ -512,8 +512,10 @@ func ConnectWs(service, port string) string {
 type output struct {
 	dst string
 
-	homeDir string
-	lock    sync.Mutex
+	homeDir        string
+	lock           sync.Mutex
+	createSymlinks bool
+	symlinksOnce   sync.Once
 
 	enodeAddrSeq *big.Int
 }
@@ -523,7 +525,8 @@ func NewOutput(sessionID, dst string) (*output, error) {
 	if err != nil {
 		return nil, err
 	}
-	if dst == "" {
+	useDefaultPath := dst == ""
+	if useDefaultPath {
 		// Use the $HOMEDIR/<session-id> as the default output
 		dst = filepath.Join(playgroundDir, sessionID)
 	}
@@ -532,7 +535,7 @@ func NewOutput(sessionID, dst string) (*output, error) {
 		return nil, fmt.Errorf("failed to convert path %s to absolute: %w", dst, err)
 	}
 
-	out := &output{dst: dst, homeDir: playgroundDir}
+	out := &output{dst: dst, homeDir: playgroundDir, createSymlinks: useDefaultPath}
 
 	// check if the output directory exists
 	if out.Exists("") {
@@ -575,7 +578,26 @@ func (o *output) CreateDir(path string) (string, error) {
 	if err := os.MkdirAll(absPath, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)
 	}
+	o.maybeCreateSymlinks()
 	return absPath, nil
+}
+
+func (o *output) maybeCreateSymlinks() {
+	if !o.createSymlinks {
+		return
+	}
+	o.symlinksOnce.Do(func() {
+		for _, name := range []string{"latest", "devnet"} {
+			link := filepath.Join(o.homeDir, name)
+			// Remove existing file, directory, or symlink
+			if err := os.RemoveAll(link); err != nil {
+				slog.Warn("failed to remove existing path for symlink", "path", link, "error", err)
+			}
+			if err := os.Symlink(o.dst, link); err != nil {
+				slog.Warn("failed to create symlink", "link", link, "target", o.dst, "error", err)
+			}
+		}
+	})
 }
 
 func (o *output) CopyFile(src, dst string) error {
@@ -690,6 +712,7 @@ func (o *output) WriteFile(dst string, data interface{}) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
+	o.maybeCreateSymlinks()
 	if err := os.WriteFile(dst, dataRaw, 0o644); err != nil {
 		return err
 	}
