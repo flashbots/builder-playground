@@ -473,10 +473,10 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
-		if abs, err := filepath.Abs(config.HostPath); err == nil {
-			svc.HostPath = abs
-		} else {
+		if filepath.IsAbs(config.HostPath) {
 			svc.HostPath = config.HostPath
+		} else {
+			svc.HostPath, _ = filepath.Abs(filepath.Join(recipeDir, config.HostPath))
 		}
 		svc.UseHostExecution()
 	}
@@ -654,10 +654,10 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
-		if abs, err := filepath.Abs(config.HostPath); err == nil {
-			svc.HostPath = abs
-		} else {
+		if filepath.IsAbs(config.HostPath) {
 			svc.HostPath = config.HostPath
+		} else {
+			svc.HostPath, _ = filepath.Abs(filepath.Join(recipeDir, config.HostPath))
 		}
 		svc.UseHostExecution()
 	}

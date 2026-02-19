@@ -527,6 +527,7 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 		if p.Name == name {
 			if p.Port != portNumber {
 				p.Port = portNumber
+				p.Protocol = protocol
 				return s
 			}
 			if p.Protocol != protocol {
