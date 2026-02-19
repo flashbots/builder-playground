@@ -67,7 +67,8 @@ type TestTxConfig struct {
 	Value      *big.Int
 	GasLimit   uint64
 	GasPrice   *big.Int
-	Timeout    time.Duration // Timeout for waiting for receipt. If 0, defaults to 2 minutes
+	Timeout    time.Duration // Timeout for waiting for receipt. If 0, no timeout.
+	Retries    int           // Max failed receipt requests before giving up. If 0, retry forever.
 	Insecure   bool          // Skip TLS certificate verification
 }
 
@@ -209,23 +210,23 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 	txHash := signedTx.Hash()
 	fmt.Printf("TX Hash: %s\n", txHash.Hex())
 
-	// Wait for receipt with timeout
-	timeout := cfg.Timeout
-	if timeout == 0 {
-		timeout = 2 * time.Minute
+	// Apply timeout if configured
+	if cfg.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, cfg.Timeout)
+		defer cancel()
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	fmt.Println("Waiting for receipt...")
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	failedAttempts := 0
 	for {
 		select {
 		case <-ctx.Done():
 			if ctx.Err() == context.DeadlineExceeded {
-				return fmt.Errorf("timeout waiting for transaction receipt after %s", timeout)
+				return fmt.Errorf("timeout waiting for transaction receipt after %s", cfg.Timeout)
 			}
 			return ctx.Err()
 		case <-ticker.C:
@@ -242,6 +243,10 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 					fmt.Printf("  Extra Data: %s\n", string(block.Extra()))
 				}
 				return nil
+			}
+			failedAttempts++
+			if cfg.Retries > 0 && failedAttempts >= cfg.Retries {
+				return fmt.Errorf("failed to get transaction receipt after %d attempts", cfg.Retries)
 			}
 		}
 	}

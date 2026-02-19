@@ -22,6 +22,10 @@ type YAMLRecipeConfig struct {
 	// Description is an optional description of the recipe
 	Description string `yaml:"description,omitempty"`
 
+	// Setup is a list of shell commands to run before any services are launched.
+	// Commands run sequentially in the recipe's directory; each must exit 0.
+	Setup []string `yaml:"setup,omitempty"`
+
 	// Recipe contains the component/service hierarchy to apply as overrides or additions
 	Recipe map[string]*YAMLComponentConfig `yaml:"recipe"`
 }
@@ -226,6 +230,11 @@ func (y *YAMLRecipe) Apply(ctx *ExContext) *Component {
 
 func (y *YAMLRecipe) Output(manifest *Manifest) map[string]interface{} {
 	return y.baseRecipe.Output(manifest)
+}
+
+// SetupCommands returns the setup commands and the directory to run them in.
+func (y *YAMLRecipe) SetupCommands() ([]string, string) {
+	return y.config.Setup, y.recipeDir
 }
 
 // applyModifications applies the YAML recipe modifications to the component tree
@@ -464,7 +473,11 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
-		svc.HostPath = config.HostPath
+		if abs, err := filepath.Abs(config.HostPath); err == nil {
+			svc.HostPath = abs
+		} else {
+			svc.HostPath = config.HostPath
+		}
 		svc.UseHostExecution()
 	}
 	if config.Release != nil {
@@ -641,7 +654,11 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
-		svc.HostPath = config.HostPath
+		if abs, err := filepath.Abs(config.HostPath); err == nil {
+			svc.HostPath = abs
+		} else {
+			svc.HostPath = config.HostPath
+		}
 		svc.UseHostExecution()
 	}
 	if config.Release != nil {

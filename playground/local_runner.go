@@ -1187,6 +1187,11 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
 	}
 
+	// Run setup commands before launching any services
+	if err := d.runSetupCommands(ctx); err != nil {
+		return err
+	}
+
 	// Pull all required images in parallel
 	if err := d.pullNotAvailableImages(ctx); err != nil {
 		return err

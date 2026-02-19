@@ -160,3 +160,30 @@ func (d *LocalRunner) runAllLifecycleStopCommands() {
 		d.runLifecycleStopCommands(info.svc, info.logFile, info.logPath)
 	}
 }
+
+// runSetupCommands runs the setup commands from the manifest before any services
+// are launched. Commands run sequentially via "sh -c" in the recipe directory;
+// each must exit 0 or an error is returned.
+func (d *LocalRunner) runSetupCommands(ctx context.Context) error {
+	if len(d.manifest.Setup) == 0 {
+		return nil
+	}
+
+	dir := d.manifest.SetupDir
+	if dir == "" {
+		dir = d.out.sessionDir
+	}
+
+	for i, command := range d.manifest.Setup {
+		slog.Info("Running setup command", "index", i, "command", command)
+		cmd := exec.CommandContext(ctx, "sh", "-c", command)
+		cmd.Dir = dir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("setup command %d failed: %q: %w", i, command, err)
+		}
+	}
+
+	return nil
+}
