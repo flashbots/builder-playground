@@ -54,6 +54,7 @@ var (
 	contenderArgs     []string
 	contenderTarget   string
 	detached          bool
+	skipSetup         bool
 	prefundedAccounts []string
 	followFlag        bool
 	generateForce     bool
@@ -559,6 +560,7 @@ func main() {
 		cmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		cmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
 		cmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+		cmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip the setup commands defined in the YAML recipe")
 		cmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
 	}
 
@@ -704,7 +706,7 @@ func runIt(recipe playground.Recipe) error {
 	components := recipe.Apply(exCtx)
 	svcManager := playground.NewManifest(sessionID, components)
 	svcManager.Bootnode = exCtx.Bootnode
-	if yamlRecipe, ok := recipe.(*playground.YAMLRecipe); ok {
+	if yamlRecipe, ok := recipe.(*playground.YAMLRecipe); ok && !skipSetup {
 		svcManager.Setup, svcManager.SetupDir = yamlRecipe.SetupCommands()
 	}
 
