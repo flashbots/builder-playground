@@ -54,12 +54,14 @@ var (
 	contenderArgs     []string
 	contenderTarget   string
 	detached          bool
+	skipSetup         bool
 	prefundedAccounts []string
 	followFlag        bool
 	generateForce     bool
 	testRPCURL        string
 	testELRPCURL      string
 	testTimeout       time.Duration
+	testRetries       int
 	testInsecure      bool
 	portListFlag      bool
 )
@@ -515,6 +517,7 @@ var testCmd = &cobra.Command{
 		cfg.RPCURL = testRPCURL
 		cfg.ELRPCURL = testELRPCURL
 		cfg.Timeout = testTimeout
+		cfg.Retries = testRetries
 		cfg.Insecure = testInsecure
 
 		// Suggest --insecure flag if any RPC URL uses https without insecure mode
@@ -557,6 +560,7 @@ func main() {
 		cmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		cmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
 		cmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+		cmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip the setup commands defined in the YAML recipe")
 		cmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
 	}
 
@@ -605,6 +609,7 @@ func main() {
 			},
 		}
 		recipeCmd.Flags().AddFlagSet(recipe.Flags())
+		generateCmd.Flags().AddFlagSet(recipe.Flags())
 		addCommonRecipeFlags(recipeCmd)
 		startCmd.AddCommand(recipeCmd)
 	}
@@ -633,7 +638,8 @@ func main() {
 	rootCmd.AddCommand(recipesCmd)
 	testCmd.Flags().StringVar(&testRPCURL, "rpc", "http://localhost:8545", "Target RPC URL for sending transactions")
 	testCmd.Flags().StringVar(&testELRPCURL, "el-rpc", "", "EL RPC URL for chain queries (default: same as --rpc)")
-	testCmd.Flags().DurationVar(&testTimeout, "timeout", 2*time.Minute, "Timeout for waiting for transaction receipt")
+	testCmd.Flags().DurationVar(&testTimeout, "timeout", time.Minute, "Timeout for waiting for transaction receipt (0 means no timeout - default: 1m)")
+	testCmd.Flags().IntVar(&testRetries, "retries", 0, "Max number of failed receipt requests before giving up (0 means retry forever - default: 0)")
 	testCmd.Flags().BoolVar(&testInsecure, "insecure", false, "Skip TLS certificate verification (for self-signed certs)")
 	rootCmd.AddCommand(testCmd)
 
@@ -700,6 +706,9 @@ func runIt(recipe playground.Recipe) error {
 	components := recipe.Apply(exCtx)
 	svcManager := playground.NewManifest(sessionID, components)
 	svcManager.Bootnode = exCtx.Bootnode
+	if yamlRecipe, ok := recipe.(*playground.YAMLRecipe); ok && !skipSetup {
+		svcManager.Setup, svcManager.SetupDir = yamlRecipe.SetupCommands()
+	}
 
 	// generate the dot graph
 	slog.Debug("Generating dot graph...")

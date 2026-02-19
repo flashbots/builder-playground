@@ -47,6 +47,13 @@ type Manifest struct {
 
 	Bootnode *BootnodeRef `json:"bootnode,omitempty"`
 
+	// Setup contains shell commands to run before any services are launched.
+	// Commands run sequentially in SetupDir; each must exit 0.
+	Setup []string `json:"setup,omitempty"`
+
+	// SetupDir is the working directory for setup commands.
+	SetupDir string `json:"setup_dir,omitempty"`
+
 	// overrides is a map of service name to the path of the executable to run
 	// on the host machine instead of a container.
 	overrides map[string]string
@@ -515,12 +522,13 @@ func (s *Service) WithPort(name string, portNumber int, protocolVar ...string) *
 		protocol = protocolVar[0]
 	}
 
-	// add the port if not already present with the same name.
-	// if preset with the same name, they must have same port number
+	// add or replace the ports
 	for _, p := range s.Ports {
 		if p.Name == name {
 			if p.Port != portNumber {
-				panic(fmt.Sprintf("port %s already defined with different port number (existing: %d, new: %d) on service %s", name, p.Port, portNumber, s.Name))
+				p.Port = portNumber
+				p.Protocol = protocol
+				return s
 			}
 			if p.Protocol != protocol {
 				// If they have different protocols they are different ports
