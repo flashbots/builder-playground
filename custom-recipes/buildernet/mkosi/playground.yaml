@@ -25,14 +25,14 @@ recipe:
         depends_on:
           - builder-hub-proxy:healthy
         files:
-          "/server.key": "server.key"
-          "/server.crt": "server.crt"
+          "/server.key": "config/server.key"
+          "/server.crt": "config/server.crt"
 
       builder:
         lifecycle_hooks: true
         init:
           - rm -rf .runtime/buildernet-vm.qcow2 || true
-          - ./prepare.sh
-        start: ./start.sh
+          - ./scripts/prepare.sh
+        start: ./scripts/start.sh
         stop:
-          - ./stop.sh
+          - ./scripts/stop.sh

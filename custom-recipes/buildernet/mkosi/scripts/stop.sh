@@ -3,7 +3,8 @@
 set -eu -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PIDFILE="${SCRIPT_DIR}/.runtime/qemu.pid"
+PROJECT_DIR="${SCRIPT_DIR}/.."
+PIDFILE="${PROJECT_DIR}/.runtime/qemu.pid"
 
 if [[ ! -f "${PIDFILE}" ]]; then
     echo "No pidfile found"

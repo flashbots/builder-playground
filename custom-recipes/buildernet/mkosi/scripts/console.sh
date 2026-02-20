@@ -3,11 +3,12 @@
 set -eu -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONSOLE_SOCK="${SCRIPT_DIR}/.runtime/console.sock"
+PROJECT_DIR="${SCRIPT_DIR}/.."
+CONSOLE_SOCK="${PROJECT_DIR}/.runtime/console.sock"
 
 if [[ ! -S "${CONSOLE_SOCK}" ]]; then
     echo "Error: Console socket not found. Is the VM running?"
-    echo "Run ./start.sh first."
+    echo "Run ./scripts/start.sh first."
     exit 1
 fi
 
