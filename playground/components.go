@@ -533,7 +533,7 @@ func (l *LighthouseBeaconNode) Apply(ctx *ExContext) *Component {
 
 	svc := component.NewService("beacon").
 		WithImage("sigp/lighthouse").
-		WithTag("v8.0.0-rc.2").
+		WithTag("v8.1.0").
 		WithEntrypoint("lighthouse").
 		WithArgs(
 			"bn",
@@ -587,7 +587,7 @@ func (l *LighthouseValidator) Apply(ctx *ExContext) *Component {
 	// start validator client
 	component.NewService("validator").
 		WithImage("sigp/lighthouse").
-		WithTag("v8.0.0-rc.2").
+		WithTag("v8.1.0").
 		WithEntrypoint("lighthouse").
 		WithArgs(
 			"vc",
