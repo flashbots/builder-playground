@@ -344,7 +344,7 @@ func StopSession(id string, keepResources bool) error {
 	return nil
 }
 
-// ForceKillSession immediately stops all containers for a session using SIGKILL with a grace period timeout
+// ForceKillSession stops all containers for a session using SIGKILL with a grace period timeout
 func ForceKillSession(id string, keepResources bool) {
 	cmd := exec.Command("sh", "-c",
 		fmt.Sprintf("docker ps -q --filter label=playground.session=%s | xargs -r docker stop -t %d -s SIGKILL", id, stopGracePeriodSecs))
