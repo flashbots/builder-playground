@@ -283,18 +283,12 @@ func (d *LocalRunner) sendExitError(err error) {
 }
 
 func (d *LocalRunner) Stop(keepResources bool) error {
-	forceKillCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	// Keep an eye on the force kill requests.
-	go func(ctx context.Context) {
-		select {
-		case <-ctx.Done():
-			return
-		case <-mainctx.GetForceKillCtx().Done():
-			d.stopAllProcessesWithSignal(os.Kill)
-			ForceKillSession(d.manifest.ID, keepResources)
-		}
-	}(forceKillCtx)
+	go func() {
+		<-mainctx.GetForceKillCtx().Done()
+		d.stopAllProcessesWithSignal(os.Kill)
+		ForceKillSession(d.manifest.ID, keepResources)
+	}()
 	// Kill all the processes ran by playground on the host.
 	// Possible to make a more graceful exit with os.Interrupt here
 	// but preferring a quick exit for now.
