@@ -12,8 +12,8 @@ PIDFILE="${RUNTIME_DIR}/qemu.pid"
 CONSOLE_LOG="${RUNTIME_DIR}/console.log"
 CONSOLE_SOCK="${RUNTIME_DIR}/console.sock"
 
-CPU=8
-RAM=32G
+CPU="${QEMU_CPU:-8}"
+RAM="${QEMU_RAM:-32G}"
 SSH_PORT=2222
 OPERATOR_API_PORT=13535
 RBUILDER_RPC_PORT=18645
@@ -30,7 +30,28 @@ if [[ -f "${PIDFILE}" ]] && kill -0 $(cat "${PIDFILE}") 2>/dev/null; then
     exit 1
 fi
 
+# Determine acceleration mode
+ACCEL="${QEMU_ACCEL:-kvm}"
+if [[ "${ACCEL}" == "kvm" ]]; then
+    if [[ ! -e /dev/kvm ]]; then
+        echo "Error: KVM is not available (/dev/kvm not found)."
+        echo "Options:"
+        echo "  - Enable KVM on this host (load kvm kernel module)"
+        echo "  - Use software emulation: QEMU_ACCEL=tcg ./scripts/start.sh"
+        echo "    (TCG is ~10-20x slower but works anywhere)"
+        exit 1
+    fi
+    QEMU_ACCEL_ARGS="-enable-kvm -cpu host"
+elif [[ "${ACCEL}" == "tcg" ]]; then
+    QEMU_ACCEL_ARGS="-accel tcg -cpu max"
+else
+    echo "Error: Unknown QEMU_ACCEL value: ${ACCEL} (expected 'kvm' or 'tcg')"
+    exit 1
+fi
+
 echo "Starting VM..."
+echo "  Accel: ${ACCEL}"
+echo "  CPU: ${CPU} cores, RAM: ${RAM}"
 echo "  SSH: localhost:${SSH_PORT}"
 echo "  Operator API: localhost:${OPERATOR_API_PORT}"
 echo "  rbuilder RPC: localhost:${RBUILDER_RPC_PORT}"
@@ -50,7 +71,7 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file="${OVMF_VARS}" \
   -drive format=qcow2,if=none,cache=none,id=osdisk,file="${VM_IMAGE}" \
   -device nvme,drive=osdisk,serial=nvme-os,bootindex=0 \
-  -enable-kvm -cpu host -m "${RAM}" -smp "${CPU}" -display none \
+  ${QEMU_ACCEL_ARGS} -m "${RAM}" -smp "${CPU}" -display none \
   -device virtio-scsi-pci,id=scsi0 \
   -drive file="${VM_DATA_DISK}",format=raw,if=none,id=datadisk \
   -device nvme,id=nvme0,serial=nvme-data \
