@@ -247,7 +247,13 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 		// Write the file preserving subdirectory structure
 		fullPath := filepath.Join(targetDir, relPath)
 
-		if err := os.WriteFile(fullPath, content, 0o755); err != nil {
+		// Use executable permissions for shell scripts, regular permissions for everything else
+		perm := os.FileMode(0o644)
+		if strings.HasSuffix(fileName, ".sh") {
+			perm = 0o755
+		}
+
+		if err := os.WriteFile(fullPath, content, perm); err != nil {
 			return fmt.Errorf("failed to write %s: %w", fullPath, err)
 		}
 		return nil
@@ -337,7 +343,7 @@ func listCustomRecipeFiles(customRecipeName string) ([]string, error) {
 
 		relPath, err := filepath.Rel(recipePath, path)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to compute relative path for %s: %w", path, err)
 		}
 
 		fileName := filepath.Base(path)

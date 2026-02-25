@@ -40,6 +40,16 @@ recipe:
 		"custom-recipes/testdir/sample/extra.toml": &fstest.MapFile{
 			Data: []byte("[section]\nkey = \"value\"\n"),
 		},
+		// Subdirectory files for testing directory preservation
+		"custom-recipes/testdir/sample/scripts/build.sh": &fstest.MapFile{
+			Data: []byte("#!/bin/bash\necho build\n"),
+		},
+		"custom-recipes/testdir/sample/scripts/start.sh": &fstest.MapFile{
+			Data: []byte("#!/bin/bash\necho start\n"),
+		},
+		"custom-recipes/testdir/sample/config/server.crt": &fstest.MapFile{
+			Data: []byte("CERT_DATA"),
+		},
 		"custom-recipes/testdir/another/playground.yaml": &fstest.MapFile{
 			Data: []byte(`base: l1
 description: Another test recipe
@@ -185,6 +195,11 @@ func TestListCustomRecipeFiles(t *testing.T) {
 	// Should include playground.yaml and non-YAML sibling files
 	require.Contains(t, files, "playground.yaml")
 	require.Contains(t, files, "extra.toml")
+
+	// Should include files in subdirectories with relative paths
+	require.Contains(t, files, filepath.Join("scripts", "build.sh"))
+	require.Contains(t, files, filepath.Join("scripts", "start.sh"))
+	require.Contains(t, files, filepath.Join("config", "server.crt"))
 }
 
 func TestListCustomRecipeFiles_InvalidName(t *testing.T) {
@@ -227,6 +242,26 @@ func TestGenerateCustomRecipeToDir(t *testing.T) {
 	extraContent, err := os.ReadFile(extraPath)
 	require.NoError(t, err)
 	require.Contains(t, string(extraContent), "key = \"value\"")
+
+	// Verify subdirectory files were extracted with correct paths
+	scriptPath := filepath.Join(tmpDir, "scripts", "build.sh")
+	scriptContent, err := os.ReadFile(scriptPath)
+	require.NoError(t, err)
+	require.Contains(t, string(scriptContent), "echo build")
+
+	certPath := filepath.Join(tmpDir, "config", "server.crt")
+	certContent, err := os.ReadFile(certPath)
+	require.NoError(t, err)
+	require.Equal(t, "CERT_DATA", string(certContent))
+
+	// Verify permissions: .sh files should be executable, others should not
+	scriptInfo, err := os.Stat(scriptPath)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o755), scriptInfo.Mode().Perm(), "shell scripts should be executable")
+
+	certInfo, err := os.Stat(certPath)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o644), certInfo.Mode().Perm(), "non-script files should not be executable")
 }
 
 func TestGenerateCustomRecipeToDir_InvalidName(t *testing.T) {
