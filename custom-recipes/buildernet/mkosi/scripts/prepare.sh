@@ -3,9 +3,10 @@
 set -eu -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${SCRIPT_DIR}/.."
 
-FLASHBOTS_IMAGES_DIR="${SCRIPT_DIR}/.flashbots-images"
-RUNTIME_DIR="${SCRIPT_DIR}/.runtime"
+FLASHBOTS_IMAGES_DIR="${PROJECT_DIR}/.flashbots-images"
+RUNTIME_DIR="${PROJECT_DIR}/.runtime"
 
 QEMU_QCOW2="${FLASHBOTS_IMAGES_DIR}/mkosi.output/buildernet-qemu_latest.qcow2"
 
@@ -14,7 +15,7 @@ VM_DATA_DISK="${RUNTIME_DIR}/persistent.raw"
 
 if [[ ! -f "${QEMU_QCOW2}" ]]; then
     echo "Error: QEMU qcow2 image not found: ${QEMU_QCOW2}"
-    echo "Run ./build.sh first."
+    echo "Run ./scripts/build.sh first."
     exit 1
 fi
 

@@ -3,8 +3,9 @@
 set -eu -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${SCRIPT_DIR}/.."
 
-RUNTIME_DIR="${SCRIPT_DIR}/.runtime"
+RUNTIME_DIR="${PROJECT_DIR}/.runtime"
 VM_IMAGE="${RUNTIME_DIR}/buildernet-vm.qcow2"
 VM_DATA_DISK="${RUNTIME_DIR}/persistent.raw"
 PIDFILE="${RUNTIME_DIR}/qemu.pid"
@@ -20,7 +21,7 @@ HAPROXY_HTTP_PORT=10080
 HAPROXY_HTTPS_PORT=10443
 
 if [[ ! -f "${VM_IMAGE}" ]]; then
-    echo "Error: VM image not found. Run ./prepare.sh first."
+    echo "Error: VM image not found. Run ./scripts/prepare.sh first."
     exit 1
 fi
 
@@ -60,7 +61,7 @@ qemu-system-x86_64 \
   -device virtconsole,chardev=virtcon,name=org.qemu.console.0
 
 echo "VM started (PID: $(cat ${PIDFILE}))"
-echo "Use './stop.sh' to stop, './console.sh' to connect"
+echo "Use './scripts/stop.sh' to stop, './scripts/console.sh' to connect"
 echo "Use 'tail -f ${CONSOLE_LOG}' to watch console output"
 
 

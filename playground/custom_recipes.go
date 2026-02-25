@@ -208,19 +208,33 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 		return "", err
 	}
 
-	// Extract files to target directory
+	// Extract files to target directory, preserving subdirectory structure
 	err = fs.WalkDir(CustomRecipesFS, recipePath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
+		// Compute relative path from recipe root
+		relPath, err := filepath.Rel(recipePath, path)
+		if err != nil {
+			return fmt.Errorf("failed to compute relative path for %s: %w", path, err)
+		}
+
 		if d.IsDir() {
+			// Create subdirectories in target
+			if relPath != "." {
+				dirPath := filepath.Join(targetDir, relPath)
+				if err := os.MkdirAll(dirPath, 0o755); err != nil {
+					return fmt.Errorf("failed to create directory %s: %w", dirPath, err)
+				}
+			}
 			return nil
 		}
 
 		fileName := filepath.Base(path)
 
-		// Skip other yaml files that aren't the selected custom recipe
-		if (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
+		// Skip other root-level yaml files that aren't the selected custom recipe
+		if relPath == fileName && (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
 			return nil
 		}
 
@@ -230,10 +244,16 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 			return fmt.Errorf("failed to read %s: %w", path, err)
 		}
 
-		// Write the file to target directory (playground.yaml is already correctly named)
-		fullPath := filepath.Join(targetDir, fileName)
+		// Write the file preserving subdirectory structure
+		fullPath := filepath.Join(targetDir, relPath)
 
-		if err := os.WriteFile(fullPath, content, 0o755); err != nil {
+		// Use executable permissions for shell scripts, regular permissions for everything else
+		perm := os.FileMode(0o644)
+		if strings.HasSuffix(fileName, ".sh") {
+			perm = 0o755
+		}
+
+		if err := os.WriteFile(fullPath, content, perm); err != nil {
 			return fmt.Errorf("failed to write %s: %w", fullPath, err)
 		}
 		return nil
@@ -311,7 +331,7 @@ func listCustomRecipeFiles(customRecipeName string) ([]string, error) {
 		return nil, err
 	}
 
-	// Collect output files
+	// Collect output files, preserving relative paths
 	var files []string
 	err = fs.WalkDir(CustomRecipesFS, recipePath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -321,15 +341,19 @@ func listCustomRecipeFiles(customRecipeName string) ([]string, error) {
 			return nil
 		}
 
+		relPath, err := filepath.Rel(recipePath, path)
+		if err != nil {
+			return fmt.Errorf("failed to compute relative path for %s: %w", path, err)
+		}
+
 		fileName := filepath.Base(path)
 
-		// Skip other yaml files that aren't the selected custom recipe
-		if (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
+		// Skip other root-level yaml files that aren't the selected custom recipe
+		if relPath == fileName && (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
 			return nil
 		}
 
-		// playground.yaml is already correctly named
-		files = append(files, fileName)
+		files = append(files, relPath)
 		return nil
 	})
 	if err != nil {

@@ -3,8 +3,9 @@
 set -eu -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${SCRIPT_DIR}/.."
 
-FLASHBOTS_IMAGES_DIR="${SCRIPT_DIR}/.flashbots-images"
+FLASHBOTS_IMAGES_DIR="${PROJECT_DIR}/.flashbots-images"
 FLASHBOTS_IMAGES_BRANCH="fryd/mkosi-playground"
 FLASHBOTS_IMAGES_REPO="https://github.com/flashbots/flashbots-images.git"
 
