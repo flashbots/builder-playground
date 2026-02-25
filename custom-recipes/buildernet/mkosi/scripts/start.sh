@@ -67,8 +67,9 @@ echo "start.sh: QEMU_ACCEL_ARGS=${QEMU_ACCEL_ARGS}"
 echo "start.sh: VM_IMAGE=${VM_IMAGE} ($(du -h "${VM_IMAGE}" | cut -f1))"
 echo "start.sh: VM_DATA_DISK=${VM_DATA_DISK}"
 
-qemu-system-x86_64 \
-  -daemonize \
+# exec replaces this shell with QEMU so the playground can track and kill
+# the process directly. QEMU runs in the foreground (no -daemonize).
+exec qemu-system-x86_64 \
   -pidfile "${PIDFILE}" \
   -serial file:"${CONSOLE_LOG}" \
   -name buildernet-playground \
@@ -85,44 +86,3 @@ qemu-system-x86_64 \
   -chardev socket,id=virtcon,path="${CONSOLE_SOCK}",server=on,wait=off \
   -device virtio-serial-pci \
   -device virtconsole,chardev=virtcon,name=org.qemu.console.0
-
-QEMU_EXIT=$?
-echo "start.sh: qemu exited with code ${QEMU_EXIT}"
-
-if [[ -f "${PIDFILE}" ]]; then
-    QEMU_PID=$(cat "${PIDFILE}")
-    echo "start.sh: PID file exists, PID=${QEMU_PID}"
-    if kill -0 "${QEMU_PID}" 2>/dev/null; then
-        echo "start.sh: QEMU process is running"
-    else
-        echo "start.sh: WARNING - QEMU process is NOT running (crashed after daemonize?)"
-    fi
-else
-    echo "start.sh: WARNING - no PID file created"
-fi
-
-echo "Use './scripts/stop.sh' to stop, './scripts/console.sh' to connect"
-echo "Use 'tail -f ${CONSOLE_LOG}' to watch console output"
-
-
-# TRIED TO DISABLE SERVICES - DID NOT WORK
-# error:
-#   qemu-system-x86_64: -append only allowed with -kernel option
-
-# PLAYGROUND_DISABLE_SERVICES=(
-#   reth-sync                    # Downloads Reth snapshot from S3 bucket
-#   acme-le                      # Issues Let's Encrypt TLS certificates
-#   acme-le-renewal              # Renews Let's Encrypt certificates
-#   rbuilder-bidding-downloader  # Downloads binary from private GitHub repo
-#   vector                       # Observability pipeline (logs/metrics)
-#   rbuilder-rebalancer          # ETH balance rebalancing across wallets
-#   operator-api                 # Management API for node operators
-#   config-watchdog              # Watches and reloads rbuilder config
-# )
-
-# mask_args() {
-#   [[ $# -gt 0 ]] && printf "systemd.mask=%s.service " "$@"
-# }
-# # # add argument to qemu-system-x86_64:
-# # \
-# #   -append "console=ttyS0 $(mask_args "${PLAYGROUND_DISABLE_SERVICES[@]}")"

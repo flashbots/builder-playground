@@ -109,8 +109,15 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 	lc.logHeader("Start", -1, svc.Start)
 
 	startCmd := lc.newCmd(ctx, svc.Start)
+	// Use Start() instead of Run() in a goroutine to ensure the process is
+	// launched before we return. This is important for --detached mode where
+	// the main process exits right after lifecycle hooks complete.
+	if err := startCmd.Start(); err != nil {
+		return fmt.Errorf("%s", lc.formatError("start", svc.Start, err))
+	}
+
 	go func() {
-		if err := startCmd.Run(); err != nil {
+		if err := startCmd.Wait(); err != nil {
 			if mainctx.IsExiting() {
 				return
 			}
