@@ -16,13 +16,13 @@ Recipes (e.g. `l1`, `opstack`) assemble opinionated components and pre-baked con
 
 ### Install with script (recommended)
 
-On Linux and macOS, you can install to `/usr/local/bin` with:
+On Linux and macOS, you can install the latest version to `/usr/local/bin` with:
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/install.sh | bash
 ```
 
-This installs the latest version by default. If you need to install a different version, please specify the version in the beginning like:
+If you need to install a specific version, you can use the `VERSION` env var in the beginning like:
 ```bash
 VERSION=1.2.3 curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/install.sh | bash
 ```
