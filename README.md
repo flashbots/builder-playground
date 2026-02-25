@@ -12,7 +12,33 @@ Recipes (e.g. `l1`, `opstack`) assemble opinionated components and pre-baked con
 - Running repeatable CI and e2e scenarios
 - Experimenting with fork configurations and client combinations
 
-Quick start:
+## Installation
+
+### Install with script (recommended)
+
+On Linux and macOS, you can install to `/usr/local/bin` with:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/install.sh | bash
+```
+
+This installs the latest version by default. If you need to install a different version, please specify the version in the beginning like:
+```bash
+VERSION=1.2.3 curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/install.sh | bash
+```
+
+### Install from repository
+
+Extend the `PATH` variable with `GOPATH/bin` (or `GOBIN` if set), then clone the repository and do:
+```bash
+go install .
+```
+
+---
+
+These commands install to different directories as mentioned above so make sure to verify with `which $(builder-playground)` to avoid confusion!
+
+## Quick Examples
 
 ```bash
 # L1 environment with mev-boost relay
@@ -21,20 +47,6 @@ builder-playground start l1
 # L2 OpStack with external builder support
 builder-playground start opstack --external-builder http://localhost:4444
 ```
-
-## Installation
-
-```
-$ go install github.com/flashbots/builder-playground@latest
-```
-
-or clone the repository and do:
-
-```
-$ go install .
-```
-
-or do `go build .` and run from the repository like `./builder-playground`.
 
 ## CI / GitHub Actions
 
