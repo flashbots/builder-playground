@@ -36,7 +36,7 @@ go install .
 
 ---
 
-These commands install to different directories as mentioned above so make sure to verify with `which $(builder-playground)` to avoid confusion!
+These commands install to different directories as mentioned above so make sure to verify with `which builder-playground` to avoid confusion!
 
 ## Quick Examples
 
