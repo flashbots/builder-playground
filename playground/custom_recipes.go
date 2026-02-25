@@ -233,8 +233,8 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 
 		fileName := filepath.Base(path)
 
-		// Skip other yaml files that aren't the selected custom recipe
-		if (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
+		// Skip other root-level yaml files that aren't the selected custom recipe
+		if relPath == fileName && (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
 			return nil
 		}
 
@@ -348,8 +348,8 @@ func listCustomRecipeFiles(customRecipeName string) ([]string, error) {
 
 		fileName := filepath.Base(path)
 
-		// Skip other yaml files that aren't the selected custom recipe
-		if (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
+		// Skip other root-level yaml files that aren't the selected custom recipe
+		if relPath == fileName && (strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml")) && fileName != yamlFile {
 			return nil
 		}
 
