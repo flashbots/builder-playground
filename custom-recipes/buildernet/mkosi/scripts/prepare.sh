@@ -24,14 +24,18 @@ VM_DATA_DISK="${RUNTIME_DIR}/persistent.raw"
 # Determine source image: $1 > $BUILDERNET_IMAGE > default build output
 SOURCE="${1:-${BUILDERNET_IMAGE:-${DEFAULT_QCOW2}}}"
 
+echo "prepare.sh: PROJECT_DIR=${PROJECT_DIR}"
+echo "prepare.sh: RUNTIME_DIR=${RUNTIME_DIR}"
+echo "prepare.sh: SOURCE=${SOURCE}"
+
 rm -rf "${RUNTIME_DIR}"
 mkdir -p "${RUNTIME_DIR}"
 
 if [[ "${SOURCE}" =~ ^https?:// ]]; then
-    echo "Downloading VM image: ${SOURCE}"
+    echo "prepare.sh: downloading from URL..."
     curl -fSL -o "${VM_IMAGE}" "${SOURCE}"
 elif [[ -f "${SOURCE}" ]]; then
-    echo "Copying VM image: ${SOURCE}"
+    echo "prepare.sh: copying local file ($(du -h "${SOURCE}" | cut -f1))..."
     cp --sparse=always "${SOURCE}" "${VM_IMAGE}"
 else
     echo "Error: VM image not found: ${SOURCE}"
@@ -42,7 +46,8 @@ else
     exit 1
 fi
 
+echo "prepare.sh: creating data disk..."
 qemu-img create -f raw "${VM_DATA_DISK}" 100G
 
-echo "Runtime ready: ${RUNTIME_DIR}"
+echo "prepare.sh: runtime ready"
 ls -lah "${RUNTIME_DIR}"
