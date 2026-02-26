@@ -35,35 +35,36 @@ var (
 )
 
 var (
-	keepFlag          bool
-	outputFlag        string
-	genesisDelayFlag  uint64
-	withOverrides     []string
-	watchdog          bool
-	dryRun            bool
-	interactive       bool
-	timeout           time.Duration
-	logLevelFlag      string
-	bindExternal      bool
-	withPrometheus    bool
-	networkName       string
-	labels            playground.MapStringFlag
-	disableLogs       bool
-	platform          string
-	contenderEnabled  bool
-	contenderArgs     []string
-	contenderTarget   string
-	detached          bool
-	skipSetup         bool
-	prefundedAccounts []string
-	followFlag        bool
-	generateForce     bool
-	testRPCURL        string
-	testELRPCURL      string
-	testTimeout       time.Duration
-	testRetries       int
-	testInsecure      bool
-	portListFlag      bool
+	keepFlag              bool
+	outputFlag            string
+	genesisDelayFlag      uint64
+	withOverrides         []string
+	watchdog              bool
+	dryRun                bool
+	interactive           bool
+	timeout               time.Duration
+	logLevelFlag          string
+	bindExternal          bool
+	withPrometheus        bool
+	networkName           string
+	labels                playground.MapStringFlag
+	disableLogs           bool
+	platform              string
+	contenderEnabled      bool
+	contenderArgs         []string
+	contenderTarget       string
+	detached              bool
+	skipSetup             bool
+	prefundedAccounts     []string
+	followFlag            bool
+	generateForce         bool
+	testRPCURL            string
+	testELRPCURL          string
+	testTimeout           time.Duration
+	testRetries           int
+	testInsecure          bool
+	testExpectedExtraData string
+	portListFlag          bool
 )
 
 var rootCmd = &cobra.Command{
@@ -519,6 +520,7 @@ var testCmd = &cobra.Command{
 		cfg.Timeout = testTimeout
 		cfg.Retries = testRetries
 		cfg.Insecure = testInsecure
+		cfg.ExpectedExtraData = testExpectedExtraData
 
 		// Suggest --insecure flag if any RPC URL uses https without insecure mode
 		for _, rpcURL := range []string{cfg.RPCURL, cfg.ELRPCURL} {
@@ -641,6 +643,7 @@ func main() {
 	testCmd.Flags().DurationVar(&testTimeout, "timeout", time.Minute, "Timeout for waiting for transaction receipt (0 means no timeout - default: 1m)")
 	testCmd.Flags().IntVar(&testRetries, "retries", 0, "Max number of failed receipt requests before giving up (0 means retry forever - default: 0)")
 	testCmd.Flags().BoolVar(&testInsecure, "insecure", false, "Skip TLS certificate verification (for self-signed certs)")
+	testCmd.Flags().StringVar(&testExpectedExtraData, "expected-extra-data", "", "Verify block extra data matches this string (fails if different)")
 	rootCmd.AddCommand(testCmd)
 
 	if err := rootCmd.Execute(); err != nil {

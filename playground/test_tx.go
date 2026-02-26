@@ -60,16 +60,17 @@ func (t *buildernetSigningTransport) RoundTrip(req *http.Request) (*http.Respons
 
 // TestTxConfig holds configuration for the test transaction
 type TestTxConfig struct {
-	RPCURL     string // Target RPC URL for sending transactions (e.g., rbuilder)
-	ELRPCURL   string // EL RPC URL for chain queries (e.g., reth). If empty, uses RPCURL
-	PrivateKey string
-	ToAddress  string
-	Value      *big.Int
-	GasLimit   uint64
-	GasPrice   *big.Int
-	Timeout    time.Duration // Timeout for waiting for receipt. If 0, no timeout.
-	Retries    int           // Max failed receipt requests before giving up. If 0, retry forever.
-	Insecure   bool          // Skip TLS certificate verification
+	RPCURL            string // Target RPC URL for sending transactions (e.g., rbuilder)
+	ELRPCURL          string // EL RPC URL for chain queries (e.g., reth). If empty, uses RPCURL
+	PrivateKey        string
+	ToAddress         string
+	Value             *big.Int
+	GasLimit          uint64
+	GasPrice          *big.Int
+	Timeout           time.Duration // Timeout for waiting for receipt. If 0, no timeout.
+	Retries           int           // Max failed receipt requests before giving up. If 0, retry forever.
+	Insecure          bool          // Skip TLS certificate verification
+	ExpectedExtraData string        // If set, verify block extra data matches this string
 }
 
 // DefaultTestTxConfig returns the default test transaction configuration
@@ -240,7 +241,12 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 				// Get block to show extra data (builder name)
 				block, err := elClient.BlockByNumber(ctx, receipt.BlockNumber)
 				if err == nil && block != nil {
-					fmt.Printf("  Extra Data: %s\n", string(block.Extra()))
+					extraData := string(block.Extra())
+					fmt.Printf("  Extra Data: %s\n", extraData)
+
+					if cfg.ExpectedExtraData != "" && extraData != cfg.ExpectedExtraData {
+						return fmt.Errorf("extra data mismatch: expected %q, got %q", cfg.ExpectedExtraData, extraData)
+					}
 				}
 				return nil
 			}
