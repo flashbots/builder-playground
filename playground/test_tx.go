@@ -241,11 +241,16 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 				// Get block to show extra data (builder name)
 				block, err := elClient.BlockByNumber(ctx, receipt.BlockNumber)
 				if err == nil && block != nil {
-					extraData := string(block.Extra())
-					fmt.Printf("  Extra Data: %s\n", extraData)
+					extraHex := hex.EncodeToString(block.Extra())
+					fmt.Printf("  Extra Data: 0x%s\n", extraHex)
 
-					if cfg.ExpectedExtraData != "" && extraData != cfg.ExpectedExtraData {
-						return fmt.Errorf("extra data mismatch: expected %q, got %q", cfg.ExpectedExtraData, extraData)
+					if cfg.ExpectedExtraData != "" {
+						expectedHex := hex.EncodeToString([]byte(cfg.ExpectedExtraData))
+						if extraHex != expectedHex {
+							fmt.Printf("  Extra Data check: failed\n")
+							return fmt.Errorf("extra data mismatch: expected 0x%s (%q), got 0x%s", expectedHex, cfg.ExpectedExtraData, extraHex)
+						}
+						fmt.Printf("  Extra Data check: passed\n")
 					}
 				}
 				return nil

@@ -33,7 +33,9 @@ mkdir -p "${RUNTIME_DIR}"
 
 if [[ "${SOURCE}" =~ ^https?:// ]]; then
     echo "prepare.sh: downloading from URL..."
-    curl -fSL -o "${VM_IMAGE}" "${SOURCE}"
+    TMP_IMAGE="${VM_IMAGE}.tmp"
+    curl -fSL -o "${TMP_IMAGE}" "${SOURCE}"
+    mv "${TMP_IMAGE}" "${VM_IMAGE}"
 elif [[ -f "${SOURCE}" ]]; then
     echo "prepare.sh: copying local file ($(du -h "${SOURCE}" | cut -f1))..."
     cp --sparse=always "${SOURCE}" "${VM_IMAGE}"

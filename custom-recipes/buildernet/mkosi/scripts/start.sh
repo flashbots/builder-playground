@@ -41,9 +41,9 @@ if [[ "${ACCEL}" == "kvm" ]]; then
         echo "    (TCG is ~10-20x slower but works anywhere)"
         exit 1
     fi
-    QEMU_ACCEL_ARGS="-enable-kvm -cpu host"
+    QEMU_ACCEL_ARGS=(-enable-kvm -cpu host)
 elif [[ "${ACCEL}" == "tcg" ]]; then
-    QEMU_ACCEL_ARGS="-accel tcg -cpu max"
+    QEMU_ACCEL_ARGS=(-accel tcg -cpu max)
 else
     echo "Error: Unknown QEMU_ACCEL value: ${ACCEL} (expected 'kvm' or 'tcg')"
     exit 1
@@ -63,7 +63,7 @@ echo "  Console socket: ${CONSOLE_SOCK}"
 source "${SCRIPT_DIR}/ovmf.sh"
 
 echo "start.sh: launching qemu-system-x86_64..."
-echo "start.sh: QEMU_ACCEL_ARGS=${QEMU_ACCEL_ARGS}"
+echo "start.sh: QEMU_ACCEL_ARGS=${QEMU_ACCEL_ARGS[*]}"
 echo "start.sh: VM_IMAGE=${VM_IMAGE} ($(du -h "${VM_IMAGE}" | cut -f1))"
 echo "start.sh: VM_DATA_DISK=${VM_DATA_DISK}"
 
@@ -77,7 +77,7 @@ exec qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file="${OVMF_VARS}" \
   -drive format=qcow2,if=none,cache=none,id=osdisk,file="${VM_IMAGE}" \
   -device nvme,drive=osdisk,serial=nvme-os,bootindex=0 \
-  ${QEMU_ACCEL_ARGS} -m "${RAM}" -smp "${CPU}" -display none \
+  "${QEMU_ACCEL_ARGS[@]}" -m "${RAM}" -smp "${CPU}" -display none \
   -device virtio-scsi-pci,id=scsi0 \
   -drive file="${VM_DATA_DISK}",format=raw,if=none,id=datadisk \
   -device nvme,id=nvme0,serial=nvme-data \
