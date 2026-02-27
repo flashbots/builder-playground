@@ -31,6 +31,17 @@ func (lc *lifecycleContext) newCmd(ctx context.Context, command string) *exec.Cm
 	cmd.Dir = lc.dir
 	cmd.Stdout = lc.logWriter
 	cmd.Stderr = lc.logWriter
+	if len(lc.svc.Env) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range lc.svc.Env {
+			// YAML env vars act as defaults: only set if not already
+			// present in the process environment. This lets CI / shell
+			// override values defined in the recipe.
+			if _, exists := os.LookupEnv(k); !exists {
+				cmd.Env = append(cmd.Env, k+"="+v)
+			}
+		}
+	}
 	return cmd
 }
 
@@ -109,8 +120,15 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 	lc.logHeader("Start", -1, svc.Start)
 
 	startCmd := lc.newCmd(ctx, svc.Start)
+	// Use Start() instead of Run() in a goroutine to ensure the process is
+	// launched before we return. This is important for --detached mode where
+	// the main process exits right after lifecycle hooks complete.
+	if err := startCmd.Start(); err != nil {
+		return fmt.Errorf("%s", lc.formatError("start", svc.Start, err))
+	}
+
 	go func() {
-		if err := startCmd.Run(); err != nil {
+		if err := startCmd.Wait(); err != nil {
 			if mainctx.IsExiting() {
 				return
 			}

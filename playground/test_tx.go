@@ -60,16 +60,17 @@ func (t *buildernetSigningTransport) RoundTrip(req *http.Request) (*http.Respons
 
 // TestTxConfig holds configuration for the test transaction
 type TestTxConfig struct {
-	RPCURL     string // Target RPC URL for sending transactions (e.g., rbuilder)
-	ELRPCURL   string // EL RPC URL for chain queries (e.g., reth). If empty, uses RPCURL
-	PrivateKey string
-	ToAddress  string
-	Value      *big.Int
-	GasLimit   uint64
-	GasPrice   *big.Int
-	Timeout    time.Duration // Timeout for waiting for receipt. If 0, no timeout.
-	Retries    int           // Max failed receipt requests before giving up. If 0, retry forever.
-	Insecure   bool          // Skip TLS certificate verification
+	RPCURL            string // Target RPC URL for sending transactions (e.g., rbuilder)
+	ELRPCURL          string // EL RPC URL for chain queries (e.g., reth). If empty, uses RPCURL
+	PrivateKey        string
+	ToAddress         string
+	Value             *big.Int
+	GasLimit          uint64
+	GasPrice          *big.Int
+	Timeout           time.Duration // Timeout for waiting for receipt. If 0, no timeout.
+	Retries           int           // Max failed receipt requests before giving up. If 0, retry forever.
+	Insecure          bool          // Skip TLS certificate verification
+	ExpectedExtraData string        // If set, verify block extra data matches this string
 }
 
 // DefaultTestTxConfig returns the default test transaction configuration
@@ -240,7 +241,17 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 				// Get block to show extra data (builder name)
 				block, err := elClient.BlockByNumber(ctx, receipt.BlockNumber)
 				if err == nil && block != nil {
-					fmt.Printf("  Extra Data: %s\n", string(block.Extra()))
+					extraHex := hex.EncodeToString(block.Extra())
+					fmt.Printf("  Extra Data: 0x%s\n", extraHex)
+
+					if cfg.ExpectedExtraData != "" {
+						expectedHex := hex.EncodeToString([]byte(cfg.ExpectedExtraData))
+						if extraHex != expectedHex {
+							fmt.Printf("  Extra Data check: failed\n")
+							return fmt.Errorf("extra data mismatch: expected 0x%s (%q), got 0x%s", expectedHex, cfg.ExpectedExtraData, extraHex)
+						}
+						fmt.Printf("  Extra Data check: passed\n")
+					}
 				}
 				return nil
 			}

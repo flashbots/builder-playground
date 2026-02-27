@@ -1,106 +1,162 @@
-# BuilderNet VM Scripts
+# BuilderNet VM for Playground
 
-Temporary bash scripts for running BuilderNet VM alongside builder-playground.
-Feel free to translate them to Go and integrate into the CLI.
+Run a BuilderNet VM alongside builder-playground's L1 network. The playground manages the L1 stack (Reth, Lighthouse, mev-boost-relay, builder-hub) in Docker, while a BuilderNet VM runs in QEMU and proposes blocks to the network.
 
-## Information:
+> **Important:** The VM image must be built with the `playground` mkosi profile. Production images are hardened and will not work with this setup.
 
-Changes are made in two repos:
-- [flashbots-images](https://github.com/flashbots/flashbots-images/tree/fryd/mkosi-playground) on `fryd/mkosi-playground` branch,
-- [builder-playground](https://github.com/flashbots/builder-playground/tree/fryd/mkosi-playground) on `fryd/mkosi-playground` branch,
+## Prerequisites
 
-There are no plans of using [buildernet-playground](https://github.com/flashbots/buildernet-playground) repo.
+- **Linux with KVM** (macOS is not supported)
+- **Docker** (for the L1 network stack)
+- **QEMU** with KVM support (`qemu-system-x86_64`)
+- **UEFI firmware** (`edk2-ovmf` or equivalent)
+- **socat** (for VM console access)
+- **jq**, **curl**
 
-## Start playground
-
-Start playground with: `--bind-external` (expose ports to the VM) and `--contender` (create transactions)
-
-```bash
-builder-playground \
-  start buildernet \
-  --bind-external \
-  --output ".playground-home" \
-  --contender \
-  --detached fryd-vm-builder
-```
-
-## First Time Setup
+Verify KVM is available:
 
 ```bash
-./sync.sh      # Clone / fetch flashbots-images repo
-./build.sh     # Build VM image with mkosi
-./prepare.sh   # Extract image + create data disk
+ls /dev/kvm
 ```
 
-`sync.sh` clones/updates the `fryd/mkosi-playground` branch of flashbots-images.
-
-## Run VM
+## Quick Start
 
 ```bash
-./start.sh     # Start VM (background)
-./console.sh   # Open console to the VM
-./ssh.sh       # SSH into running VM (requires SSH key setup)
-./stop.sh      # Stop VM
+# 1. Install builder-playground
+curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/install.sh | bash
+
+# 2. Create project dir and generate recipe files
+mkdir buildernet-dev && cd buildernet-dev
+builder-playground generate buildernet/mkosi
+
+# 3. Point to the VM image binary
+#    - alternatively you can edit playground.yaml
+#    - you can point to local disk or URL
+export BUILDERNET_IMAGE=flashbots-images/path/buildernet-playground.qcow2
+
+# 4. Start
+builder-playground start playground.yaml --bind-external --detached
+
+# 5. Verify by sending transaction
+builder-playground test --rpc http://localhost:18645 --el-rpc http://localhost:8545
 ```
 
-## Builder Hub
+If the test transaction is included in a block, the full pipeline is working: transaction reaches rbuilder inside the VM, rbuilder builds a block, and it lands on the L1 chain.
+
+## Using Your Own Image
+
+For developers working on [flashbots-images](https://github.com/flashbots/flashbots-images) who want to test VM changes against a local network.
+
+Build the image in your flashbots-images checkout using the **playground** mkosi profile, then point `BUILDERNET_IMAGE` to it:
+
+```yaml
+# In playground.yaml, under builder > env:
+env:
+  BUILDERNET_IMAGE: "/path/to/buildernet-qemu_latest.qcow2"
+```
+
+Or override via environment variable:
 
 ```bash
-./builderhub-configure.sh   # Register VM with builder-hub and update config for the VM
-./builderhub-get-config.sh  # Get configuration for the VM
+export BUILDERNET_IMAGE=/path/to/buildernet-qemu_latest.qcow2
 ```
+
+See the [flashbots-images](https://github.com/flashbots/flashbots-images) repository for build environment setup, available profiles, and customization options.
+
+## VM Management
+
+### Lifecycle
+
+```bash
+./scripts/stop.sh                        # Stop the VM (Docker L1 stack keeps running)
+./scripts/prepare.sh <path-or-url>       # Reset VM to fresh state
+./scripts/start.sh                       # Start the VM
+```
+
+### Access
+
+```bash
+./scripts/console.sh    # Serial console (exit: Ctrl+])
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BUILDERNET_IMAGE` | *(set in playground.yaml)* | Path or URL to the VM qcow2 image |
+| `QEMU_CPU` | `8` | Number of CPU cores |
+| `QEMU_RAM` | `32G` | Memory allocation |
+| `QEMU_ACCEL` | `kvm` | Acceleration (`kvm` or `tcg`) |
+
+Environment variables override values defined in `playground.yaml`.
 
 ## Operator API
 
-Scripts to interact with the operator-api service running inside the VM.
-
-> **Note:** Actions and File Uploads could potentially be used for various things, like injecting genesis config instead of BuilderHub - still exploring this functionality.
+The operator-api runs inside the VM and is exposed on port 13535:
 
 ```bash
-./operator-api-health.sh              # Check if operator-api is healthy
-./operator-api-logs.sh                # Get event logs
-./operator-api-action.sh <action>     # Execute an action
+./scripts/operator-api-health.sh            # Health check
+./scripts/operator-api-logs.sh              # Event logs
+./scripts/operator-api-action.sh <action>   # Execute an action
 ```
 
-Available actions:
-- `reboot` - Reboot the system
-- `rbuilder_restart` - Restart rbuilder-operator service
-- `rbuilder_stop` - Stop rbuilder-operator service
-- `fetch_config` - Fetch config from BuilderHub
-- `rbuilder_bidding_restart` - Restart rbuilder-bidding service
-- `ssh_stop` - Stop SSH service
-- `ssh_start` - Start SSH service
-- `haproxy_restart` - Restart HAProxy service
+Available actions: `reboot`, `rbuilder_restart`, `rbuilder_stop`, `fetch_config`, `rbuilder_bidding_restart`, `ssh_stop`, `ssh_start`, `haproxy_restart`.
 
-### File Uploads
-
-Upload files to predefined paths. Only whitelisted names from `[file_uploads]` config are allowed:
-
-```toml
-[file_uploads]
-rbuilder_blocklist = "/var/lib/persistent/rbuilder-operator/rbuilder.blocklist.json"
-```
+## Stopping
 
 ```bash
-# Stores local blocklist.json content to the configured remote path
-curl -k --data-binary "@blocklist.json" https://localhost:13535/api/v1/file-upload/rbuilder_blocklist
+# Stop just the VM (Docker keeps running)
+./scripts/stop.sh
+
+# Stop everything
+builder-playground stop <session-name>
+
+# Full cleanup
+builder-playground clean <session-name>
+./scripts/clean.sh
 ```
 
-### Customization
-
-To add more actions or file uploads, modify the config template:
-https://github.com/flashbots/flashbots-images/blob/fryd/mkosi-playground/mkosi.profiles/playground/mkosi.extra/usr/lib/mustache-templates/etc/operator-api/config.toml.mustache
-
-## Maintenance
-
-```bash
-./sync.sh      # Update flashbots-images to latest
-./clean.sh     # Clean build artifacts + runtime files
-```
+Use `builder-playground list` to find the session name.
 
 ## Ports
 
-| Port | Service |
-|------|---------|
-| 2222 | SSH (maps to VM:40192) |
-| 13535 | Operator API (maps to VM:3535) |
+### VM (QEMU host forwarding)
+
+| Host Port | VM Port | Service |
+|-----------|---------|---------|
+| 2222 | 40192 | SSH |
+| 13535 | 3535 | Operator API |
+| 18645 | 8645 | rbuilder JSON-RPC |
+| 10080 | 80 | HAProxy HTTP |
+| 10443 | 443 | HAProxy HTTPS |
+
+### Playground (Docker)
+
+Use `builder-playground port <service> <port-name>` to look up host ports. Common services: `el` (Reth), `beacon` (Lighthouse), `mev-boost-relay`.
+
+## File Structure
+
+After `builder-playground generate buildernet/mkosi`:
+
+```
+buildernet-dev/
+├── playground.yaml           # Recipe (L1 stack + VM lifecycle hooks)
+├── config/                   # configs used by the BuilderNet setup
+└── scripts/
+    ├── prepare.sh            # Download/copy image + create data disk
+    ├── start.sh              # Start the QEMU VM
+    ├── stop.sh               # Stop the QEMU VM
+    ├── console.sh            # Serial console
+    ├── clean.sh              # Remove runtime files
+    └── operator-api-*.sh     # Operator API helpers
+```
+
+## Troubleshooting
+
+**"KVM not available"** — Ensure `/dev/kvm` exists. You may need: `sudo usermod -aG kvm $USER`
+
+**"OVMF not found"** — Install UEFI firmware: `sudo apt install ovmf` (Debian/Ubuntu) or `sudo dnf install edk2-ovmf` (Fedora)
+
+**VM boots but doesn't connect** — Ensure playground was started with `--bind-external` so the VM can reach Docker services via `10.0.2.2` (QEMU user-mode networking gateway).
+
+**Console shows login prompt** — The image was not built with the `playground` mkosi profile. Rebuild with the profile enabled.

@@ -12,8 +12,8 @@ PIDFILE="${RUNTIME_DIR}/qemu.pid"
 CONSOLE_LOG="${RUNTIME_DIR}/console.log"
 CONSOLE_SOCK="${RUNTIME_DIR}/console.sock"
 
-CPU=8
-RAM=32G
+CPU="${QEMU_CPU:-8}"
+RAM="${QEMU_RAM:-32G}"
 SSH_PORT=2222
 OPERATOR_API_PORT=13535
 RBUILDER_RPC_PORT=18645
@@ -30,7 +30,28 @@ if [[ -f "${PIDFILE}" ]] && kill -0 $(cat "${PIDFILE}") 2>/dev/null; then
     exit 1
 fi
 
+# Determine acceleration mode
+ACCEL="${QEMU_ACCEL:-kvm}"
+if [[ "${ACCEL}" == "kvm" ]]; then
+    if [[ ! -e /dev/kvm ]]; then
+        echo "Error: KVM is not available (/dev/kvm not found)."
+        echo "Options:"
+        echo "  - Enable KVM on this host (load kvm kernel module)"
+        echo "  - Use software emulation: QEMU_ACCEL=tcg ./scripts/start.sh"
+        echo "    (TCG is ~10-20x slower but works anywhere)"
+        exit 1
+    fi
+    QEMU_ACCEL_ARGS=(-enable-kvm -cpu host)
+elif [[ "${ACCEL}" == "tcg" ]]; then
+    QEMU_ACCEL_ARGS=(-accel tcg -cpu max)
+else
+    echo "Error: Unknown QEMU_ACCEL value: ${ACCEL} (expected 'kvm' or 'tcg')"
+    exit 1
+fi
+
 echo "Starting VM..."
+echo "  Accel: ${ACCEL}"
+echo "  CPU: ${CPU} cores, RAM: ${RAM}"
 echo "  SSH: localhost:${SSH_PORT}"
 echo "  Operator API: localhost:${OPERATOR_API_PORT}"
 echo "  rbuilder RPC: localhost:${RBUILDER_RPC_PORT}"
@@ -41,8 +62,14 @@ echo "  Console socket: ${CONSOLE_SOCK}"
 
 source "${SCRIPT_DIR}/ovmf.sh"
 
-qemu-system-x86_64 \
-  -daemonize \
+echo "start.sh: launching qemu-system-x86_64..."
+echo "start.sh: QEMU_ACCEL_ARGS=${QEMU_ACCEL_ARGS[*]}"
+echo "start.sh: VM_IMAGE=${VM_IMAGE} ($(du -h "${VM_IMAGE}" | cut -f1))"
+echo "start.sh: VM_DATA_DISK=${VM_DATA_DISK}"
+
+# exec replaces this shell with QEMU so the playground can track and kill
+# the process directly. QEMU runs in the foreground (no -daemonize).
+exec qemu-system-x86_64 \
   -pidfile "${PIDFILE}" \
   -serial file:"${CONSOLE_LOG}" \
   -name buildernet-playground \
@@ -50,7 +77,7 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file="${OVMF_VARS}" \
   -drive format=qcow2,if=none,cache=none,id=osdisk,file="${VM_IMAGE}" \
   -device nvme,drive=osdisk,serial=nvme-os,bootindex=0 \
-  -enable-kvm -cpu host -m "${RAM}" -smp "${CPU}" -display none \
+  "${QEMU_ACCEL_ARGS[@]}" -m "${RAM}" -smp "${CPU}" -display none \
   -device virtio-scsi-pci,id=scsi0 \
   -drive file="${VM_DATA_DISK}",format=raw,if=none,id=datadisk \
   -device nvme,id=nvme0,serial=nvme-data \
@@ -59,30 +86,3 @@ qemu-system-x86_64 \
   -chardev socket,id=virtcon,path="${CONSOLE_SOCK}",server=on,wait=off \
   -device virtio-serial-pci \
   -device virtconsole,chardev=virtcon,name=org.qemu.console.0
-
-echo "VM started (PID: $(cat ${PIDFILE}))"
-echo "Use './scripts/stop.sh' to stop, './scripts/console.sh' to connect"
-echo "Use 'tail -f ${CONSOLE_LOG}' to watch console output"
-
-
-# TRIED TO DISABLE SERVICES - DID NOT WORK
-# error:
-#   qemu-system-x86_64: -append only allowed with -kernel option
-
-# PLAYGROUND_DISABLE_SERVICES=(
-#   reth-sync                    # Downloads Reth snapshot from S3 bucket
-#   acme-le                      # Issues Let's Encrypt TLS certificates
-#   acme-le-renewal              # Renews Let's Encrypt certificates
-#   rbuilder-bidding-downloader  # Downloads binary from private GitHub repo
-#   vector                       # Observability pipeline (logs/metrics)
-#   rbuilder-rebalancer          # ETH balance rebalancing across wallets
-#   operator-api                 # Management API for node operators
-#   config-watchdog              # Watches and reloads rbuilder config
-# )
-
-# mask_args() {
-#   [[ $# -gt 0 ]] && printf "systemd.mask=%s.service " "$@"
-# }
-# # # add argument to qemu-system-x86_64:
-# # \
-# #   -append "console=ttyS0 $(mask_args "${PLAYGROUND_DISABLE_SERVICES[@]}")"
