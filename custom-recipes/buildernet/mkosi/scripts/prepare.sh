@@ -2,7 +2,6 @@
 # Extract VM image and create data disk
 #
 # Usage:
-#   ./prepare.sh                              # Use default build output
 #   ./prepare.sh /path/to/image.qcow2         # Use local image
 #   ./prepare.sh https://example.com/img.qcow2 # Download from URL
 #
@@ -13,16 +12,20 @@ set -eu -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${SCRIPT_DIR}/.."
 
-FLASHBOTS_IMAGES_DIR="${PROJECT_DIR}/.flashbots-images"
 RUNTIME_DIR="${PROJECT_DIR}/.runtime"
-
-DEFAULT_QCOW2="${FLASHBOTS_IMAGES_DIR}/mkosi.output/buildernet-qemu_latest.qcow2"
 
 VM_IMAGE="${RUNTIME_DIR}/buildernet-vm.qcow2"
 VM_DATA_DISK="${RUNTIME_DIR}/persistent.raw"
 
-# Determine source image: $1 > $BUILDERNET_IMAGE > default build output
-SOURCE="${1:-${BUILDERNET_IMAGE:-${DEFAULT_QCOW2}}}"
+# Determine source image: $1 > $BUILDERNET_IMAGE > error
+SOURCE="${1:-${BUILDERNET_IMAGE:-}}"
+
+if [[ -z "${SOURCE}" ]]; then
+    echo "Error: no VM image specified."
+    echo "Set BUILDERNET_IMAGE or pass a path/URL as argument."
+    echo "Usage: ./scripts/prepare.sh [/path/to/image.qcow2 | https://url/to/image.qcow2]"
+    exit 1
+fi
 
 echo "prepare.sh: PROJECT_DIR=${PROJECT_DIR}"
 echo "prepare.sh: RUNTIME_DIR=${RUNTIME_DIR}"
@@ -41,10 +44,6 @@ elif [[ -f "${SOURCE}" ]]; then
     cp --sparse=always "${SOURCE}" "${VM_IMAGE}"
 else
     echo "Error: VM image not found: ${SOURCE}"
-    if [[ "${SOURCE}" == "${DEFAULT_QCOW2}" ]]; then
-        echo "Run './scripts/sync.sh && ./scripts/build.sh' first, or pass a path/URL as argument."
-    fi
-    echo "Usage: ./scripts/prepare.sh [/path/to/image.qcow2 | https://url/to/image.qcow2]"
     exit 1
 fi
 

@@ -31,6 +31,17 @@ func (lc *lifecycleContext) newCmd(ctx context.Context, command string) *exec.Cm
 	cmd.Dir = lc.dir
 	cmd.Stdout = lc.logWriter
 	cmd.Stderr = lc.logWriter
+	if len(lc.svc.Env) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range lc.svc.Env {
+			// YAML env vars act as defaults: only set if not already
+			// present in the process environment. This lets CI / shell
+			// override values defined in the recipe.
+			if _, exists := os.LookupEnv(k); !exists {
+				cmd.Env = append(cmd.Env, k+"="+v)
+			}
+		}
+	}
 	return cmd
 }
 

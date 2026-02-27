@@ -25,17 +25,19 @@ ls /dev/kvm
 # 1. Install builder-playground
 curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/install.sh | bash
 
-# 2. Create project directory and generate recipe files
+# 2. Create project dir and generate recipe files
 mkdir buildernet-dev && cd buildernet-dev
 builder-playground generate buildernet/mkosi
 
-# 3. Download the VM image and prepare runtime
-./scripts/prepare.sh https://example.com/buildernet-playground.qcow2
+# 3. Point to the VM image binary
+#    - alternatively you can edit playground.yaml
+#    - you can point to local disk or URL
+export BUILDERNET_IMAGE=flashbots-images/path/buildernet-playground.qcow2
 
-# 4. Start everything
+# 4. Start
 builder-playground start playground.yaml --bind-external --detached
 
-# 5. Send a test transaction through rbuilder
+# 5. Verify by sending transaction
 builder-playground test --rpc http://localhost:18645 --el-rpc http://localhost:8545
 ```
 
@@ -45,12 +47,18 @@ If the test transaction is included in a block, the full pipeline is working: tr
 
 For developers working on [flashbots-images](https://github.com/flashbots/flashbots-images) who want to test VM changes against a local network.
 
-Build the image in your flashbots-images checkout using the **playground** mkosi profile.
+Build the image in your flashbots-images checkout using the **playground** mkosi profile, then point `BUILDERNET_IMAGE` to it:
 
-Then pass the image path to prepare:
+```yaml
+# In playground.yaml, under builder > env:
+env:
+  BUILDERNET_IMAGE: "/path/to/buildernet-qemu_latest.qcow2"
+```
+
+Or override via environment variable:
 
 ```bash
-./scripts/prepare.sh /path/to/buildernet-qemu_latest.qcow2
+export BUILDERNET_IMAGE=/path/to/buildernet-qemu_latest.qcow2
 ```
 
 See the [flashbots-images](https://github.com/flashbots/flashbots-images) repository for build environment setup, available profiles, and customization options.
@@ -60,9 +68,9 @@ See the [flashbots-images](https://github.com/flashbots/flashbots-images) reposi
 ### Lifecycle
 
 ```bash
-./scripts/stop.sh       # Stop the VM (Docker L1 stack keeps running)
-./scripts/prepare.sh <url-or-path>  # Reset VM to fresh state
-./scripts/start.sh      # Start the VM
+./scripts/stop.sh                        # Stop the VM (Docker L1 stack keeps running)
+./scripts/prepare.sh <path-or-url>       # Reset VM to fresh state
+./scripts/start.sh                       # Start the VM
 ```
 
 ### Access
@@ -75,28 +83,12 @@ See the [flashbots-images](https://github.com/flashbots/flashbots-images) reposi
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `BUILDERNET_IMAGE` | *(set in playground.yaml)* | Path or URL to the VM qcow2 image |
 | `QEMU_CPU` | `8` | Number of CPU cores |
 | `QEMU_RAM` | `32G` | Memory allocation |
 | `QEMU_ACCEL` | `kvm` | Acceleration (`kvm` or `tcg`) |
 
-## Development Workflow
-
-The Docker L1 stack stays running while you iterate on the VM image:
-
-```bash
-# 1. Stop the VM
-./scripts/stop.sh
-
-# 2. Rebuild the image (in your flashbots-images checkout)
-#    IMPORTANT: use `playground` mkosi profile when building
-
-# 3. Prepare and restart
-./scripts/prepare.sh /path/to/buildernet-qemu_latest.qcow2
-./scripts/start.sh
-
-# 4. Verify
-builder-playground test --rpc http://localhost:18645 --el-rpc http://localhost:8545
-```
+Environment variables override values defined in `playground.yaml`.
 
 ## Operator API
 
