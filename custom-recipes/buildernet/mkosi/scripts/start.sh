@@ -21,7 +21,11 @@ HAPROXY_HTTP_PORT=10080
 HAPROXY_HTTPS_PORT=10443
 
 if [[ ! -f "${VM_IMAGE}" ]]; then
-    echo "Error: VM image not found. Run ./scripts/prepare.sh first."
+    echo "Error: VM image not found at ${VM_IMAGE}"
+    echo ""
+    echo "Run ./scripts/prepare.sh to set up the runtime:"
+    echo "  ./scripts/prepare.sh https://example.com/buildernet.qcow2   # download from URL"
+    echo "  ./scripts/prepare.sh /path/to/buildernet-qemu_latest.qcow2  # use local image"
     exit 1
 fi
 

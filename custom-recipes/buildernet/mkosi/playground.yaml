@@ -30,9 +30,6 @@ recipe:
 
       builder:
         lifecycle_hooks: true
-        init:
-          - rm -rf .runtime/buildernet-vm.qcow2 || true
-          - ./scripts/prepare.sh
         start: ./scripts/start.sh
         stop:
           - ./scripts/stop.sh
