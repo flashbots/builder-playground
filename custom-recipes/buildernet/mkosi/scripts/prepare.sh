@@ -31,6 +31,9 @@ echo "prepare.sh: PROJECT_DIR=${PROJECT_DIR}"
 echo "prepare.sh: RUNTIME_DIR=${RUNTIME_DIR}"
 echo "prepare.sh: SOURCE=${SOURCE}"
 
+# Ensure the VM is stopped before replacing runtime files (PID file, disk images).
+"${SCRIPT_DIR}/stop.sh"
+
 rm -rf "${RUNTIME_DIR}"
 mkdir -p "${RUNTIME_DIR}"
 

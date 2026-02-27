@@ -33,7 +33,6 @@ recipe:
         env:
           BUILDERNET_IMAGE: ".flashbots-images/mkosi.output/buildernet-qemu_latest.qcow2"
         init:
-          - rm -rf .runtime/buildernet-vm.qcow2 || true
           - ./scripts/prepare.sh
         start: ./scripts/start.sh
         stop:
