@@ -7,7 +7,7 @@ PROJECT_DIR="${SCRIPT_DIR}/.."
 
 FLASHBOTS_IMAGES_DIR="${PROJECT_DIR}/.flashbots-images"
 FLASHBOTS_IMAGES_REPO="https://github.com/flashbots/flashbots-images.git"
-FLASHBOTS_IMAGES_BRANCH="${FLASHBOTS_IMAGES_BRANCH:-main}"
+FLASHBOTS_IMAGES_BRANCH="${FLASHBOTS_IMAGES_BRANCH:-fryd/mkosi-playground}"
 
 if [[ ! -d "${FLASHBOTS_IMAGES_DIR}" ]]; then
     echo "Cloning flashbots-images (branch: ${FLASHBOTS_IMAGES_BRANCH})..."
