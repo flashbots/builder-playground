@@ -29,13 +29,14 @@ curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/i
 mkdir buildernet-dev && cd buildernet-dev
 builder-playground generate buildernet/mkosi
 
-# 3. Point to the VM image
-#    - you can point to a local file or URL
-#    - alternatively you can set this in playground.yaml (see below)
+# 3. Build a VM image or point to it
+# Build
+./scripts/build.sh
+# or you can point to a local file or URL (can be set in playground.yaml - see below)
 export BUILDERNET_IMAGE=/path/to/buildernet-qemu.qcow2
 
 # 4. Start (runs L1 Docker stack + VM in the background)
-builder-playground start playground.yaml --bind-external --detached
+builder-playground start playground.yaml --bind-external
 
 # 5. Wait for the VM to boot (~60-90s) then check readiness
 ./scripts/operator-api-health.sh    # repeat until you see "OK"
