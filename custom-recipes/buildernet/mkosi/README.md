@@ -44,7 +44,7 @@ builder-playground start playground.yaml --bind-external --detached
 builder-playground test --rpc http://localhost:18645 --el-rpc http://localhost:8545
 ```
 
-If the test transaction is included in a block, the full pipeline is working: transaction reaches rbuilder inside the VM, rbuilder builds a block, and it lands on the L1 chain.
+If the test transaction is included in a block and the Extra Data shows `Playground VM Builder`, the full pipeline is working: transaction reaches rbuilder inside the VM, rbuilder builds a block, and it lands on the L1 chain.
 
 You can also set `BUILDERNET_IMAGE` in `playground.yaml` instead of using an environment variable:
 
