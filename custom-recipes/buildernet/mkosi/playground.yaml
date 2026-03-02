@@ -1,5 +1,6 @@
 base: buildernet
-description: Deploy the stack with the BuilderNet mkosi image (QEMU)
+description: Deploy the stack with the BuilderNet mkosi image (QEMU) - check out the README before running!
+hidden: true
 
 recipe:
   builder-vm:

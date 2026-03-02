@@ -22,6 +22,9 @@ type YAMLRecipeConfig struct {
 	// Description is an optional description of the recipe
 	Description string `yaml:"description,omitempty"`
 
+	// Hidden indicates this recipe should be excluded from listings and automated discovery
+	Hidden bool `yaml:"hidden,omitempty"`
+
 	// Setup is a list of shell commands to run before any services are launched.
 	// Commands run sequentially in the recipe's directory; each must exit 0.
 	Setup []string `yaml:"setup,omitempty"`
