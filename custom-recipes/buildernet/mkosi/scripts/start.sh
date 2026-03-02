@@ -62,14 +62,16 @@ echo "  Console socket: ${CONSOLE_SOCK}"
 
 source "${SCRIPT_DIR}/ovmf.sh"
 
+READYZ_TIMEOUT="${READYZ_TIMEOUT:-300}"
+
 echo "start.sh: launching qemu-system-x86_64..."
 echo "start.sh: QEMU_ACCEL_ARGS=${QEMU_ACCEL_ARGS[*]}"
 echo "start.sh: VM_IMAGE=${VM_IMAGE} ($(du -h "${VM_IMAGE}" | cut -f1))"
 echo "start.sh: VM_DATA_DISK=${VM_DATA_DISK}"
 
-# exec replaces this shell with QEMU so the playground can track and kill
-# the process directly. QEMU runs in the foreground (no -daemonize).
-exec qemu-system-x86_64 \
+# QEMU daemonizes (forks into background)
+qemu-system-x86_64 \
+  -daemonize \
   -pidfile "${PIDFILE}" \
   -serial file:"${CONSOLE_LOG}" \
   -name buildernet-playground \
@@ -86,3 +88,33 @@ exec qemu-system-x86_64 \
   -chardev socket,id=virtcon,path="${CONSOLE_SOCK}",server=on,wait=off \
   -device virtio-serial-pci \
   -device virtconsole,chardev=virtcon,name=org.qemu.console.0
+
+echo "VM started (PID: $(cat "${PIDFILE}"))"
+echo "Waiting for VM to become ready (timeout: ${READYZ_TIMEOUT}s)..."
+echo "  Console: tail -f ${CONSOLE_LOG}"
+echo "  Socket:  socat -,rawer UNIX-CONNECT:${CONSOLE_SOCK}"
+
+READYZ_URL="https://localhost:${HAPROXY_HTTPS_PORT}/readyz"
+DEADLINE=$(( SECONDS + READYZ_TIMEOUT ))
+
+while (( SECONDS < DEADLINE )); do
+    sleep 5
+
+    # Fail fast if QEMU died (bad image, kernel panic, etc.)
+    if ! kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+        echo "Error: QEMU process died during boot"
+        echo "  Check console log: tail -f ${CONSOLE_LOG}"
+        exit 1
+    fi
+
+    HTTP_CODE=$(curl -s -k -o /dev/null -w "%{http_code}" "${READYZ_URL}" 2>/dev/null || echo "000")
+    if [[ "${HTTP_CODE}" == "200" ]]; then
+        echo "VM ready after $(( READYZ_TIMEOUT - (DEADLINE - SECONDS) ))s (PID: $(cat "${PIDFILE}"))"
+        exit 0
+    fi
+    echo "  waiting... $(( READYZ_TIMEOUT - (DEADLINE - SECONDS) ))s (HTTP ${HTTP_CODE})"
+done
+
+echo "Error: VM did not become ready within ${READYZ_TIMEOUT}s"
+echo "  Check console log: tail -f ${CONSOLE_LOG}"
+exit 1
