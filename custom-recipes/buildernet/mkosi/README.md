@@ -26,6 +26,7 @@ ls /dev/kvm
 curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/install.sh | bash
 
 # 2. Create project dir and generate recipe files
+# (ignore if you're reading the generated README)
 mkdir buildernet-dev && cd buildernet-dev
 builder-playground generate buildernet/mkosi
 
