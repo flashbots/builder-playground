@@ -474,8 +474,11 @@ var recipesCmd = &cobra.Command{
 		}
 		whiteTitleColor.Println("Custom Recipes:")
 		for _, cr := range customRecipes {
-			fmt.Println("  " + customRecipesColor.Sprint(cr))
 			info, err := playground.GetCustomRecipeInfo(cr, recipes)
+			if err == nil && info.Hidden {
+				continue
+			}
+			fmt.Println("  " + customRecipesColor.Sprint(cr))
 			if err == nil {
 				if info.Description != "" {
 					descriptionColor.Add(color.Bold).Printf("    %s\n", info.Description)
@@ -575,6 +578,10 @@ func main() {
 	var customRecipes []playground.Recipe
 
 	for _, crName := range customRecipeNames {
+		info, err := playground.GetCustomRecipeInfo(crName, recipes)
+		if err == nil && info.Hidden {
+			continue // Skip hidden custom recipes
+		}
 		customRecipe, cleanup, err := playground.LoadCustomRecipe(crName, recipes)
 		if err != nil {
 			continue // Skip invalid custom recipes

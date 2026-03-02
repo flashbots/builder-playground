@@ -56,6 +56,7 @@ type CustomRecipeInfo struct {
 	Name               string
 	Description        string
 	Base               string
+	Hidden             bool
 	ModifiedComponents []string
 	NewComponents      []string
 }
@@ -94,6 +95,7 @@ func GetCustomRecipeInfo(customRecipeName string, baseRecipes []Recipe) (*Custom
 		Name:        customRecipeName,
 		Base:        config.Base,
 		Description: config.Description,
+		Hidden:      config.Hidden,
 	}
 
 	// Find the base recipe to get its components
