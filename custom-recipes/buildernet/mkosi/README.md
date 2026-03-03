@@ -8,10 +8,10 @@ Run a BuilderNet VM alongside builder-playground's L1 network. The playground ma
 
 - **Linux with KVM** (macOS is not supported)
 - **Docker** (for the L1 network stack)
-- **QEMU** with KVM support (`qemu-system-x86_64`)
+- **QEMU** with KVM support (`qemu-system-x86_64`, `qemu-utils`)
 - **UEFI firmware** (`edk2-ovmf` or equivalent)
 - **socat** (for VM console access)
-- **jq**, **curl**
+- **jq**, **curl**, **unzip**
 
 Verify KVM is available:
 
@@ -29,39 +29,42 @@ curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/i
 mkdir buildernet-dev && cd buildernet-dev
 builder-playground generate buildernet/mkosi
 
-# 3. Point to the VM image binary
-#    - alternatively you can edit playground.yaml
-#    - you can point to local disk or URL
-export BUILDERNET_IMAGE=flashbots-images/path/buildernet-playground.qcow2
+# 3. Point to the VM image
+#    - you can point to a local file or URL
+#    - alternatively you can set this in playground.yaml (see below)
+export BUILDERNET_IMAGE=/path/to/buildernet-qemu.qcow2
 
-# 4. Start
+# 4. Start (runs L1 Docker stack + VM in the background)
 builder-playground start playground.yaml --bind-external --detached
 
-# 5. Verify by sending transaction
+# 5. Wait for the VM to boot (~60-90s) then check readiness
+./scripts/operator-api-health.sh    # repeat until you see "OK"
+
+# 6. Verify by sending a transaction
 builder-playground test --rpc http://localhost:18645 --el-rpc http://localhost:8545
 ```
 
-If the test transaction is included in a block, the full pipeline is working: transaction reaches rbuilder inside the VM, rbuilder builds a block, and it lands on the L1 chain.
+If the test transaction is included in a block and the Extra Data shows `Playground VM Builder`, the full pipeline is working: transaction reaches rbuilder inside the VM, rbuilder builds a block, and it lands on the L1 chain.
 
-## Using Your Own Image
-
-For developers working on [flashbots-images](https://github.com/flashbots/flashbots-images) who want to test VM changes against a local network.
-
-Build the image in your flashbots-images checkout using the **playground** mkosi profile, then point `BUILDERNET_IMAGE` to it:
+You can also set `BUILDERNET_IMAGE` in `playground.yaml` instead of using an environment variable:
 
 ```yaml
 # In playground.yaml, under builder > env:
 env:
-  BUILDERNET_IMAGE: "/path/to/buildernet-qemu_latest.qcow2"
+  BUILDERNET_IMAGE: "/path/to/buildernet-qemu.qcow2"
 ```
 
-Or override via environment variable:
+## Building Your Own Image
+
+For developers working on [flashbots-images](https://github.com/flashbots/flashbots-images) who want to test VM changes against a local network.
+
+Build the image in your flashbots-images checkout using the **playground** mkosi profile, then point `BUILDERNET_IMAGE` to the output:
 
 ```bash
-export BUILDERNET_IMAGE=/path/to/buildernet-qemu_latest.qcow2
+export BUILDERNET_IMAGE=/path/to/flashbots-images/mkosi.output/buildernet-qemu_latest.qcow2
 ```
 
-See the [flashbots-images](https://github.com/flashbots/flashbots-images) repository for build environment setup, available profiles, and customization options.
+See the [flashbots-images](https://github.com/flashbots/flashbots-images) repository for build environment setup, available profiles, and customization options. You can also look at [`./scripts/build.sh`](scripts/build.sh) for a reference on how to clone and build the image.
 
 ## VM Management
 
@@ -78,6 +81,22 @@ See the [flashbots-images](https://github.com/flashbots/flashbots-images) reposi
 ```bash
 ./scripts/console.sh    # Serial console (exit: Ctrl+])
 ```
+
+### Logs
+
+VM serial output (kernel, systemd, service logs) is captured to `.runtime/console.log`:
+
+```bash
+tail -f .runtime/console.log
+```
+
+For operator-api event logs (rbuilder lifecycle, config fetches, etc.):
+
+```bash
+./scripts/operator-api-logs.sh
+```
+
+For Docker service logs (Reth, Lighthouse, mev-boost-relay, etc.), use `builder-playground logs`.
 
 ### Environment Variables
 
@@ -108,15 +127,13 @@ Available actions: `reboot`, `rbuilder_restart`, `rbuilder_stop`, `fetch_config`
 # Stop just the VM (Docker keeps running)
 ./scripts/stop.sh
 
-# Stop everything
+# Stop everything (use `builder-playground list` to find the session name)
 builder-playground stop <session-name>
 
 # Full cleanup
 builder-playground clean <session-name>
 ./scripts/clean.sh
 ```
-
-Use `builder-playground list` to find the session name.
 
 ## Ports
 
