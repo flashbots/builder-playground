@@ -29,16 +29,16 @@ curl -sSfL https://raw.githubusercontent.com/flashbots/builder-playground/main/i
 mkdir buildernet-dev && cd buildernet-dev
 builder-playground generate buildernet/mkosi
 
-# 3. Point to the VM image
-#    - you can point to a local file or URL
-#    - alternatively you can set this in playground.yaml (see below)
+# 3. Point to the VM image — local path, https:// URL, or set in playground.yaml.
+#    Skip to download the latest pre-built image automatically.
+#    Pre-built images: https://downloads.buildernet.org/buildernet-playground-images/
 export BUILDERNET_IMAGE=/path/to/buildernet-qemu.qcow2
 
 # 4. Start (runs L1 Docker stack + VM in the background)
 builder-playground start playground.yaml --bind-external --detached
 
-# 5. Wait for the VM to boot (~60-90s) then check readiness
-./scripts/operator-api-health.sh    # repeat until you see "OK"
+# 5. Wait for the VM to be ready
+./scripts/readyz.sh
 
 # 6. Verify by sending a transaction
 builder-playground test --rpc http://localhost:18645 --el-rpc http://localhost:8545
@@ -102,7 +102,7 @@ For Docker service logs (Reth, Lighthouse, mev-boost-relay, etc.), use `builder-
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BUILDERNET_IMAGE` | *(set in playground.yaml)* | Path or URL to the VM qcow2 image |
+| `BUILDERNET_IMAGE` | pre-built image URL (see playground.yaml) | Local path or https:// URL to the VM qcow2 image |
 | `QEMU_CPU` | `8` | Number of CPU cores |
 | `QEMU_RAM` | `32G` | Memory allocation |
 | `QEMU_ACCEL` | `kvm` | Acceleration (`kvm` or `tcg`) |
@@ -163,6 +163,7 @@ buildernet-dev/
     ├── prepare.sh            # Download/copy image + create data disk
     ├── start.sh              # Start the QEMU VM
     ├── stop.sh               # Stop the QEMU VM
+    ├── readyz.sh             # Wait for VM readiness (/readyz on HAProxy)
     ├── console.sh            # Serial console
     ├── clean.sh              # Remove runtime files
     └── operator-api-*.sh     # Operator API helpers
