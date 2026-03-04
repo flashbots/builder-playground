@@ -32,7 +32,7 @@ recipe:
       builder:
         lifecycle_hooks: true
         env:
-          BUILDERNET_IMAGE: "https://downloads.buildernet.org/buildernet-playground-images/dev-20260303-3059b761/buildernet-qemu_dev-20260303-3059b761.qcow2"
+          BUILDERNET_IMAGE: "https://downloads.buildernet.org/buildernet-playground-images/v2.3.1/buildernet-qemu_2.3.1-46fd6f50.qcow2"
         init:
           - ./scripts/prepare.sh
         start: ./scripts/start.sh
