@@ -51,7 +51,8 @@ else
 fi
 
 echo "prepare.sh: creating data disk..."
-qemu-img create -f raw "${VM_DATA_DISK}" 100G
+VM_DATA_DISK_SIZE="${VM_DATA_DISK_SIZE:-100G}"
+qemu-img create -f raw "${VM_DATA_DISK}" "${VM_DATA_DISK_SIZE}"
 
 echo "prepare.sh: runtime ready"
 ls -lah "${RUNTIME_DIR}"
