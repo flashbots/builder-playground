@@ -382,7 +382,7 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 	var trustedPeers string
 	if ctx.Bootnode != nil {
 		// TODO: Figure out the port dynamically.
-		trustedPeers = fmt.Sprintf("--bootnodes enode://%s@$(awk '/host.docker.internal/ {print $1; exit}' /etc/hosts):30303 ", ctx.Bootnode.ID)
+		trustedPeers = fmt.Sprintf("--bootnodes enode://%s@$(getent hosts bootnode | awk '{print $1}'):30303 --discovery.v4 ", ctx.Bootnode.ID)
 	} else {
 		trustedPeers = "--nodiscover "
 	}
