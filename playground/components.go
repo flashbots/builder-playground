@@ -379,12 +379,11 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 	component := NewComponent("op-geth")
 	o.Enode = ctx.Output.GetEnodeAddr()
 
-	// TODO: this does not work for op-geth because hostnames are not allowed
-	// in geth bootnode config (node will break on startup if we remove --nodiscover below)
-	// var trustedPeers string
-	// if ctx.Bootnode != nil {
-	// 	trustedPeers = fmt.Sprintf("--bootnodes %s ", ctx.Bootnode.Connect())
-	// }
+	var trustedPeers string
+	if ctx.Bootnode != nil {
+		// TODO: Figure out the port dynamically.
+		trustedPeers = fmt.Sprintf("--bootnodes enode://%s@$(awk '/host.docker.internal/ {print $1; exit}' /etc/hosts):30303 ", ctx.Bootnode.ID)
+	}
 
 	svc := component.NewService("op-geth").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
@@ -409,7 +408,6 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 				"--ws.origins \"*\" "+
 				"--ws.api debug,eth,txpool,net,engine,miner "+
 				"--syncmode full "+
-				"--nodiscover "+
 				"--maxpeers 5 "+
 				"--rpc.allow-unprotected-txs "+
 				"--authrpc.addr 0.0.0.0 "+
@@ -420,7 +418,7 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
 				"--nodekey /data/p2p_key.txt "+
-				// trustedPeers+
+				trustedPeers+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
