@@ -2,13 +2,12 @@ package playground
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	_ "embed"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
@@ -81,7 +80,6 @@ func (o *OpRbuilder) Apply(ctx *ExContext) *Component {
 			"--http.port", `{{Port "http" 8545}}`,
 			"--chain", "/data/l2-genesis.json",
 			"--datadir", "/data_op_reth",
-			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			"--port", `{{Port "rpc" 30303}}`,
@@ -100,7 +98,9 @@ func (o *OpRbuilder) Apply(ctx *ExContext) *Component {
 		})
 
 	if ctx.Bootnode != nil {
-		service.WithArgs("--bootnodes", ctx.Bootnode.Connect())
+		service.WithArgs("--bootnodes", ctx.Bootnode.Connect(), "--nat", "none", "--rollup.discovery.v4")
+	} else {
+		service.WithArgs("--disable-discovery")
 	}
 
 	if o.Flashblocks {
@@ -159,7 +159,6 @@ func (f *FlashblocksRPC) Apply(ctx *ExContext) *Component {
 		"--http.port", `{{Port "http" 8545}}`,
 		"--chain", "/data/l2-genesis.json",
 		"--datadir", "/data_op_reth",
-		"--disable-discovery",
 		"--color", "never",
 		"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 		"--port", `{{Port "rpc" 30303}}`,
@@ -171,7 +170,11 @@ func (f *FlashblocksRPC) Apply(ctx *ExContext) *Component {
 	if ctx.Bootnode != nil {
 		service.WithArgs(
 			"--bootnodes", ctx.Bootnode.Connect(),
+			"--nat", "none",
+			"--rollup.discovery.v4",
 		)
+	} else {
+		service.WithArgs("--disable-discovery")
 	}
 
 	return component
@@ -376,10 +379,12 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 	component := NewComponent("op-geth")
 	o.Enode = ctx.Output.GetEnodeAddr()
 
-	var trustedPeers string
-	if ctx.Bootnode != nil {
-		trustedPeers = fmt.Sprintf("--bootnodes %s ", ctx.Bootnode.Connect())
-	}
+	// TODO: this does not work for op-geth because hostnames are not allowed
+	// in geth bootnode config (node will break on startup if we remove --nodiscover below)
+	// var trustedPeers string
+	// if ctx.Bootnode != nil {
+	// 	trustedPeers = fmt.Sprintf("--bootnodes %s ", ctx.Bootnode.Connect())
+	// }
 
 	svc := component.NewService("op-geth").
 		WithImage("us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth").
@@ -415,7 +420,7 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 				"--state.scheme hash "+
 				"--port "+`{{Port "rpc" 30303}} `+
 				"--nodekey /data/p2p_key.txt "+
-				trustedPeers+
+				// trustedPeers+
 				"--metrics "+
 				"--metrics.addr 0.0.0.0 "+
 				"--metrics.port "+`{{Port "metrics" 6061}}`,
@@ -483,7 +488,6 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 			"--color", "never",
 			"--addr", "0.0.0.0",
 			"--port", `{{Port "rpc" 30303}}`,
-			// "--disable-discovery",
 			"--ipcpath", "/data_reth/reth.ipc",
 			// http config
 			"--http",
@@ -510,7 +514,9 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 		WithVolume("data", "/data_reth", true)
 
 	if ctx.Bootnode != nil {
-		svc.WithArgs("--bootnodes", ctx.Bootnode.Connect())
+		svc.WithArgs("--bootnodes", ctx.Bootnode.Connect(), "--nat", "none")
+	} else {
+		svc.WithArgs("--disable-discovery")
 	}
 
 	UseHealthmon(component, svc, healthmonExecution)
@@ -691,7 +697,6 @@ func (o *OpReth) Apply(ctx *ExContext) *Component {
 			"--http.port", `{{Port "http" 8545}}`,
 			"--chain", "/data/l2-genesis.json",
 			"--datadir", "/data_op_reth",
-			"--disable-discovery",
 			"--color", "never",
 			"--metrics", `0.0.0.0:{{Port "metrics" 9090}}`,
 			"--addr", "0.0.0.0",
@@ -700,6 +705,12 @@ func (o *OpReth) Apply(ctx *ExContext) *Component {
 		WithArtifact("/data/jwtsecret", "jwtsecret").
 		WithArtifact("/data/l2-genesis.json", "l2-genesis.json").
 		WithVolume("data", "/data_op_reth")
+
+	if ctx.Bootnode != nil {
+		svc.WithArgs("--bootnodes", ctx.Bootnode.Connect(), "--nat", "none", "--rollup.discovery.v4")
+	} else {
+		svc.WithArgs("--disable-discovery")
+	}
 
 	UseHealthmon(component, svc, healthmonExecution)
 
@@ -1057,22 +1068,15 @@ func registerBuilderHook(ctx context.Context, exCtx *ExContext, manifest *Manife
 	return nil
 }
 
-type BootnodeProtocol string
-
-const (
-	BootnodeProtocolV5 BootnodeProtocol = "v5"
-)
-
 type Bootnode struct {
-	Protocol BootnodeProtocol
-	Enode    *EnodeAddr
+	Enode *EnodeAddr
 }
 
 func (b *Bootnode) Apply(ctx *ExContext) *Component {
 	component := NewComponent("bootnode")
 
 	b.Enode = ctx.Output.GetEnodeAddr()
-	svc := component.NewService("bootnode").
+	component.NewService("bootnode").
 		WithImage("ghcr.io/paradigmxyz/reth").
 		WithTag("v1.9.3").
 		WithEntrypoint("/usr/local/bin/reth").
@@ -1082,12 +1086,10 @@ func (b *Bootnode) Apply(ctx *ExContext) *Component {
 			"--p2p-secret-key", "/data/p2p_key.txt",
 			"-vvvv",
 			"--color", "never",
+			"--nat", "none",
+			"--v5",
 		).
 		WithArtifact("/data/p2p_key.txt", b.Enode.Artifact)
-
-	if b.Protocol == BootnodeProtocolV5 {
-		svc.WithArgs("--v5")
-	}
 
 	// Mutate the execution context by setting the bootnode.
 	ctx.Bootnode = &BootnodeRef{
