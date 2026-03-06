@@ -35,7 +35,6 @@ graph LR
   beacon -->|authrpc| el
   beacon_healthmon -->|http| beacon
   validator -->|http| beacon
-  op_geth -->|rpc| bootnode
   op_geth_healthmon -->|http| op_geth
   op_node -->|http| el
   op_node -->|http| beacon
