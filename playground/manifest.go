@@ -279,6 +279,20 @@ func (s *Manifest) Validate(out *output) error {
 
 			readyCheck := *ss.ReadyCheck
 			ss.ReadyCheck = nil
+
+			// Apply sensible defaults so Docker doesn't fall back to 30s interval
+			if readyCheck.Interval == 0 {
+				readyCheck.Interval = 1 * time.Second
+			}
+			if readyCheck.Timeout == 0 {
+				readyCheck.Timeout = 10 * time.Second
+			}
+			if readyCheck.Retries == 0 {
+				readyCheck.Retries = 30
+			}
+			if readyCheck.StartPeriod == 0 {
+				readyCheck.StartPeriod = 1 * time.Second
+			}
 			ss.WithLabel(healthCheckSidecarLabel, sidecarName)
 
 			// the url supplied by the service will bind to localhost, we have to change it
