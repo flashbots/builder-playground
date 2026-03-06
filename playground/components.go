@@ -383,6 +383,8 @@ func (o *OpGeth) Apply(ctx *ExContext) *Component {
 	if ctx.Bootnode != nil {
 		// TODO: Figure out the port dynamically.
 		trustedPeers = fmt.Sprintf("--bootnodes enode://%s@$(awk '/host.docker.internal/ {print $1; exit}' /etc/hosts):30303 ", ctx.Bootnode.ID)
+	} else {
+		trustedPeers = "--nodiscover "
 	}
 
 	svc := component.NewService("op-geth").
