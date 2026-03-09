@@ -916,8 +916,7 @@ func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 		return fmt.Errorf("failed waiting for dependencies: %w", err)
 	}
 
-	// TODO: Use env vars in host processes
-	args, _, err := d.applyTemplate(ss)
+	args, envs, err := d.applyTemplate(ss)
 	if err != nil {
 		return fmt.Errorf("failed to apply template, err: %w", err)
 	}
@@ -953,6 +952,12 @@ func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 	execPath := ss.HostPath
 	cmd := exec.Command(execPath, args...)
 	cmd.Dir = d.out.sessionDir // Run from artifacts directory so relative paths work
+	if len(envs) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range envs {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+	}
 
 	logOutput, err := d.out.LogOutput(ss.Name)
 	if err != nil {
