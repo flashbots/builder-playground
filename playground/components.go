@@ -2,13 +2,12 @@ package playground
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	_ "embed"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"

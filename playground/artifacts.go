@@ -263,6 +263,9 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		return err
 	}
 
+	// add Safe Singleton Factory (deterministic CREATE2 deployer)
+	appendSafeSingletonFactoryToAlloc(&gen.Alloc)
+
 	// Apply Optimism pre-state
 	var l2Fork *l2ForkConfig
 	if b.l2Enabled {
@@ -362,6 +365,9 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 		if err := appendPrefundedAccountsToAlloc(&allocs, b.getPrefundedAccounts()); err != nil {
 			return err
 		}
+
+		// add Safe Singleton Factory (deterministic CREATE2 deployer)
+		appendSafeSingletonFactoryToAlloc(&allocs)
 
 		// override l2 genesis, make the timestamp start 2 seconds after the L1 genesis
 		input := map[string]interface{}{
@@ -846,6 +852,20 @@ func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []strin
 		}
 	}
 	return nil
+}
+
+// safeSingletonFactoryAddress is the canonical address of the Safe Singleton Factory
+// (deterministic CREATE2 deployer) from https://github.com/safe-global/safe-singleton-factory
+var safeSingletonFactoryAddress = gethcommon.HexToAddress("0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7")
+
+// safeSingletonFactoryCode is the runtime bytecode of the Safe Singleton Factory
+var safeSingletonFactoryCode = gethcommon.FromHex("0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3")
+
+func appendSafeSingletonFactoryToAlloc(allocs *types.GenesisAlloc) {
+	(*allocs)[safeSingletonFactoryAddress] = types.Account{
+		Balance: big.NewInt(0),
+		Code:    safeSingletonFactoryCode,
+	}
 }
 
 func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.GenesisAlloc) error {
