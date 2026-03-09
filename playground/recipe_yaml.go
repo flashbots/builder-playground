@@ -25,6 +25,10 @@ type YAMLRecipeConfig struct {
 	// Hidden indicates this recipe should be excluded from listings and automated discovery
 	Hidden bool `yaml:"hidden,omitempty"`
 
+	// Predeploys is a path (relative to the recipe file) to a JSON file containing
+	// additional contracts to predeploy in the L2 genesis.
+	Predeploys string `yaml:"predeploys,omitempty"`
+
 	// Setup is a list of shell commands to run before any services are launched.
 	// Commands run sequentially in the recipe's directory; each must exit 0.
 	Setup []string `yaml:"setup,omitempty"`
@@ -196,6 +200,15 @@ func (y *YAMLRecipe) Flags() *flag.FlagSet {
 
 func (y *YAMLRecipe) Artifacts() *ArtifactsBuilder {
 	builder := y.baseRecipe.Artifacts()
+
+	// Apply predeploys from the recipe config, resolving relative paths against the recipe dir.
+	if y.config.Predeploys != "" {
+		p := y.config.Predeploys
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(y.recipeDir, p)
+		}
+		builder.PredeployFile(p)
+	}
 
 	// Add extra files from the recipe directory
 	for _, componentConfig := range y.config.Recipe {

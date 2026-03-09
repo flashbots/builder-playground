@@ -199,6 +199,7 @@ func (b *ArtifactsBuilder) loadPredeploys() (types.GenesisAlloc, error) {
 	if err := json.Unmarshal(data, &alloc); err != nil {
 		return nil, fmt.Errorf("failed to parse predeploy JSON: %w", err)
 	}
+	slog.Debug("loaded predeploys", "count", len(alloc))
 	return alloc, nil
 }
 
@@ -851,7 +852,7 @@ func appendPrefundedAccountsToAlloc(allocs *types.GenesisAlloc, privKeys []strin
 func appendPredeploysToAlloc(allocs *types.GenesisAlloc, predeploys types.GenesisAlloc) error {
 	for addr, account := range predeploys {
 		if _, exists := (*allocs)[addr]; exists {
-			return fmt.Errorf("custom predeploy address %s conflicts with existing alloc entry in template genesis", addr.Hex())
+			slog.Warn("predeployed account already exists! overriding", "address", addr.Hex())
 		}
 		(*allocs)[addr] = account
 	}
