@@ -572,7 +572,7 @@ func yamlReleaseToRelease(cfg *YAMLReleaseConfig) *release {
 	}
 }
 
-// applyFilesToService maps files to a service
+// applyVolumesToService maps volumes to a service
 func applyVolumesToService(svc *Service, volumes map[string]*YAMLVolumeMappedConfig) {
 	for containerPath, volumeMapping := range volumes {
 		if volumeMapping.HostPath != "" {
