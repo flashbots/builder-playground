@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "register-builder.sh: Running builder registration..."
 
-# Get builder IP from environment or default to 127.0.0.1
+# Get builder IP from environment or default to 10.0.2.2
 HOST_IP=${HOST_IP:-10.0.2.2}
 
 # Default values for the registration
