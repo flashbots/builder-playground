@@ -93,7 +93,7 @@ if [ "$PEER_ID" = "null" ] || [ -z "$PEER_ID" ]; then
 fi
 
 # Construct libp2p address with the known host IP
-LIBP2P_ADDR="/ip4/10.0.2.2/tcp/9001/p2p/${PEER_ID}"
+LIBP2P_ADDR="/ip4/${HOST_IP}/tcp/9001/p2p/${PEER_ID}"
 echo "register-builder.sh: Setting builder config var libp2p-addr: ${LIBP2P_ADDR}"
 
 # Get reth node info to extract enode
