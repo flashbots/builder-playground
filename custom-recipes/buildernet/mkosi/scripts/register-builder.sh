@@ -23,11 +23,10 @@ GENESIS_JSON=$(<"$HOME/.local/state/builder-playground/devnet/genesis.json")
 CONFIG_YAML="$SCRIPT_DIR/../config/builderhub-config.yaml"
 
 # Convert YAML to JSON and inject genesis
-CONFIG_JSON=$(yq eval -o=json "$CONFIG_YAML")
-if [[ $? -ne 0 ]]; then
+CONFIG_JSON=$(yq eval -o=json "$CONFIG_YAML") || {
     echo "register-builder.sh: Error - invalid YAML in $CONFIG_YAML" >&2
     exit 1
-fi
+}
 # Replace the genesis field with the actual genesis JSON
 CONFIG_JSON=$(echo "$CONFIG_JSON" | jq --argjson genesis "$GENESIS_JSON" '.genesis = $genesis')
 
