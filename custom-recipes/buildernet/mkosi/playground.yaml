@@ -34,6 +34,7 @@ recipe:
         env:
           BUILDERNET_IMAGE: "https://downloads.buildernet.org/buildernet-playground-images/v2.3.1/buildernet-qemu_2.3.1-46fd6f50.qcow2"
         init:
+          - ./scripts/register-builder.sh
           - ./scripts/prepare.sh
         start: ./scripts/start.sh
         stop:

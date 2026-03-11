@@ -791,12 +791,6 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to wait for service readiness: %w", err)
 	}
 
-	// run post hook operations
-	if err := svcManager.ExecutePostHookActions(ctx); err != nil {
-		dockerRunner.Stop(keepFlag)
-		return fmt.Errorf("failed to execute post-hook operations: %w", err)
-	}
-
 	slog.Info("Running lifecycle hooks of services... ⏳")
 	if err := dockerRunner.RunLifecycleHooks(ctx); err != nil {
 		dockerRunner.Stop(keepFlag)

@@ -1,10 +1,8 @@
 package playground
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -448,8 +446,7 @@ type Service struct {
 	// RecipeDir is the directory containing the recipe file (for lifecycle hooks)
 	RecipeDir string `json:"recipe_dir,omitempty"`
 
-	postHook *postHook
-	release  *release
+	release *release
 }
 
 type VolumeMapped struct {
@@ -618,29 +615,6 @@ func (s *Service) WithArtifact(localPath, artifactName string) *Service {
 func (s *Service) WithReady(check ReadyCheck) *Service {
 	s.ReadyCheck = &check
 	return s
-}
-
-type postHook struct {
-	Name   string
-	Action func(ctx context.Context, m *Manifest, s *Service) error
-}
-
-func (s *Service) WithPostHook(hook *postHook) *Service {
-	s.postHook = hook
-	return s
-}
-
-func (m *Manifest) ExecutePostHookActions(ctx context.Context) error {
-	for _, svc := range m.Services {
-		if svc.postHook != nil {
-			slog.Info("Executing post-hook operation", "name", svc.postHook.Name)
-			if err := svc.postHook.Action(ctx, m, svc); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 type ReadyCheck struct {

@@ -1,10 +1,8 @@
 package playground
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +11,6 @@ import (
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-boost-utils/bls"
 	"github.com/flashbots/go-boost-utils/utils"
-	"github.com/goccy/go-yaml"
 )
 
 var (
@@ -983,12 +980,6 @@ func (b *BuilderHub) Apply(exCtx *ExContext) *Component {
 			Timeout:     30 * time.Second,
 			Retries:     3,
 			StartPeriod: 1 * time.Second,
-		}).
-		WithPostHook(&postHook{
-			Name: "register-builder",
-			Action: func(ctx context.Context, m *Manifest, s *Service) error {
-				return registerBuilderHook(ctx, exCtx, m, s, b)
-			},
 		})
 
 	// Proxy service
@@ -1007,65 +998,6 @@ func (b *BuilderHub) Apply(exCtx *ExContext) *Component {
 		})
 
 	return component
-}
-
-type builderHubConfig struct {
-	Playground struct {
-		BuilderHubConfig struct {
-			BuilderID     string `yaml:"builder_id"`
-			BuilderIP     string `yaml:"builder_ip"`
-			MeasurementID string `yaml:"measurement_id"`
-			Network       string `yaml:"network"`
-		} `yaml:"builder_hub_config"`
-	} `yaml:"playground"`
-}
-
-func registerBuilderHook(ctx context.Context, exCtx *ExContext, manifest *Manifest, s *Service, b *BuilderHub) error {
-	genesis, err := exCtx.Output.Read("genesis.json")
-	if err != nil {
-		return err
-	}
-
-	configYaml := defaultBuilderHubConfig
-	if len(b.BuilderConfig) > 0 {
-		configYaml, err = os.ReadFile(b.BuilderConfig)
-		if err != nil {
-			return err
-		}
-	}
-
-	var config builderHubConfig
-	if err := yaml.Unmarshal([]byte(configYaml), &config); err != nil {
-		return err
-	}
-
-	// we need to convert the config to JSON because it is what the API server accepts
-	configJSON, err := yamlToJson([]byte(configYaml))
-	if err != nil {
-		return err
-	}
-
-	overrideConfig := map[string]interface{}{
-		"genesis": genesis,
-	}
-	if configJSON, err = overrideJSON(configJSON, overrideConfig); err != nil {
-		return err
-	}
-
-	input := &builderHubRegisterBuilderInput{
-		BuilderID:     config.Playground.BuilderHubConfig.BuilderID,
-		BuilderIP:     config.Playground.BuilderHubConfig.BuilderIP,
-		MeasurementID: config.Playground.BuilderHubConfig.MeasurementID,
-		Network:       config.Playground.BuilderHubConfig.Network,
-		Config:        string(configJSON),
-	}
-	adminApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("builder-hub-api").MustGetPort("admin").HostPort)
-	beaconApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("beacon").MustGetPort("http").HostPort)
-	rethApi := fmt.Sprintf("http://localhost:%d", manifest.MustGetService("el").MustGetPort("http").HostPort)
-	if err := registerBuilder(ctx, adminApi, beaconApi, rethApi, input); err != nil {
-		return err
-	}
-	return nil
 }
 
 type Bootnode struct {
