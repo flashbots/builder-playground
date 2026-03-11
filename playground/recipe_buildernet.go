@@ -6,17 +6,12 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-const BuilderHostIPAddress = "10.0.2.2"
-
 var _ Recipe = &BuilderNetRecipe{}
 
 // BuilderNetRecipe is a recipe that extends the L1 recipe to include builder-hub
 type BuilderNetRecipe struct {
 	// Embed the L1Recipe to reuse its functionality
 	l1Recipe L1Recipe
-
-	builderIP     string
-	builderConfig string
 }
 
 func (b *BuilderNetRecipe) Name() string {
@@ -29,10 +24,7 @@ func (b *BuilderNetRecipe) Description() string {
 
 func (b *BuilderNetRecipe) Flags() *flag.FlagSet {
 	// Reuse the L1Recipe flags
-	flags := b.l1Recipe.Flags()
-	flags.StringVar(&b.builderIP, "builder-ip", "127.0.0.1", "IP address of the external builder to register in BuilderHub")
-	flags.StringVar(&b.builderConfig, "builder-config", "", "Builder config in YAML format")
-	return flags
+	return b.l1Recipe.Flags()
 }
 
 func (b *BuilderNetRecipe) Artifacts() *ArtifactsBuilder {
@@ -45,10 +37,7 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
 
 	// Start with the L1Recipe manifest
 	component.AddComponent(ctx, &b.l1Recipe)
-	component.AddComponent(ctx, &BuilderHub{
-		BuilderIP:     b.builderIP,
-		BuilderConfig: b.builderConfig,
-	})
+	component.AddComponent(ctx, &BuilderHub{})
 
 	component.AddComponent(ctx, &Fileserver{})
 

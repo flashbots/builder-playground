@@ -933,8 +933,6 @@ func (c *Contender) Apply(ctx *ExContext) *Component {
 }
 
 type BuilderHub struct {
-	BuilderIP     string
-	BuilderConfig string
 }
 
 func (b *BuilderHub) Apply(exCtx *ExContext) *Component {
