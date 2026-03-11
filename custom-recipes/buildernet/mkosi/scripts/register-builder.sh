@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Register a builder with the BuilderHub
-# This script implements the registerBuilder function logic for the buildernet recipe
+# Register the VM builder with the BuilderHub
 
 set -eu -o pipefail
 

@@ -68,9 +68,6 @@ var opStateJovian []byte
 //go:embed config.yaml.tmpl
 var clConfigContent []byte
 
-//go:embed utils/builderhub-config.yaml
-var defaultBuilderHubConfig []byte
-
 // l2ForkConfig holds the selected L2 fork configuration files
 type l2ForkConfig struct {
 	genesis      []byte  // L2 genesis JSON
