@@ -932,8 +932,7 @@ func (c *Contender) Apply(ctx *ExContext) *Component {
 	return component
 }
 
-type BuilderHub struct {
-}
+type BuilderHub struct{}
 
 func (b *BuilderHub) Apply(exCtx *ExContext) *Component {
 	component := NewComponent("builder-hub")
