@@ -623,7 +623,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 
 	// Use files mapped to figure out which files from the artifacts is using the service
 	volumes := map[string]string{
-		outputFolder: "/artifacts", // placeholder
+		outputFolder: "/data",
 	}
 	for k, v := range s.FilesMapped {
 		volumes[filepath.Join(outputFolder, v)] = k
@@ -1180,9 +1180,7 @@ func (d *LocalRunner) pullNotAvailableImages(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (d *LocalRunner) Run(ctx context.Context) error {
-	go d.trackContainerStatusAndLogs()
-
+func (d *LocalRunner) WriteDockerComposeFile() error {
 	yamlData, err := d.generateDockerCompose()
 	if err != nil {
 		return fmt.Errorf("failed to generate docker-compose.yaml: %w", err)
@@ -1191,6 +1189,12 @@ func (d *LocalRunner) Run(ctx context.Context) error {
 	if err := d.out.WriteFile("docker-compose.yaml", yamlData); err != nil {
 		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
 	}
+
+	return nil
+}
+
+func (d *LocalRunner) Run(ctx context.Context) error {
+	go d.trackContainerStatusAndLogs()
 
 	// Run setup commands before launching any services
 	if err := d.runSetupCommands(ctx); err != nil {

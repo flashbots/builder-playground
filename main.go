@@ -8,12 +8,14 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/flashbots/builder-playground/playground"
+	"github.com/flashbots/builder-playground/playground/k8sgen"
 	"github.com/flashbots/builder-playground/utils"
 	"github.com/flashbots/builder-playground/utils/logging"
 	"github.com/flashbots/builder-playground/utils/mainctx"
@@ -65,6 +67,7 @@ var (
 	testInsecure          bool
 	testExpectedExtraData string
 	portListFlag          bool
+	k8sFlag               bool
 )
 
 var rootCmd = &cobra.Command{
@@ -292,6 +295,24 @@ var logsCmd = &cobra.Command{
 			return fmt.Errorf("invalid amount of args")
 		}
 
+		return nil
+	},
+}
+
+var dirCmd = &cobra.Command{
+	Use:   "dir",
+	Short: "Print the latest session directory",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		sessionsDir, err := utils.GetSessionsDir()
+		if err != nil {
+			return err
+		}
+		latest := filepath.Join(sessionsDir, "latest")
+		resolved, err := filepath.EvalSymlinks(latest)
+		if err != nil {
+			return fmt.Errorf("no latest session found: %w", err)
+		}
+		fmt.Print(resolved)
 		return nil
 	},
 }
@@ -567,6 +588,7 @@ func main() {
 		cmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
 		cmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip the setup commands defined in the YAML recipe")
 		cmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
+		cmd.Flags().BoolVar(&k8sFlag, "k8s", false, "generate Kubernetes manifests (requires kompose) and helper files")
 	}
 
 	// Add common flags to startCmd for YAML recipe files
@@ -628,6 +650,7 @@ func main() {
 
 	logsCmd.Flags().BoolVarP(&followFlag, "follow", "f", false, "Stream logs continuously instead of displaying and exiting")
 	rootCmd.AddCommand(logsCmd)
+	rootCmd.AddCommand(dirCmd)
 	rootCmd.AddCommand(listCmd)
 	portCmd.Flags().BoolVarP(&portListFlag, "list", "l", false, "List all available ports for the service")
 	rootCmd.AddCommand(portCmd)
@@ -742,10 +765,6 @@ func runIt(recipe playground.Recipe) error {
 		}
 	}
 
-	if dryRun {
-		return nil
-	}
-
 	if err := svcManager.ApplyOverrides(overrides); err != nil {
 		return err
 	}
@@ -773,6 +792,23 @@ func runIt(recipe playground.Recipe) error {
 	dockerRunner, err := playground.NewLocalRunner(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create docker runner: %w", err)
+	}
+
+	if err := dockerRunner.WriteDockerComposeFile(); err != nil {
+		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
+	}
+
+	if k8sFlag {
+		slog.Info("Generating Kubernetes manifests... ⏳")
+		if err := k8sgen.GenerateK8s(out.Dst()); err != nil {
+			return fmt.Errorf("failed to generate k8s manifests: %w", err)
+		}
+		slog.Info("Kubernetes manifests generated", "dir", out.Dst()+"/k8s")
+		slog.Info("You can find them with: cd $(builder-playground dir)/k8s")
+	}
+
+	if dryRun || k8sFlag {
+		return nil
 	}
 
 	ctx := mainctx.Get()

@@ -8,3 +8,4 @@ playground/utils/op-deployer*
 playground/utils/state.json
 recipe/
 /playground.yaml
+.vscode
