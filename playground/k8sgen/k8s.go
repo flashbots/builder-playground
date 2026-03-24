@@ -49,10 +49,20 @@ func GenerateK8s(sessionDir string) error {
 		return err
 	}
 
+	// Normalize the session dir container path to /data across all services so
+	// that fixMountVolumes and patchK8sMissingVolumes both agree on the mount path.
+	for svc := range serviceVolumes {
+		for i := range serviceVolumes[svc] {
+			if serviceVolumes[svc][i].hostPath == sessionDir {
+				serviceVolumes[svc][i].containerPath = "/data"
+			}
+		}
+	}
+
 	// Fix hostPath volumes kompose generated from bind mounts:
 	//   - file paths           → remove volume and its mounts
 	//   - named Docker volumes → replace with emptyDir
-	if err := fixMountVolumes(k8sDir, namedVolumes); err != nil {
+	if err := fixMountVolumes(k8sDir, sessionDir, namedVolumes); err != nil {
 		return fmt.Errorf("failed to fix hostPath volumes: %w", err)
 	}
 
@@ -66,6 +76,9 @@ func GenerateK8s(sessionDir string) error {
 	mountPaths := map[string]struct{}{}
 	for _, mounts := range serviceVolumes {
 		for _, m := range mounts {
+			if strings.HasPrefix(m.hostPath, utils.TempPlaygroundDirPath()+"/") {
+				continue // converted to emptyDir, no minikube mount needed
+			}
 			if m.hostPath == sessionDir || strings.HasPrefix(m.hostPath, sessionDir+"/") {
 				mountPaths[sessionDir] = struct{}{}
 			} else {
@@ -152,7 +165,7 @@ func parseComposeVolumesPerService(composeFile string) (map[string][]bindMount, 
 // file-path volumes are removed (along with their volumeMounts), temp-dir
 // volumes are replaced with emptyDir, and named Docker volumes that kompose
 // incorrectly assigned a hostPath are also replaced with emptyDir.
-func fixMountVolumes(k8sDir string, namedVolumes map[string]struct{}) error {
+func fixMountVolumes(k8sDir, sessionDir string, namedVolumes map[string]struct{}) error {
 	entries, err := os.ReadDir(k8sDir)
 	if err != nil {
 		return fmt.Errorf("failed to read k8s dir: %w", err)
@@ -194,6 +207,17 @@ func fixMountVolumes(k8sDir string, namedVolumes map[string]struct{}) error {
 			} else if _, ok := namedVolumes[volName]; ok || strings.HasPrefix(path, utils.TempPlaygroundDirPath()+"/") {
 				delete(volMap, "hostPath")
 				volMap["emptyDir"] = map[interface{}]interface{}{}
+				dirty = true
+			} else if path == sessionDir {
+				for _, c := range toSlice(podSpec["containers"]) {
+					cMap, _ := c.(map[interface{}]interface{})
+					for _, vm := range toSlice(cMap["volumeMounts"]) {
+						vmMap, _ := vm.(map[interface{}]interface{})
+						if vmMap["name"] == volName {
+							vmMap["mountPath"] = "/data"
+						}
+					}
+				}
 				dirty = true
 			}
 		}

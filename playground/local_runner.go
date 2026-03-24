@@ -623,7 +623,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 
 	// Use files mapped to figure out which files from the artifacts is using the service
 	volumes := map[string]string{
-		outputFolder: "/data",
+		outputFolder: "/artifacts",
 	}
 	for k, v := range s.FilesMapped {
 		volumes[filepath.Join(outputFolder, v)] = k

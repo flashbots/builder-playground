@@ -110,7 +110,7 @@ spec:
           hostPath:
             path: /some/session/dir
 `)
-	r.NoError(fixMountVolumes(k8sDir, map[string]struct{}{"volume-beacon-data": {}}))
+	r.NoError(fixMountVolumes(k8sDir, "", map[string]struct{}{"volume-beacon-data": {}}))
 
 	doc := readDeployment(t, filepath.Join(k8sDir, "beacon-deployment.yaml"))
 	podSpec := nestedIMap(doc, "spec", "template", "spec")
@@ -147,7 +147,7 @@ spec:
             path: `+tempPath+`
 `)
 	// Use the named-volume mechanism to cover the emptyDir replacement path.
-	r.NoError(fixMountVolumes(k8sDir, map[string]struct{}{"el-hostpath3": {}}))
+	r.NoError(fixMountVolumes(k8sDir, "", map[string]struct{}{"el-hostpath3": {}}))
 
 	doc := readDeployment(t, filepath.Join(k8sDir, "el-deployment.yaml"))
 	podSpec := nestedIMap(doc, "spec", "template", "spec")
@@ -188,7 +188,7 @@ spec:
           hostPath:
             path: /some/dir
 `)
-	r.NoError(fixMountVolumes(k8sDir, map[string]struct{}{}))
+	r.NoError(fixMountVolumes(k8sDir, "", map[string]struct{}{}))
 
 	doc := readDeployment(t, filepath.Join(k8sDir, "el-deployment.yaml"))
 	podSpec := nestedIMap(doc, "spec", "template", "spec")
@@ -206,6 +206,42 @@ spec:
 	}
 }
 
+func TestFixMountVolumes_SessionDirMountPathPatchedToData(t *testing.T) {
+	r := require.New(t)
+	sessionDir := t.TempDir()
+	k8sDir := t.TempDir()
+	writeFile(t, k8sDir, "el-deployment.yaml", `
+kind: Deployment
+metadata:
+  name: el
+spec:
+  template:
+    spec:
+      containers:
+        - name: el
+          volumeMounts:
+            - name: el-session
+              mountPath: /artifacts
+      volumes:
+        - name: el-session
+          hostPath:
+            path: `+sessionDir+`
+`)
+	r.NoError(fixMountVolumes(k8sDir, sessionDir, map[string]struct{}{}))
+
+	doc := readDeployment(t, filepath.Join(k8sDir, "el-deployment.yaml"))
+	podSpec := nestedIMap(doc, "spec", "template", "spec")
+	for _, c := range toSlice(podSpec["containers"]) {
+		cMap, _ := c.(map[interface{}]interface{})
+		for _, vm := range toSlice(cMap["volumeMounts"]) {
+			vmMap, _ := vm.(map[interface{}]interface{})
+			if vmMap["name"] == "el-session" {
+				r.Equal("/data", vmMap["mountPath"])
+			}
+		}
+	}
+}
+
 func TestFixMountVolumes_NonDeploymentSkipped(t *testing.T) {
 	r := require.New(t)
 	k8sDir := t.TempDir()
@@ -217,7 +253,7 @@ spec:
     - port: 8551
 `
 	writeFile(t, k8sDir, "el-service.yaml", original)
-	r.NoError(fixMountVolumes(k8sDir, map[string]struct{}{}))
+	r.NoError(fixMountVolumes(k8sDir, "", map[string]struct{}{}))
 	got, err := os.ReadFile(filepath.Join(k8sDir, "el-service.yaml"))
 	r.NoError(err)
 	r.Equal(original, string(got))
