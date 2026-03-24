@@ -685,6 +685,8 @@ func main() {
 func runIt(recipe playground.Recipe) error {
 	fmt.Println()
 
+	ctx := mainctx.Get()
+
 	var logLevel playground.LogLevel
 	if err := logLevel.Unmarshal(logLevelFlag); err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
@@ -794,6 +796,10 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to create docker runner: %w", err)
 	}
 
+	if err := dockerRunner.RunSetupCommands(ctx); err != nil {
+		return fmt.Errorf("failed to run setup commands: %w", err)
+	}
+
 	if err := dockerRunner.WriteDockerComposeFile(); err != nil {
 		return fmt.Errorf("failed to write docker-compose.yaml: %w", err)
 	}
@@ -810,8 +816,6 @@ func runIt(recipe playground.Recipe) error {
 	if dryRun || k8sFlag {
 		return nil
 	}
-
-	ctx := mainctx.Get()
 
 	slog.Info("Starting services... ⏳", "session-id", svcManager.ID)
 	if err := dockerRunner.Run(ctx); err != nil {

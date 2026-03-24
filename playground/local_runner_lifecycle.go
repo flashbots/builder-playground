@@ -179,10 +179,10 @@ func (d *LocalRunner) runAllLifecycleStopCommands() {
 	}
 }
 
-// runSetupCommands runs the setup commands from the manifest before any services
+// RunSetupCommands runs the setup commands from the manifest before any services
 // are launched. Commands run sequentially via "sh -c" in the recipe directory;
 // each must exit 0 or an error is returned.
-func (d *LocalRunner) runSetupCommands(ctx context.Context) error {
+func (d *LocalRunner) RunSetupCommands(ctx context.Context) error {
 	if len(d.manifest.Setup) == 0 {
 		return nil
 	}
