@@ -21,7 +21,6 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 	// Create a minimal LocalRunner - no Docker client needed for lifecycle
 	runner := &LocalRunner{
 		out:               out,
-		lifecycleServices: []*lifecycleServiceInfo{},
 	}
 
 	// Create a service with init commands that create files
@@ -44,9 +43,6 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 	require.Contains(t, string(content), "init1")
 	require.Contains(t, string(content), "init2")
 
-	// Verify service was tracked for stop commands
-	require.Len(t, runner.lifecycleServices, 1)
-	require.Equal(t, "test-lifecycle", runner.lifecycleServices[0].svc.Name)
 }
 
 func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
@@ -58,7 +54,6 @@ func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
 
 	runner := &LocalRunner{
 		out:               out,
-		lifecycleServices: []*lifecycleServiceInfo{},
 	}
 
 	svc := &Service{
@@ -84,7 +79,6 @@ func TestLocalRunner_LifecycleService_StartCommand(t *testing.T) {
 	runner := &LocalRunner{
 		out:               out,
 		handles:           []*exec.Cmd{},
-		lifecycleServices: []*lifecycleServiceInfo{},
 	}
 
 	startFile := filepath.Join(tmpDir, "start-ran.txt")
@@ -121,7 +115,6 @@ func TestLocalRunner_LifecycleService_InitOnly(t *testing.T) {
 	runner := &LocalRunner{
 		out:               out,
 		handles:           []*exec.Cmd{},
-		lifecycleServices: []*lifecycleServiceInfo{},
 	}
 
 	initFile := filepath.Join(tmpDir, "init-only.txt")

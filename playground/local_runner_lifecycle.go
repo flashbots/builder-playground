@@ -21,13 +21,6 @@ type lifecycleContext struct {
 	logPath   string
 }
 
-// lifecycleServiceInfo tracks a lifecycle service with its log file for stop commands
-type lifecycleServiceInfo struct {
-	svc     *Service
-	logFile io.Writer
-	logPath string
-}
-
 func (lc *lifecycleContext) newCmd(ctx context.Context, command string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = lc.dir
@@ -94,14 +87,6 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 		logWriter: logFile,
 		logPath:   logPath,
 	}
-
-	d.lifecycleMu.Lock()
-	d.lifecycleServices = append(d.lifecycleServices, &lifecycleServiceInfo{
-		svc:     svc,
-		logFile: logFile,
-		logPath: logPath,
-	})
-	d.lifecycleMu.Unlock()
 
 	// Run init commands sequentially - each must return exit code 0
 	for i, cmd := range svc.Init {

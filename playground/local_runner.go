@@ -67,10 +67,6 @@ type LocalRunner struct {
 	handles   []*exec.Cmd
 	handlesMu sync.Mutex
 
-	// lifecycleServices tracks services started with lifecycle hooks
-	lifecycleServices []*lifecycleServiceInfo
-	lifecycleMu       sync.Mutex
-
 	// exitError signals when one of the services fails
 	exitErr     chan error
 	exitErrOnce sync.Once
