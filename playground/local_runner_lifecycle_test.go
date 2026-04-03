@@ -150,26 +150,21 @@ func TestLocalRunner_StopCommands(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	out := &output{sessionDir: tmpDir}
-
 	stopFile := filepath.Join(tmpDir, "stop.txt")
-	svc := &Service{
-		Name:           "test-lifecycle",
-		LifecycleHooks: true,
-		Init:           []string{"echo init"},
-		Stop: []string{
-			"echo 'stop1' > " + stopFile,
-			"echo 'stop2' >> " + stopFile,
+	services := []*Service{
+		{
+			Name:           "test-lifecycle",
+			LifecycleHooks: true,
+			Init:           []string{"echo init"},
+			Stop: []string{
+				"echo 'stop1' > " + stopFile,
+				"echo 'stop2' >> " + stopFile,
+			},
 		},
 	}
 
-	runner := &LocalRunner{
-		out:               out,
-		lifecycleServices: []*lifecycleServiceInfo{{svc: svc}},
-	}
-
 	// Run all stop commands
-	runner.runAllLifecycleStopCommands()
+	runLifecycleStopForServices(services, tmpDir)
 
 	// Verify stop commands ran
 	content, err := os.ReadFile(stopFile)
@@ -183,26 +178,21 @@ func TestLocalRunner_StopCommands_ContinueOnError(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	out := &output{sessionDir: tmpDir}
-
 	stopFile := filepath.Join(tmpDir, "stop.txt")
-	svc := &Service{
-		Name:           "test-lifecycle",
-		LifecycleHooks: true,
-		Init:           []string{"echo init"},
-		Stop: []string{
-			"exit 1",                         // This fails
-			"echo 'continued' > " + stopFile, // But this should still run
+	services := []*Service{
+		{
+			Name:           "test-lifecycle",
+			LifecycleHooks: true,
+			Init:           []string{"echo init"},
+			Stop: []string{
+				"exit 1",                         // This fails
+				"echo 'continued' > " + stopFile, // But this should still run
+			},
 		},
 	}
 
-	runner := &LocalRunner{
-		out:               out,
-		lifecycleServices: []*lifecycleServiceInfo{{svc: svc}},
-	}
-
 	// Run all stop commands - should not panic or stop on error
-	runner.runAllLifecycleStopCommands()
+	runLifecycleStopForServices(services, tmpDir)
 
 	// Verify second stop command still ran despite first failing
 	content, err := os.ReadFile(stopFile)

@@ -145,46 +145,11 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 	return nil
 }
 
-// runLifecycleStopCommands runs the stop commands for a lifecycle service
-func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer, logPath string) {
-	if len(svc.Stop) == 0 {
-		return
-	}
 
-	// Use recipe directory for lifecycle hooks if set, otherwise use artifacts dir
-	dir := d.out.sessionDir
-	if svc.RecipeDir != "" {
-		dir = svc.RecipeDir
-	}
-
-	lc := &lifecycleContext{
-		svc:       svc,
-		dir:       dir,
-		logWriter: logOutput,
-		logPath:   logPath,
-	}
-
-	for i, stopCmd := range svc.Stop {
-		slog.Info("Running lifecycle stop command", "service", svc.Name, "command", stopCmd, "index", i)
-		lc.logHeader("Stop", i, stopCmd)
-
-		if err := lc.newCmd(context.Background(), stopCmd).Run(); err != nil {
-			slog.Warn("Lifecycle stop command failed (continuing)", "service", svc.Name, "command", stopCmd, "error", err)
-		}
-	}
-}
-
-// runAllLifecycleStopCommands runs stop commands for all lifecycle services
-func (d *LocalRunner) runAllLifecycleStopCommands() {
-	for _, info := range d.lifecycleServices {
-		d.runLifecycleStopCommands(info.svc, info.logFile, info.logPath)
-	}
-}
-
-// RunLifecycleStopFromManifest loads a session's persisted manifest and runs
+// RunAllLifecycleStopCommands loads a session's persisted manifest and runs
 // stop commands for any lifecycle-managed services. This ensures host processes
-// (e.g. QEMU VMs) are cleaned up even when the session was started in detached mode.
-func RunLifecycleStopFromManifest(sessionID string) {
+// (e.g. QEMU VMs) are cleaned up during session shutdown.
+func RunAllLifecycleStopCommands(sessionID string) {
 	sessionsDir, err := utils.GetSessionsDir()
 	if err != nil {
 		slog.Warn("Failed to get sessions dir, skipping lifecycle stop", "error", err)
@@ -198,7 +163,12 @@ func RunLifecycleStopFromManifest(sessionID string) {
 		return
 	}
 
-	for _, svc := range manifest.Services {
+	runLifecycleStopForServices(manifest.Services, sessionDir)
+}
+
+// runLifecycleStopForServices runs stop commands for lifecycle-managed services.
+func runLifecycleStopForServices(services []*Service, sessionDir string) {
+	for _, svc := range services {
 		if !svc.LifecycleHooks || len(svc.Stop) == 0 {
 			continue
 		}

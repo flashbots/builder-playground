@@ -67,7 +67,7 @@ type LocalRunner struct {
 	handles   []*exec.Cmd
 	handlesMu sync.Mutex
 
-	// lifecycleServices tracks services with lifecycle configs for stop command execution
+	// lifecycleServices tracks services started with lifecycle hooks
 	lifecycleServices []*lifecycleServiceInfo
 	lifecycleMu       sync.Mutex
 
@@ -300,9 +300,6 @@ func (d *LocalRunner) Stop(keepResources bool) error {
 	// but preferring a quick exit for now.
 	d.stopAllProcessesWithSignal(os.Kill)
 
-	// Run lifecycle stop commands for all tracked lifecycle services
-	d.runAllLifecycleStopCommands()
-
 	return StopSession(d.manifest.ID, keepResources)
 }
 
@@ -336,7 +333,7 @@ func stopProcessWithSignal(handle *exec.Cmd, signal os.Signal) {
 func StopSession(id string, keepResources bool) error {
 	// Run lifecycle stop commands for services that manage host processes (e.g. QEMU VMs).
 	// The manifest on disk contains the stop commands and working directories needed.
-	RunLifecycleStopFromManifest(id)
+	RunAllLifecycleStopCommands(id)
 
 	// stop the docker-compose
 	args := []string{"compose", "-p", id}
