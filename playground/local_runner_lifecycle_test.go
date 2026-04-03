@@ -42,7 +42,6 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(content), "init1")
 	require.Contains(t, string(content), "init2")
-
 }
 
 func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
