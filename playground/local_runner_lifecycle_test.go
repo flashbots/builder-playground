@@ -20,7 +20,7 @@ func TestLocalRunner_LifecycleService_InitCommands(t *testing.T) {
 
 	// Create a minimal LocalRunner - no Docker client needed for lifecycle
 	runner := &LocalRunner{
-		out:               out,
+		out: out,
 	}
 
 	// Create a service with init commands that create files
@@ -53,7 +53,7 @@ func TestLocalRunner_LifecycleService_InitFailure(t *testing.T) {
 	out := &output{sessionDir: tmpDir}
 
 	runner := &LocalRunner{
-		out:               out,
+		out: out,
 	}
 
 	svc := &Service{
@@ -77,8 +77,8 @@ func TestLocalRunner_LifecycleService_StartCommand(t *testing.T) {
 	out := &output{sessionDir: tmpDir}
 
 	runner := &LocalRunner{
-		out:               out,
-		handles:           []*exec.Cmd{},
+		out:     out,
+		handles: []*exec.Cmd{},
 	}
 
 	startFile := filepath.Join(tmpDir, "start-ran.txt")
@@ -113,8 +113,8 @@ func TestLocalRunner_LifecycleService_InitOnly(t *testing.T) {
 	out := &output{sessionDir: tmpDir}
 
 	runner := &LocalRunner{
-		out:               out,
-		handles:           []*exec.Cmd{},
+		out:     out,
+		handles: []*exec.Cmd{},
 	}
 
 	initFile := filepath.Join(tmpDir, "init-only.txt")
