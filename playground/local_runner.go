@@ -187,7 +187,10 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 	}
 
 	// Acquire a session slot based on active sessions (via Docker container labels)
-	sessionSlot := acquireSessionSlot()
+	sessionSlot, err := acquireSessionSlot(client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire session slot: %w", err)
+	}
 	portOffset := sessionSlot * portOffsetMultiplier
 	slog.Debug("port allocation", "session_slot", sessionSlot, "port_offset", portOffset)
 
@@ -393,14 +396,11 @@ func GetLocalSessions() ([]string, error) {
 }
 
 // getUsedSessionSlots returns the set of slot numbers currently in use by active sessions.
-func getUsedSessionSlots() (map[int]bool, error) {
+func getUsedSessionSlots(client *client.Client) (map[int]bool, error) {
 	used := map[int]bool{}
-	client, err := newDockerClient()
-	if err != nil {
-		return used, err
-	}
 	containers, err := client.ContainerList(context.Background(), container.ListOptions{
-		All: true,
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
 	})
 	if err != nil {
 		return used, err
@@ -408,7 +408,7 @@ func getUsedSessionSlots() (map[int]bool, error) {
 	seen := map[string]bool{}
 	for _, c := range containers {
 		session := c.Labels["playground.session"]
-		if c.Labels["playground"] != "true" || seen[session] {
+		if seen[session] {
 			continue
 		}
 		seen[session] = true
@@ -422,20 +422,18 @@ func getUsedSessionSlots() (map[int]bool, error) {
 }
 
 // acquireSessionSlot finds the lowest unused slot number among active sessions.
-func acquireSessionSlot() int {
-	used, err := getUsedSessionSlots()
+func acquireSessionSlot(client *client.Client) (int, error) {
+	used, err := getUsedSessionSlots(client)
 	if err != nil {
-		slog.Warn("could not query active session slots, using slot 0", "error", err)
-		return 0
+		return 0, fmt.Errorf("could not query active session slots: %w", err)
 	}
 	for i := 0; i < maxSessionSlots; i++ {
 		if !used[i] {
 			slog.Debug("session slot acquired", "slot", i)
-			return i
+			return i, nil
 		}
 	}
-	slog.Warn("all session slots used, using slot 0")
-	return 0
+	return 0, fmt.Errorf("all %d session slots are in use", maxSessionSlots)
 }
 
 func GetSessionServices(session string) ([]string, error) {
