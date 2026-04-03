@@ -145,7 +145,6 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 	return nil
 }
 
-
 // RunAllLifecycleStopCommands loads a session's persisted manifest and runs
 // stop commands for any lifecycle-managed services. This ensures host processes
 // (e.g. QEMU VMs) are cleaned up during session shutdown.
