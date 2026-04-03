@@ -3,6 +3,7 @@ package playground
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/flashbots/builder-playground/utils"
@@ -82,8 +83,14 @@ func validateYAMLRecipe(recipe *YAMLRecipe, baseRecipes []Recipe, result *Valida
 	// Check base recipe exists (built-in name or file path)
 	baseFound := false
 	if isYAMLBasePath(recipe.config.Base) {
-		// File-based base: check that the file was resolved (parsing would have failed otherwise)
-		baseFound = true
+		// File-based base: check the referenced file exists
+		basePath := recipe.config.Base
+		if !filepath.IsAbs(basePath) {
+			basePath = filepath.Join(filepath.Dir(recipe.filePath), basePath)
+		}
+		if _, err := os.Stat(basePath); err == nil {
+			baseFound = true
+		}
 	} else {
 		for _, r := range baseRecipes {
 			if r.Name() == recipe.config.Base {

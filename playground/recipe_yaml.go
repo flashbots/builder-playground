@@ -148,14 +148,23 @@ func ParseYAMLRecipe(filePath string, baseRecipes []Recipe) (*YAMLRecipe, error)
 	return parseYAMLRecipe(filePath, baseRecipes, nil)
 }
 
+const maxBaseRecipeDepth = 10
+
 func parseYAMLRecipe(filePath string, baseRecipes []Recipe, visited map[string]bool) (*YAMLRecipe, error) {
 	// Cycle detection for file-based base references
-	absPath, err := filepath.Abs(filePath)
+	absPath, err := filepath.EvalSymlinks(filePath)
+	if err != nil {
+		// EvalSymlinks fails for non-existent files; fall back to Abs
+		absPath, err = filepath.Abs(filePath)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve path %s: %w", filePath, err)
 	}
 	if visited == nil {
 		visited = make(map[string]bool)
+	}
+	if len(visited) > maxBaseRecipeDepth {
+		return nil, fmt.Errorf("base recipe chain too deep (max %d)", maxBaseRecipeDepth)
 	}
 	if visited[absPath] {
 		return nil, fmt.Errorf("circular base recipe reference: %s", filePath)
@@ -222,8 +231,8 @@ func parseYAMLRecipe(filePath string, baseRecipes []Recipe, visited map[string]b
 // isYAMLBasePath returns true if the base string looks like a file path
 // rather than a built-in recipe name.
 func isYAMLBasePath(base string) bool {
-	return strings.HasSuffix(base, ".yaml") || strings.HasSuffix(base, ".yml") ||
-		strings.HasPrefix(base, "./") || strings.HasPrefix(base, "../") || strings.HasPrefix(base, "/")
+	return strings.Contains(base, string(filepath.Separator)) || strings.Contains(base, "/") ||
+		strings.HasSuffix(base, ".yaml") || strings.HasSuffix(base, ".yml")
 }
 
 func (y *YAMLRecipe) Name() string {
