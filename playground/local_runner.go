@@ -334,6 +334,10 @@ func stopProcessWithSignal(handle *exec.Cmd, signal os.Signal) {
 }
 
 func StopSession(id string, keepResources bool) error {
+	// Run lifecycle stop commands for services that manage host processes (e.g. QEMU VMs).
+	// The manifest on disk contains the stop commands and working directories needed.
+	RunLifecycleStopFromManifest(id)
+
 	// stop the docker-compose
 	args := []string{"compose", "-p", id}
 	if keepResources {

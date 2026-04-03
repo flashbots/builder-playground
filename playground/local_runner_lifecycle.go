@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 
+	"github.com/flashbots/builder-playground/utils"
 	"github.com/flashbots/builder-playground/utils/mainctx"
 )
 
@@ -176,6 +178,48 @@ func (d *LocalRunner) runLifecycleStopCommands(svc *Service, logOutput io.Writer
 func (d *LocalRunner) runAllLifecycleStopCommands() {
 	for _, info := range d.lifecycleServices {
 		d.runLifecycleStopCommands(info.svc, info.logFile, info.logPath)
+	}
+}
+
+// RunLifecycleStopFromManifest loads a session's persisted manifest and runs
+// stop commands for any lifecycle-managed services. This ensures host processes
+// (e.g. QEMU VMs) are cleaned up even when the session was started in detached mode.
+func RunLifecycleStopFromManifest(sessionID string) {
+	sessionsDir, err := utils.GetSessionsDir()
+	if err != nil {
+		slog.Warn("Failed to get sessions dir, skipping lifecycle stop", "error", err)
+		return
+	}
+
+	sessionDir := filepath.Join(sessionsDir, sessionID)
+	manifest, err := ReadManifest(sessionDir)
+	if err != nil {
+		slog.Debug("No manifest found, skipping lifecycle stop", "session", sessionID, "error", err)
+		return
+	}
+
+	for _, svc := range manifest.Services {
+		if !svc.LifecycleHooks || len(svc.Stop) == 0 {
+			continue
+		}
+
+		dir := sessionDir
+		if svc.RecipeDir != "" {
+			dir = svc.RecipeDir
+		}
+
+		lc := &lifecycleContext{
+			svc:       svc,
+			dir:       dir,
+			logWriter: os.Stdout,
+		}
+
+		for i, stopCmd := range svc.Stop {
+			slog.Info("Running lifecycle stop command", "service", svc.Name, "command", stopCmd, "index", i)
+			if err := lc.newCmd(context.Background(), stopCmd).Run(); err != nil {
+				slog.Warn("Lifecycle stop command failed (continuing)", "service", svc.Name, "command", stopCmd, "error", err)
+			}
+		}
 	}
 }
 
