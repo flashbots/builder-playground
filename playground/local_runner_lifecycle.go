@@ -216,6 +216,7 @@ func RunLifecycleStopFromManifest(sessionID string) {
 
 		for i, stopCmd := range svc.Stop {
 			slog.Info("Running lifecycle stop command", "service", svc.Name, "command", stopCmd, "index", i)
+			lc.logHeader("Stop", i, stopCmd)
 			if err := lc.newCmd(context.Background(), stopCmd).Run(); err != nil {
 				slog.Warn("Lifecycle stop command failed (continuing)", "service", svc.Name, "command", stopCmd, "error", err)
 			}
