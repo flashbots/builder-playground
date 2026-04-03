@@ -399,7 +399,7 @@ func GetLocalSessions() ([]string, error) {
 func getUsedSessionSlots(client *client.Client) (map[int]bool, error) {
 	used := map[int]bool{}
 	containers, err := client.ContainerList(context.Background(), container.ListOptions{
-		All:     true,
+		All:     false,
 		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
 	})
 	if err != nil {
