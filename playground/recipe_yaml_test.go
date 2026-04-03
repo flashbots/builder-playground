@@ -983,3 +983,175 @@ recipe:
 	require.Empty(t, svc.Start)
 	require.Equal(t, []string{"echo \"cleanup\""}, svc.Stop)
 }
+
+func TestIsYAMLBasePath(t *testing.T) {
+	// File paths should be detected
+	require.True(t, isYAMLBasePath("./base.yaml"))
+	require.True(t, isYAMLBasePath("../base.yaml"))
+	require.True(t, isYAMLBasePath("/absolute/path/base.yaml"))
+	require.True(t, isYAMLBasePath("subdir/base.yaml"))
+	require.True(t, isYAMLBasePath("recipe.yml"))
+
+	// Built-in names should not be detected as paths
+	require.False(t, isYAMLBasePath("l1"))
+	require.False(t, isYAMLBasePath("opstack"))
+	require.False(t, isYAMLBasePath("buildernet"))
+}
+
+func TestParseYAMLRecipe_FileBase(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Base recipe: extends l1 with a service
+	baseContent := `base: l1
+recipe:
+  base-component:
+    services:
+      base-svc:
+        image: base-image
+        tag: v1.0.0
+`
+	baseFile := filepath.Join(tmpDir, "base-recipe.yaml")
+	require.NoError(t, os.WriteFile(baseFile, []byte(baseContent), 0o644))
+
+	// Child recipe: extends the base recipe file with another service
+	childContent := `base: ./base-recipe.yaml
+recipe:
+  child-component:
+    services:
+      child-svc:
+        image: child-image
+        tag: v2.0.0
+`
+	childFile := filepath.Join(tmpDir, "child-recipe.yaml")
+	require.NoError(t, os.WriteFile(childFile, []byte(childContent), 0o644))
+
+	baseRecipes := GetBaseRecipes()
+	recipe, err := ParseYAMLRecipe(childFile, baseRecipes)
+	require.NoError(t, err)
+	require.NotNil(t, recipe)
+
+	// Apply and verify both base and child services exist
+	exCtx := &ExContext{
+		LogLevel: LevelInfo,
+		Contender: &ContenderContext{
+			Enabled: false,
+		},
+	}
+	component := recipe.Apply(exCtx)
+
+	baseSvc := component.FindService("base-svc")
+	require.NotNil(t, baseSvc, "base service should exist")
+
+	childSvc := component.FindService("child-svc")
+	require.NotNil(t, childSvc, "child service should exist")
+}
+
+func TestParseYAMLRecipe_FileBase_CircularDependency(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Recipe A references B
+	recipeA := `base: ./recipe-b.yaml
+recipe: {}
+`
+	fileA := filepath.Join(tmpDir, "recipe-a.yaml")
+	require.NoError(t, os.WriteFile(fileA, []byte(recipeA), 0o644))
+
+	// Recipe B references A (circular)
+	recipeB := `base: ./recipe-a.yaml
+recipe: {}
+`
+	fileB := filepath.Join(tmpDir, "recipe-b.yaml")
+	require.NoError(t, os.WriteFile(fileB, []byte(recipeB), 0o644))
+
+	baseRecipes := GetBaseRecipes()
+	_, err = ParseYAMLRecipe(fileA, baseRecipes)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "circular")
+}
+
+func TestParseYAMLRecipe_FileBase_NotFound(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	yamlContent := `base: ./nonexistent.yaml
+recipe: {}
+`
+	yamlFile := filepath.Join(tmpDir, "recipe.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0o644))
+
+	baseRecipes := GetBaseRecipes()
+	_, err = ParseYAMLRecipe(yamlFile, baseRecipes)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to parse base recipe")
+}
+
+func TestParseYAMLRecipe_FileBase_MultiLevel(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "recipe-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Level 1: extends l1
+	level1 := `base: l1
+recipe:
+  level1-component:
+    services:
+      level1-svc:
+        image: level1-image
+        tag: v1.0.0
+`
+	file1 := filepath.Join(tmpDir, "level1.yaml")
+	require.NoError(t, os.WriteFile(file1, []byte(level1), 0o644))
+
+	// Level 2: extends level 1
+	level2 := `base: ./level1.yaml
+recipe:
+  level2-component:
+    services:
+      level2-svc:
+        image: level2-image
+        tag: v2.0.0
+`
+	file2 := filepath.Join(tmpDir, "level2.yaml")
+	require.NoError(t, os.WriteFile(file2, []byte(level2), 0o644))
+
+	// Level 3: extends level 2
+	level3 := `base: ./level2.yaml
+recipe:
+  level3-component:
+    services:
+      level3-svc:
+        lifecycle_hooks: true
+        init:
+          - echo hello
+        start: sleep infinity
+        stop:
+          - echo bye
+`
+	file3 := filepath.Join(tmpDir, "level3.yaml")
+	require.NoError(t, os.WriteFile(file3, []byte(level3), 0o644))
+
+	baseRecipes := GetBaseRecipes()
+	recipe, err := ParseYAMLRecipe(file3, baseRecipes)
+	require.NoError(t, err)
+
+	exCtx := &ExContext{
+		LogLevel: LevelInfo,
+		Contender: &ContenderContext{
+			Enabled: false,
+		},
+	}
+	component := recipe.Apply(exCtx)
+
+	// All three levels should be present
+	require.NotNil(t, component.FindService("level1-svc"), "level1 service should exist")
+	require.NotNil(t, component.FindService("level2-svc"), "level2 service should exist")
+
+	level3Svc := component.FindService("level3-svc")
+	require.NotNil(t, level3Svc, "level3 service should exist")
+	require.True(t, level3Svc.LifecycleHooks)
+}

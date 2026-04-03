@@ -79,12 +79,17 @@ func ValidateRecipe(recipe Recipe, baseRecipes []Recipe) *ValidationResult {
 }
 
 func validateYAMLRecipe(recipe *YAMLRecipe, baseRecipes []Recipe, result *ValidationResult) {
-	// Check base recipe exists
+	// Check base recipe exists (built-in name or file path)
 	baseFound := false
-	for _, r := range baseRecipes {
-		if r.Name() == recipe.config.Base {
-			baseFound = true
-			break
+	if isYAMLBasePath(recipe.config.Base) {
+		// File-based base: check that the file was resolved (parsing would have failed otherwise)
+		baseFound = true
+	} else {
+		for _, r := range baseRecipes {
+			if r.Name() == recipe.config.Base {
+				baseFound = true
+				break
+			}
 		}
 	}
 	if !baseFound {

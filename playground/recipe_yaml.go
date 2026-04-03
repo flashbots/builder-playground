@@ -141,8 +141,27 @@ type YAMLRecipe struct {
 
 var _ Recipe = &YAMLRecipe{}
 
-// ParseYAMLRecipe parses a YAML recipe file and returns a YAMLRecipe
+// ParseYAMLRecipe parses a YAML recipe file and returns a YAMLRecipe.
+// The base field can be a built-in recipe name (l1, opstack, buildernet) or
+// a path to another YAML recipe file (e.g. ./signal-boost-recipe.yaml).
 func ParseYAMLRecipe(filePath string, baseRecipes []Recipe) (*YAMLRecipe, error) {
+	return parseYAMLRecipe(filePath, baseRecipes, nil)
+}
+
+func parseYAMLRecipe(filePath string, baseRecipes []Recipe, visited map[string]bool) (*YAMLRecipe, error) {
+	// Cycle detection for file-based base references
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve path %s: %w", filePath, err)
+	}
+	if visited == nil {
+		visited = make(map[string]bool)
+	}
+	if visited[absPath] {
+		return nil, fmt.Errorf("circular base recipe reference: %s", filePath)
+	}
+	visited[absPath] = true
+
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read YAML recipe file: %w", err)
@@ -154,15 +173,29 @@ func ParseYAMLRecipe(filePath string, baseRecipes []Recipe) (*YAMLRecipe, error)
 	}
 
 	if config.Base == "" {
-		return nil, fmt.Errorf("YAML recipe must specify a 'base' recipe (l1, opstack, or buildernet)")
+		return nil, fmt.Errorf("YAML recipe must specify a 'base' recipe (e.g. l1, opstack, buildernet, or a path to another YAML recipe)")
 	}
 
-	// Find the base recipe
+	// Resolve the base recipe: either a built-in name or a YAML file path
 	var baseRecipe Recipe
-	for _, r := range baseRecipes {
-		if r.Name() == config.Base {
-			baseRecipe = r
-			break
+
+	if isYAMLBasePath(config.Base) {
+		// File-based base: resolve relative to the current recipe's directory
+		basePath := config.Base
+		if !filepath.IsAbs(basePath) {
+			basePath = filepath.Join(filepath.Dir(filePath), basePath)
+		}
+		baseRecipe, err = parseYAMLRecipe(basePath, baseRecipes, visited)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse base recipe %s: %w", config.Base, err)
+		}
+	} else {
+		// Built-in base: find by name
+		for _, r := range baseRecipes {
+			if r.Name() == config.Base {
+				baseRecipe = r
+				break
+			}
 		}
 	}
 
@@ -184,6 +217,13 @@ func ParseYAMLRecipe(filePath string, baseRecipes []Recipe) (*YAMLRecipe, error)
 		filePath:   filePath,
 		recipeDir:  filepath.Dir(filePath),
 	}, nil
+}
+
+// isYAMLBasePath returns true if the base string looks like a file path
+// rather than a built-in recipe name.
+func isYAMLBasePath(base string) bool {
+	return strings.HasSuffix(base, ".yaml") || strings.HasSuffix(base, ".yml") ||
+		strings.HasPrefix(base, "./") || strings.HasPrefix(base, "../") || strings.HasPrefix(base, "/")
 }
 
 func (y *YAMLRecipe) Name() string {
