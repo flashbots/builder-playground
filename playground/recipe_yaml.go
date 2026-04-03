@@ -163,7 +163,7 @@ func parseYAMLRecipe(filePath string, baseRecipes []Recipe, visited map[string]b
 	if visited == nil {
 		visited = make(map[string]bool)
 	}
-	if len(visited) > maxBaseRecipeDepth {
+	if len(visited) >= maxBaseRecipeDepth {
 		return nil, fmt.Errorf("base recipe chain too deep (max %d)", maxBaseRecipeDepth)
 	}
 	if visited[absPath] {
