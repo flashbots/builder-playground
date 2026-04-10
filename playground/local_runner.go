@@ -40,8 +40,10 @@ const (
 )
 
 // portOffsetMultiplier is the port offset between concurrent playground sessions.
-// Each concurrent session gets ports offset by (sessionIndex * portOffsetMultiplier).
+// Each concurrent session gets ports offset by (sessionSlot * portOffsetMultiplier).
 const portOffsetMultiplier = 5
+
+const maxSessionSlots = 20
 
 // LocalRunner is a component that runs the services from the manifest on the local host machine.
 // By default, it uses docker and docker compose to run all the services.
@@ -57,7 +59,8 @@ type LocalRunner struct {
 	client   *client.Client
 
 	// portOffset is the offset to apply to all ports based on concurrent sessions
-	portOffset int
+	portOffset  int
+	sessionSlot int
 
 	// reservedPorts is a map of port numbers reserved for each service to avoid conflicts
 	// since we reserve ports for all the services before they are used
@@ -183,8 +186,13 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		cfg.Callbacks = []Callback{func(serviceName string, update TaskStatus) {}} // noop
 	}
 
-	// Calculate port offset based on concurrent playground sessions
-	portOffset := utils.CountConcurrentPlaygroundSessions() * portOffsetMultiplier
+	// Acquire a session slot based on active sessions (via Docker container labels)
+	sessionSlot, err := acquireSessionSlot(client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire session slot: %w", err)
+	}
+	portOffset := sessionSlot * portOffsetMultiplier
+	slog.Debug("port allocation", "session_slot", sessionSlot, "port_offset", portOffset)
 
 	d := &LocalRunner{
 		config:          cfg,
@@ -192,6 +200,7 @@ func NewLocalRunner(cfg *RunnerConfig) (*LocalRunner, error) {
 		manifest:        cfg.Manifest,
 		client:          client,
 		portOffset:      portOffset,
+		sessionSlot:     sessionSlot,
 		reservedPorts:   map[int]bool{},
 		handles:         []*exec.Cmd{},
 		tasks:           tasks,
@@ -411,6 +420,47 @@ func GetLocalSessions() ([]string, error) {
 	// Return sorted unique occurences
 	slices.Sort(sessions)
 	return slices.Compact(sessions), nil
+}
+
+// getUsedSessionSlots returns the set of slot numbers currently in use by active sessions.
+func getUsedSessionSlots(client *client.Client) (map[int]bool, error) {
+	used := map[int]bool{}
+	containers, err := client.ContainerList(context.Background(), container.ListOptions{
+		All:     false,
+		Filters: filters.NewArgs(filters.Arg("label", "playground=true")),
+	})
+	if err != nil {
+		return used, err
+	}
+	seen := map[string]bool{}
+	for _, c := range containers {
+		session := c.Labels["playground.session"]
+		if seen[session] {
+			continue
+		}
+		seen[session] = true
+		if slotStr, ok := c.Labels["playground.slot"]; ok {
+			if slot, err := strconv.Atoi(slotStr); err == nil {
+				used[slot] = true
+			}
+		}
+	}
+	return used, nil
+}
+
+// acquireSessionSlot finds the lowest unused slot number among active sessions.
+func acquireSessionSlot(client *client.Client) (int, error) {
+	used, err := getUsedSessionSlots(client)
+	if err != nil {
+		return 0, fmt.Errorf("could not query active session slots: %w", err)
+	}
+	for i := 0; i < maxSessionSlots; i++ {
+		if !used[i] {
+			slog.Debug("session slot acquired", "slot", i)
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("all %d session slots are in use", maxSessionSlots)
 }
 
 func GetSessionServices(session string) ([]string, error) {
@@ -636,6 +686,7 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		// during the cleanup process
 		"playground":         "true",
 		"playground.session": d.manifest.ID,
+		"playground.slot":    strconv.Itoa(d.sessionSlot),
 		"service":            s.Name,
 	}
 
@@ -660,6 +711,11 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 	// create the bind volumes
 	var createdVolumes []string
 	for localPath, volume := range s.VolumesMapped {
+		if volume.HostPath != "" {
+			volumes[volume.HostPath] = localPath
+			continue
+		}
+
 		dockerVolumeName := d.createVolumeName(s.Name, volume.Name)
 
 		if volume.IsLocal {

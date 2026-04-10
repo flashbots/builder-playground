@@ -456,8 +456,9 @@ type Service struct {
 }
 
 type VolumeMapped struct {
-	Name    string
-	IsLocal bool
+	Name     string
+	IsLocal  bool
+	HostPath string
 }
 
 type DependsOnCondition string
@@ -606,6 +607,16 @@ func (s *Service) WithVolume(name, localPath string, isLocalTri ...bool) *Servic
 	s.VolumesMapped[localPath] = &VolumeMapped{
 		Name:    name,
 		IsLocal: isLocal,
+	}
+	return s
+}
+
+func (s *Service) WithHostVolume(hostPath, containerPath string) *Service {
+	if s.VolumesMapped == nil {
+		s.VolumesMapped = make(map[string]*VolumeMapped)
+	}
+	s.VolumesMapped[containerPath] = &VolumeMapped{
+		HostPath: hostPath,
 	}
 	return s
 }

@@ -122,8 +122,9 @@ type YAMLServiceConfig struct {
 }
 
 type YAMLVolumeMappedConfig struct {
-	Name    string `yaml:"name"`
-	IsLocal bool   `yaml:"is_local"`
+	Name     string `yaml:"name"`
+	IsLocal  bool   `yaml:"is_local"`
+	HostPath string `yaml:"host_path"`
 }
 
 // YAMLReleaseConfig specifies a GitHub release to download
@@ -514,9 +515,7 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 		applyFilesToService(svc, config.Files)
 	}
 	if config.Volumes != nil {
-		for containerPath, volumeMapping := range config.Volumes {
-			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
-		}
+		applyVolumesToService(svc, config.Volumes)
 	}
 	if config.Pid != "" {
 		svc.Pid = config.Pid
@@ -614,7 +613,17 @@ func yamlReleaseToRelease(cfg *YAMLReleaseConfig) *release {
 	}
 }
 
-// applyFilesToService maps files to a service
+// applyVolumesToService maps volumes to a service
+func applyVolumesToService(svc *Service, volumes map[string]*YAMLVolumeMappedConfig) {
+	for containerPath, volumeMapping := range volumes {
+		if volumeMapping.HostPath != "" {
+			svc.WithHostVolume(volumeMapping.HostPath, containerPath)
+		} else {
+			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
+		}
+	}
+}
+
 func applyFilesToService(svc *Service, files map[string]string) {
 	for containerPath, fileSource := range files {
 		var artifactName string
@@ -703,9 +712,7 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 		applyFilesToService(svc, config.Files)
 	}
 	if config.Volumes != nil {
-		for containerPath, volumeMapping := range config.Volumes {
-			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
-		}
+		applyVolumesToService(svc, config.Volumes)
 	}
 	if config.Pid != "" {
 		svc.Pid = config.Pid

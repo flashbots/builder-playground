@@ -417,6 +417,22 @@ func TestCreateServiceFromConfig_WithVolumes(t *testing.T) {
 	require.Equal(t, "myvolume", svc.VolumesMapped["/data"].Name)
 }
 
+func TestCreateServiceFromConfig_WithHostPathVolume(t *testing.T) {
+	config := &YAMLServiceConfig{
+		Image: "test-image",
+		Volumes: map[string]*YAMLVolumeMappedConfig{"/var/run/docker.sock": {
+			HostPath: "/var/run/docker.sock",
+		}},
+	}
+
+	svc := createServiceFromConfig("my-service", config, nil, "")
+
+	require.NotNil(t, svc.VolumesMapped)
+	require.Equal(t, "/var/run/docker.sock", svc.VolumesMapped["/var/run/docker.sock"].HostPath)
+	require.Empty(t, svc.VolumesMapped["/var/run/docker.sock"].Name)
+	require.False(t, svc.VolumesMapped["/var/run/docker.sock"].IsLocal)
+}
+
 func TestParseYAMLRecipe(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "recipe-test")
 	require.NoError(t, err)
