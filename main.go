@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -56,6 +57,7 @@ var (
 	contenderArgs         []string
 	contenderTarget       string
 	detached              bool
+	readyServer           bool
 	skipSetup             bool
 	prefundedAccounts     []string
 	followFlag            bool
@@ -599,6 +601,7 @@ func main() {
 		cmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		cmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
 		cmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+		cmd.Flags().BoolVar(&readyServer, "ready-server", false, "Start an HTTP server on 0.0.0.0:8123 that returns 200 OK when all services are healthy")
 		cmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip the setup commands defined in the YAML recipe")
 		cmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
 		cmd.Flags().BoolVar(&k8sFlag, "k8s", false, "generate Kubernetes manifests (requires kompose) and helper files")
@@ -880,6 +883,21 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	slog.Info("All services are healthy! Ready to accept transactions. 🚀", "session-id", svcManager.ID)
+
+	if readyServer {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		srv := &http.Server{Addr: "0.0.0.0:8123", Handler: mux}
+		defer srv.Close()
+		go func() {
+			slog.Info("Ready server listening", "addr", "0.0.0.0:8123")
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Error("Ready server failed", "err", err)
+			}
+		}()
+	}
 
 	// get the output from the recipe
 	output := recipe.Output(svcManager)
