@@ -94,6 +94,12 @@ type YAMLServiceConfig struct {
 	// Release specifies a GitHub release to download for host execution
 	Release *YAMLReleaseConfig `yaml:"release,omitempty"`
 
+	// Pid sets the PID mode for the container (e.g. "service:el")
+	Pid string `yaml:"pid,omitempty"`
+
+	// Labels is a map of Docker labels to apply to the service
+	Labels map[string]string `yaml:"labels,omitempty"`
+
 	// ReadyCheck is a URL to check for service readiness (used for health checks)
 	// Format: "http://localhost:PORT/path" - the service is ready when this URL returns 200
 	ReadyCheck string `yaml:"ready_check,omitempty"`
@@ -324,6 +330,33 @@ func (y *YAMLRecipe) applyModifications(ctx *ExContext, component *Component) {
 	if len(removedServices) > 0 {
 		cleanupDependsOn(component, removedServices)
 	}
+
+	// Auto-apply ReadyCheck to health-check sidecars that don't have one.
+	// Go-created healthmon sidecars get this from UseHealthmon, but YAML-defined
+	// ones can't express ReadyCheck.Test, so we fill it in based on the label.
+	applyHealthmonReadyChecks(component)
+}
+
+// applyHealthmonReadyChecks finds services with a health-check-sidecar label
+// and ensures the referenced sidecar has a ReadyCheck set. This bridges the gap
+// between Go-created healthmon sidecars (which get ReadyCheck from UseHealthmon)
+// and YAML-defined ones (which can't express ReadyCheck.Test).
+func applyHealthmonReadyChecks(root *Component) {
+	for _, svc := range root.Services {
+		sidecarName, ok := svc.Labels[healthCheckSidecarLabel]
+		if !ok {
+			continue
+		}
+		sidecar := root.FindService(sidecarName)
+		if sidecar == nil || sidecar.ReadyCheck != nil {
+			continue
+		}
+		check := DefaultHealthmonReadyCheck()
+		sidecar.WithReady(check)
+	}
+	for _, inner := range root.Inner {
+		applyHealthmonReadyChecks(inner)
+	}
 }
 
 // findComponent finds a component by name in the component tree
@@ -485,6 +518,9 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
 		}
 	}
+	if config.Pid != "" {
+		svc.Pid = config.Pid
+	}
 	if config.DependsOn != nil {
 		applyDependsOn(svc, config.DependsOn, root)
 	}
@@ -500,6 +536,11 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 		rel := yamlReleaseToRelease(config.Release)
 		svc.WithRelease(rel)
 		svc.UseHostExecution()
+	}
+	if config.Labels != nil {
+		for k, v := range config.Labels {
+			svc.WithLabel(k, v)
+		}
 	}
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})
@@ -666,6 +707,9 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 			svc.WithVolume(volumeMapping.Name, containerPath, volumeMapping.IsLocal)
 		}
 	}
+	if config.Pid != "" {
+		svc.Pid = config.Pid
+	}
 	if config.DependsOn != nil {
 		applyDependsOn(svc, config.DependsOn, root)
 	}
@@ -681,6 +725,11 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 		rel := yamlReleaseToRelease(config.Release)
 		svc.WithRelease(rel)
 		svc.UseHostExecution()
+	}
+	if config.Labels != nil {
+		for k, v := range config.Labels {
+			svc.WithLabel(k, v)
+		}
 	}
 	if config.ReadyCheck != "" {
 		svc.WithReady(ReadyCheck{QueryURL: config.ReadyCheck})

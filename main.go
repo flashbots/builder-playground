@@ -60,6 +60,7 @@ var (
 	prefundedAccounts     []string
 	followFlag            bool
 	generateForce         bool
+	generateStdout        bool
 	testRPCURL            string
 	testELRPCURL          string
 	testTimeout           time.Duration
@@ -446,6 +447,10 @@ var generateCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("failed to convert recipe to YAML: %w", err)
 				}
+				if generateStdout {
+					fmt.Print(yamlContent)
+					return nil
+				}
 				outFile := "playground.yaml"
 				if !generateForce {
 					if _, err := os.Stat(outFile); err == nil {
@@ -467,6 +472,14 @@ var generateCmd = &cobra.Command{
 		}
 		for _, cr := range customRecipes {
 			if cr == name {
+				if generateStdout {
+					yamlContent, err := playground.GetCustomRecipeYAML(name)
+					if err != nil {
+						return fmt.Errorf("failed to read custom recipe YAML: %w", err)
+					}
+					fmt.Print(yamlContent)
+					return nil
+				}
 				return playground.GenerateFromCustomRecipe(name, generateForce)
 			}
 		}
@@ -666,6 +679,7 @@ func main() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(generateDocsCmd)
 	generateCmd.Flags().BoolVar(&generateForce, "force", false, "overwrite existing files")
+	generateCmd.Flags().BoolVar(&generateStdout, "stdout", false, "print playground.yaml to stdout instead of writing to disk")
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(recipesCmd)
 	testCmd.Flags().StringVar(&testRPCURL, "rpc", "http://localhost:8545", "Target RPC URL for sending transactions")
@@ -901,6 +915,9 @@ func runIt(recipe playground.Recipe) error {
 	var exitErr error
 
 	select {
+	case <-mainctx.GetForceKillCtx().Done():
+		exitErr = fmt.Errorf("force kill signal received")
+		slog.Warn("Force killing...", "error", exitErr)
 	case <-ctx.Done():
 		exitErr = ctx.Err()
 		slog.Warn("Stopping...", "error", exitErr)

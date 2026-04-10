@@ -260,14 +260,15 @@ func (s *Manifest) GetService(name string) (*Service, bool) {
 // - checks if all the port dependencies are met from the service description
 // - downloads any local release artifacts for the services that require host execution
 func (s *Manifest) Validate(out *output) error {
+	// Pass 1: Create health-check sidecars and label the services they monitor.
+	// This must complete before validating depends_on, because map-based service
+	// ordering (e.g. YAML recipes) can cause a dependent to be visited before
+	// the service it depends on has been labeled.
 	for _, ss := range s.Services {
-		// override ready checks that use the QueryURL feature
 		if ss.ReadyCheck != nil && ss.ReadyCheck.QueryURL != "" {
 			// For host-executed services, keep the ReadyCheck on the service itself
 			// so that local_runner can poll it directly. Don't create a sidecar.
 			if ss.HostPath != "" {
-				// Host services are polled directly by local_runner.go waitForDependencies()
-				// Keep the ReadyCheck intact for that polling logic
 				continue
 			}
 
@@ -306,7 +307,10 @@ func (s *Manifest) Validate(out *output) error {
 				WithReady(readyCheck).
 				WithUngracefulShutdown()
 		}
+	}
 
+	// Pass 2: Validate node refs, depends_on, and redirect health checks to sidecars.
+	for _, ss := range s.Services {
 		// validate node port references
 		for _, nodeRef := range ss.NodeRefs {
 			targetService, ok := s.GetService(nodeRef.Service)
@@ -432,6 +436,8 @@ type Service struct {
 	Image      string `json:"image,omitempty"`
 	Entrypoint string `json:"entrypoint,omitempty"`
 	HostPath   string `json:"host_path,omitempty"`
+
+	Pid string `json:"pid,omitempty"`
 
 	UngracefulShutdown bool `json:"ungraceful_shutdown,omitempty"`
 

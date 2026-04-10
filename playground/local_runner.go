@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -283,18 +284,12 @@ func (d *LocalRunner) sendExitError(err error) {
 }
 
 func (d *LocalRunner) Stop(keepResources bool) error {
-	forceKillCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	// Keep an eye on the force kill requests.
-	go func(ctx context.Context) {
-		select {
-		case <-ctx.Done():
-			return
-		case <-mainctx.GetForceKillCtx().Done():
-			d.stopAllProcessesWithSignal(os.Kill)
-			ForceKillSession(d.manifest.ID, keepResources)
-		}
-	}(forceKillCtx)
+	go func() {
+		<-mainctx.GetForceKillCtx().Done()
+		d.stopAllProcessesWithSignal(os.Kill)
+		ForceKillSession(d.manifest.ID, keepResources)
+	}()
 	// Kill all the processes ran by playground on the host.
 	// Possible to make a more graceful exit with os.Interrupt here
 	// but preferring a quick exit for now.
@@ -333,7 +328,40 @@ func stopProcessWithSignal(handle *exec.Cmd, signal os.Signal) {
 	}
 }
 
+// KillSessionPIDs reads the pids directory for the given session and sends signal to each process.
+func KillSessionPIDs(id string, signal os.Signal) {
+	pidsDir, err := utils.GetPIDsDir(id)
+	if err != nil {
+		return
+	}
+	entries, err := os.ReadDir(pidsDir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(pidsDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		if err != nil {
+			continue
+		}
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			continue
+		}
+		_ = proc.Signal(signal)
+	}
+}
+
 func StopSession(id string, keepResources bool) error {
+	// Kill any host processes tracked via pid files
+	KillSessionPIDs(id, syscall.SIGTERM)
+
 	// stop the docker-compose
 	args := []string{"compose", "-p", id}
 	if keepResources {
@@ -686,6 +714,10 @@ func (d *LocalRunner) toDockerComposeService(s *Service) (map[string]interface{}
 		service["stop_grace_period"] = "0s"
 	}
 
+	if s.Pid != "" {
+		service["pid"] = s.Pid
+	}
+
 	if s.DependsOn != nil {
 		depends := map[string]interface{}{}
 
@@ -822,7 +854,7 @@ func (d *LocalRunner) createVolumeDir(service, volumeName string) (string, error
 }
 
 // waitForDependencies waits for all dependencies of a host service to be healthy
-func (d *LocalRunner) waitForDependencies(ss *Service) error {
+func (d *LocalRunner) waitForDependencies(ctx context.Context, ss *Service) error {
 	if len(ss.DependsOn) == 0 {
 		return nil
 	}
@@ -852,7 +884,7 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 			}
 
 			// Poll until the dependency is healthy
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			ctx, cancel := context.WithTimeout(ctx, time.Minute)
 			defer cancel()
 
 			slog.Info("Waiting for host dependency", "service", ss.Name, "dependency", originalName)
@@ -878,7 +910,7 @@ func (d *LocalRunner) waitForDependencies(ss *Service) error {
 			}
 		} else {
 			// For Docker services, check the healthmon container
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			ctx, cancel := context.WithTimeout(ctx, time.Minute)
 			defer cancel()
 
 			slog.Info("Waiting for container dependency", "service", ss.Name, "dependency", depName)
@@ -912,7 +944,7 @@ func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 	}
 
 	// Wait for dependencies to be healthy before starting
-	if err := d.waitForDependencies(ss); err != nil {
+	if err := d.waitForDependencies(ctx, ss); err != nil {
 		return fmt.Errorf("failed waiting for dependencies: %w", err)
 	}
 
@@ -973,8 +1005,16 @@ func (d *LocalRunner) runOnHost(ctx context.Context, ss *Service) error {
 	cmd.Stdout = logOutput
 	cmd.Stderr = logOutput
 
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start host service %s: %w", ss.Name, err)
+	}
+
+	if err := d.out.WritePIDFile(ss.Name, cmd.Process.Pid); err != nil {
+		slog.Warn("failed to write pid file", "service", ss.Name, "error", err)
+	}
+
 	go func() {
-		if err := cmd.Run(); err != nil {
+		if err := cmd.Wait(); err != nil {
 			// If the playground is being exited, ignore the exit error info
 			// to make the outputs less confusing.
 			if mainctx.IsExiting() {

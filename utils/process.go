@@ -30,15 +30,7 @@ func getCountFromOutput(out []byte, myPid int) int {
 			continue
 		}
 
-		// Check if this line contains a playground start/cook command
-		if !strings.Contains(line, "builder-playground") {
-			continue
-		}
-		if !strings.Contains(line, "start") && !strings.Contains(line, "cook") {
-			continue
-		}
-
-		// Extract PID (first field)
+		// Extract PID (first field) and command (rest)
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue
@@ -51,6 +43,21 @@ func getCountFromOutput(out []byte, myPid int) int {
 
 		// Skip our own process
 		if pid == myPid {
+			continue
+		}
+
+		// Check if the command is a playground start/cook invocation.
+		// The command may be "builder-playground" or a full path like
+		// "/usr/local/bin/builder-playground".
+		command := strings.Join(fields[1:], " ")
+		binary := fields[1]
+		if idx := strings.LastIndex(binary, "/"); idx >= 0 {
+			binary = binary[idx+1:]
+		}
+		if binary != "builder-playground" {
+			continue
+		}
+		if !strings.Contains(command, " start ") && !strings.Contains(command, " cook ") {
 			continue
 		}
 

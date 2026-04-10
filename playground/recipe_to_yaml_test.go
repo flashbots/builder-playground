@@ -136,6 +136,34 @@ func TestConvertServiceToYAML(t *testing.T) {
 				HostPath: "/usr/local/bin/myapp",
 			},
 		},
+		{
+			name: "service with ready_check",
+			service: &Service{
+				Name:       "health-service",
+				Image:      "myapp",
+				ReadyCheck: &ReadyCheck{QueryURL: "http://localhost:8080/health"},
+			},
+			expected: &YAMLServiceConfig{
+				Image:      "myapp",
+				ReadyCheck: "http://localhost:8080/health",
+			},
+		},
+		{
+			name: "service with labels",
+			service: &Service{
+				Name:  "el",
+				Image: "reth",
+				Labels: map[string]string{
+					"health-check-sidecar": "el_healthmon",
+				},
+			},
+			expected: &YAMLServiceConfig{
+				Image: "reth",
+				Labels: map[string]string{
+					"health-check-sidecar": "el_healthmon",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -146,6 +174,8 @@ func TestConvertServiceToYAML(t *testing.T) {
 			require.Equal(t, tt.expected.Tag, result.Tag)
 			require.Equal(t, tt.expected.Entrypoint, result.Entrypoint)
 			require.Equal(t, tt.expected.HostPath, result.HostPath)
+			require.Equal(t, tt.expected.ReadyCheck, result.ReadyCheck)
+			require.Equal(t, tt.expected.Labels, result.Labels)
 			require.Len(t, result.Args, len(tt.expected.Args))
 			require.Equal(t, tt.expected.Ports, result.Ports)
 			require.Equal(t, tt.expected.Env, result.Env)

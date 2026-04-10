@@ -508,6 +508,7 @@ func ConnectWs(service, port string) string {
 }
 
 type output struct {
+	sessionID      string
 	sessionDir     string
 	sessionsDir    string
 	playgroundDir  string
@@ -538,6 +539,7 @@ func NewOutput(sessionID, sessionDir string) (*output, error) {
 	}
 
 	out := &output{
+		sessionID:      sessionID,
 		sessionDir:     sessionDir,
 		sessionsDir:    sessionsDir,
 		playgroundDir:  playgroundDir,
@@ -573,6 +575,18 @@ func (o *output) Exists(path string) bool {
 
 func (o *output) Remove(path string) error {
 	return os.RemoveAll(filepath.Join(o.sessionDir, path))
+}
+
+// WritePIDFile writes the given pid to pids/<name> inside the session's pids directory.
+func (o *output) WritePIDFile(name string, pid int) error {
+	pidsDir, err := utils.GetPIDsDir(o.sessionID)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(pidsDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(pidsDir, name), []byte(strconv.Itoa(pid)), 0o644)
 }
 
 // CreateDir creates a new dir in the output folder and returns the

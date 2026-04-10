@@ -1034,6 +1034,17 @@ const (
 	healthmonExecution = "execution"
 )
 
+// DefaultHealthmonReadyCheck returns the standard ReadyCheck used by healthmon sidecars.
+func DefaultHealthmonReadyCheck() ReadyCheck {
+	return ReadyCheck{
+		Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
+		Interval:    1 * time.Second,
+		Timeout:     30 * time.Minute,
+		Retries:     20,
+		StartPeriod: 1 * time.Second,
+	}
+}
+
 func UseHealthmon(component *Component, s *Service, chain string) {
 	healthmonName := s.Name + "_healthmon"
 
@@ -1043,13 +1054,7 @@ func UseHealthmon(component *Component, s *Service, chain string) {
 		WithTag(latestPlaygroundUtilsTag).
 		WithEntrypoint("healthmon").
 		WithArgs("--chain", chain, "--url", Connect(s.Name, "http")).
-		WithReady(ReadyCheck{
-			Test:        []string{"CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:21171/ready"},
-			Interval:    1 * time.Second,
-			Timeout:     10 * time.Minute,
-			Retries:     20,
-			StartPeriod: 1 * time.Second,
-		})
+		WithReady(DefaultHealthmonReadyCheck())
 }
 
 // Fileserver serves genesis and testnet files over HTTP using Caddy.

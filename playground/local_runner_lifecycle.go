@@ -67,7 +67,7 @@ func (lc *lifecycleContext) formatError(phase, command string, err error) string
 
 // startWithLifecycleHooks runs a service with lifecycle commands (init, start)
 func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service) error {
-	if err := d.waitForDependencies(svc); err != nil {
+	if err := d.waitForDependencies(ctx, svc); err != nil {
 		return fmt.Errorf("failed waiting for dependencies: %w", err)
 	}
 
@@ -125,6 +125,10 @@ func (d *LocalRunner) startWithLifecycleHooks(ctx context.Context, svc *Service)
 	// the main process exits right after lifecycle hooks complete.
 	if err := startCmd.Start(); err != nil {
 		return fmt.Errorf("%s", lc.formatError("start", svc.Start, err))
+	}
+
+	if err := d.out.WritePIDFile(svc.Name, startCmd.Process.Pid); err != nil {
+		slog.Warn("failed to write pid file", "service", svc.Name, "error", err)
 	}
 
 	go func() {

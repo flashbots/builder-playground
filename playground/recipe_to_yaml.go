@@ -139,6 +139,12 @@ func convertServiceToYAML(svc *Service) *YAMLServiceConfig {
 	if svc.HostPath != "" {
 		config.HostPath = svc.HostPath
 	}
+	if len(svc.Labels) > 0 {
+		config.Labels = svc.Labels
+	}
+	if svc.ReadyCheck != nil && svc.ReadyCheck.QueryURL != "" {
+		config.ReadyCheck = svc.ReadyCheck.QueryURL
+	}
 
 	return config
 }

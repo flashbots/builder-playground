@@ -52,3 +52,12 @@ func GetSessionsDir() (string, error) {
 	}
 	return filepath.Join(playgroundDir, "sessions"), nil
 }
+
+// GetPIDsDir returns the directory where pid files are stored for a session.
+func GetPIDsDir(sessionID string) (string, error) {
+	sessionsDir, err := GetSessionsDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(sessionsDir, sessionID, "pids"), nil
+}

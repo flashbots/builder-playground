@@ -1,9 +1,8 @@
-# NOTE: Works with Mac - prefer using rbuilder/bin for Linux if this doesn't work.
 base: l1
 description: Use reth and rbuilder containers
 
 recipe:
-  # TODO: Already included as a container in the base recipe.
+  # Already included as a container in the base recipe.
   # Uncomment and modify only if you need to override.
   # reth:
   #   services:
@@ -15,6 +14,7 @@ recipe:
     services:
       rbuilder:
         image: ghcr.io/flashbots/rbuilder
+        pid: "service:el" # Nico's trick for letting rbuilder lock the reth db
         tag: sha-7efdc0b
         args:
           - "run"
@@ -27,5 +27,6 @@ recipe:
             name: "shared:el-data"
             is_local: true
         depends_on:
+          - "el:running"
           - "el:healthy"
           - "beacon:healthy"

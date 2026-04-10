@@ -267,6 +267,19 @@ func GenerateCustomRecipeToDir(customRecipeName, targetDir string) (string, erro
 	return filepath.Join(targetDir, "playground.yaml"), nil
 }
 
+// GetCustomRecipeYAML returns the playground.yaml content for a custom recipe without writing any files.
+func GetCustomRecipeYAML(customRecipeName string) (string, error) {
+	_, yamlFile, recipePath, err := parseCustomRecipeName(customRecipeName)
+	if err != nil {
+		return "", err
+	}
+	content, err := fs.ReadFile(CustomRecipesFS, filepath.Join(recipePath, yamlFile))
+	if err != nil {
+		return "", fmt.Errorf("failed to read custom recipe yaml: %w", err)
+	}
+	return string(content), nil
+}
+
 // GenerateFromCustomRecipe extracts a custom recipe and its dependencies to current directory
 // customRecipeName should be in "group/variant" format (e.g., "rbuilder/bin")
 // If force is false, it will error if any files already exist

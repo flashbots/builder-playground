@@ -1,4 +1,4 @@
-# Custom Recipes
+# Custom Recipes Introduction
 
 > **Important:** This is yet an experimental feature and sometimes might not always work as intended. Please submit issues with your use cases if you find any problems.
 
@@ -52,7 +52,7 @@ recipe:
 Once you have a `playground.yaml` file, run it with:
 
 ```bash
-playground start playground.yaml
+builder-playground start playground.yaml
 ```
 
 The playground will load the base recipe, apply your modifications, and start all the services.
@@ -64,7 +64,7 @@ The playground will load the base recipe, apply your modifications, and start al
 To see all available base recipes and pre-built custom recipes:
 
 ```bash
-playground recipes
+builder-playground recipes
 ```
 
 This shows:
@@ -79,7 +79,7 @@ Each recipe displays a description and the components it includes.
 You can run any custom recipe directly by name:
 
 ```bash
-playground start rbuilder/bin
+builder-playground start rbuilder/bin
 ```
 
 This is equivalent to generating the custom recipe files and running them when you don't need to modify the recipe.
@@ -89,7 +89,7 @@ This is equivalent to generating the custom recipe files and running them when y
 If you want to inspect or modify a pre-built custom recipe, generate it to your current directory:
 
 ```bash
-playground generate rbuilder/bin
+builder-playground generate rbuilder/bin
 ```
 
 This creates:
@@ -100,7 +100,7 @@ This creates:
 You can then edit these files and run:
 
 ```bash
-playground start playground.yaml
+builder-playground start playground.yaml
 ```
 
 ---
@@ -110,7 +110,7 @@ playground start playground.yaml
 Sometimes you want to see the complete configuration of a base recipe, modify it extensively, and run your own version. You can generate the full YAML representation of any base recipe:
 
 ```bash
-playground generate l1
+builder-playground generate l1
 ```
 
 This creates a `playground.yaml` file with the complete `l1` recipe, showing all components, services, images, arguments, and configuration.
@@ -118,7 +118,7 @@ This creates a `playground.yaml` file with the complete `l1` recipe, showing all
 Then edit `playground.yaml` to make any changes you need, and run it:
 
 ```bash
-playground start playground.yaml
+builder-playground start playground.yaml
 ```
 
 This approach gives you full control over every aspect of the recipe while still benefiting from the playground's orchestration.
