@@ -192,11 +192,12 @@ func shutDownCmdFunc(cmdName string) func(cmd *cobra.Command, args []string) err
 		panic("setting up shut down func for unknown cmd: " + cmdName)
 	}
 	return func(cmd *cobra.Command, args []string) error {
-		sessions := args
-		if len(sessions) == 0 {
+		if len(args) == 0 {
 			return fmt.Errorf("please specify at least one session name or 'all' to %s all sessions", cmdName)
 		}
-		if len(sessions) == 1 && sessions[0] == "all" {
+		isAll := len(args) == 1 && args[0] == "all"
+		sessions := args
+		if isAll {
 			var err error
 			sessions, err = playground.GetLocalSessions()
 			if err != nil {
@@ -207,6 +208,19 @@ func shutDownCmdFunc(cmdName string) func(cmd *cobra.Command, args []string) err
 			fmt.Printf("%s: %s\n", cmdName, session)
 			if err := playground.StopSession(session, keepResources); err != nil {
 				return err
+			}
+		}
+		if cmdName == "clean" {
+			sessionsDir, err := utils.GetSessionsDir()
+			if err != nil {
+				return err
+			}
+			if isAll {
+				_ = os.RemoveAll(sessionsDir)
+			} else {
+				for _, session := range sessions {
+					_ = os.RemoveAll(filepath.Join(sessionsDir, session))
+				}
 			}
 		}
 		return nil
