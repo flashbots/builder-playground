@@ -108,6 +108,62 @@ func TestDownloadRelease_Binary(t *testing.T) {
 	require.Equal(t, os.FileMode(0o755), info.Mode().Perm())
 }
 
+func TestDownloadRelease_BinaryArch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	binaryContent := []byte("#!/bin/bash\necho hello")
+
+	var requestedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.Write(binaryContent)
+	}))
+	defer server.Close()
+
+	rel := &release{
+		Name:    "rbuilder",
+		Org:     "flashbots",
+		Repo:    "rbuilder",
+		Version: "v1.3.15",
+		Format:  "binary-arch",
+		BaseURL: server.URL,
+		Arch: func(goos, goarch string) string {
+			return "x86_64-unknown-linux-gnu"
+		},
+	}
+
+	outPath, err := DownloadRelease(tmpDir, rel)
+	require.NoError(t, err)
+
+	require.Equal(t, "/flashbots/rbuilder/releases/download/v1.3.15/rbuilder-v1.3.15-x86_64-unknown-linux-gnu", requestedPath)
+
+	content, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	require.Equal(t, binaryContent, content)
+
+	info, err := os.Stat(outPath)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o755), info.Mode().Perm())
+}
+
+func TestDownloadRelease_BinaryArch_UnsupportedArch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rel := &release{
+		Name:    "rbuilder",
+		Org:     "flashbots",
+		Version: "v1.3.15",
+		Format:  "binary-arch",
+		Arch: func(goos, goarch string) string {
+			return ""
+		},
+	}
+
+	_, err := DownloadRelease(tmpDir, rel)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported OS/Arch for binary-arch")
+}
+
 func TestDownloadRelease_RepoDefaultsToName(t *testing.T) {
 	tmpDir := t.TempDir()
 

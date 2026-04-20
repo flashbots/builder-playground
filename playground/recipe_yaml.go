@@ -133,8 +133,10 @@ type YAMLReleaseConfig struct {
 	Org     string `yaml:"org"`
 	Repo    string `yaml:"repo,omitempty"`
 	Version string `yaml:"version"`
-	// Format specifies the download format: "tar.gz" (default) or "binary"
-	// For "binary", downloads the raw binary directly without extraction
+	// Format specifies the download format: "tar.gz" (default), "binary", or "binary-arch".
+	// "binary" downloads the raw binary at <name>.
+	// "binary-arch" downloads the raw binary at <name>-<version>-<arch> (used by releases
+	// like flashbots/rbuilder that publish per-architecture binaries without tarballs).
 	Format string `yaml:"format,omitempty"`
 }
 
@@ -649,7 +651,7 @@ func yamlReleaseToRelease(cfg *YAMLReleaseConfig) *release {
 			if cfg.Format == "binary" {
 				return ""
 			}
-			// Default architecture mapping for tar.gz
+			// Default architecture mapping for tar.gz and binary-arch
 			if goos == "linux" {
 				return "x86_64-unknown-linux-gnu"
 			} else if goos == "darwin" && goarch == "arm64" {

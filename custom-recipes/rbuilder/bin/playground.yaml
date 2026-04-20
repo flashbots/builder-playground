@@ -10,7 +10,7 @@ recipe:
         release:
           name: "reth"
           org: "paradigmxyz"
-          version: "v1.10.1"
+          version: "v2.0.0"
 
   builder:
     services:
@@ -20,8 +20,8 @@ recipe:
         release:
           name: "rbuilder"
           org: "flashbots"
-          version: "v1.3.4"
-          format: "binary"
+          version: "v1.3.15"
+          format: "binary-arch"
         args:
           - "run"
           - "rbuilder.toml"

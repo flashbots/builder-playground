@@ -20,7 +20,10 @@ type release struct {
 	Org     string
 	Version string
 	Arch    func(string, string) string
-	// Format specifies the download format: "tar.gz" (default) or "binary"
+	// Format specifies the download format: "tar.gz" (default), "binary", or "binary-arch".
+	// "binary" downloads the asset named <name> as-is.
+	// "binary-arch" downloads the asset named <name>-<version>-<arch> as-is (used by
+	// releases that publish per-architecture raw binaries, e.g. flashbots/rbuilder).
 	Format string
 	// BaseURL overrides the default GitHub releases URL (for testing)
 	BaseURL string
@@ -59,6 +62,16 @@ func DownloadRelease(outputFolder string, artifact *release) (string, error) {
 	// Handle binary format (raw binary download)
 	if artifact.Format == "binary" {
 		releasesURL := fmt.Sprintf("%s/%s/%s/releases/download/%s/%s", baseURL, artifact.Org, repo, artifact.Version, artifact.Name)
+		log.Printf("Downloading binary %s: %s\n", outPath, releasesURL)
+
+		if err := downloadBinary(releasesURL, outPath); err != nil {
+			return "", fmt.Errorf("error downloading binary: %v", err)
+		}
+	} else if artifact.Format == "binary-arch" {
+		if archVersion == "" {
+			return "", fmt.Errorf("unsupported OS/Arch for binary-arch format: %s/%s", goos, goarch)
+		}
+		releasesURL := fmt.Sprintf("%s/%s/%s/releases/download/%s/%s-%s-%s", baseURL, artifact.Org, repo, artifact.Version, artifact.Name, artifact.Version, archVersion)
 		log.Printf("Downloading binary %s: %s\n", outPath, releasesURL)
 
 		if err := downloadBinary(releasesURL, outPath); err != nil {

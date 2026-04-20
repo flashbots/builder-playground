@@ -285,11 +285,12 @@ services:
       org: flashbots
       repo: rbuilder          # defaults to name if omitted
       version: v0.1.0
-      format: tar.gz          # tar.gz (default) | binary
+      format: tar.gz          # tar.gz (default) | binary | binary-arch
 ```
 
-- `format: tar.gz` — downloads and extracts a tarball; arch string is inferred from the OS/arch.
-- `format: binary` — downloads the raw binary directly; no extraction, arch ignored.
+- `format: tar.gz` — downloads and extracts `<name>-<version>-<arch>.tar.gz`; arch string is inferred from the OS/arch.
+- `format: binary` — downloads the raw binary at `<name>`; no extraction, arch ignored.
+- `format: binary-arch` — downloads the raw binary at `<name>-<version>-<arch>`; used by releases that publish per-architecture binaries without tarballs (e.g. flashbots/rbuilder).
 
 ### Lifecycle hooks
 
