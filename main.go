@@ -57,6 +57,7 @@ var (
 	contenderArgs         []string
 	contenderTarget       string
 	detached              bool
+	detachedNotifyFd      int
 	readyServer           bool
 	skipSetup             bool
 	prefundedAccounts     []string
@@ -601,6 +602,8 @@ func main() {
 		cmd.Flags().StringArrayVar(&contenderArgs, "contender.arg", []string{}, "add/override contender CLI flags")
 		cmd.Flags().StringVar(&contenderTarget, "contender.target", "", "override the node that contender spams")
 		cmd.Flags().BoolVar(&detached, "detached", false, "Detached mode: Run the recipes in the background")
+		cmd.Flags().IntVar(&detachedNotifyFd, "detached-notify-fd", 0, "internal: file descriptor used by a detached child to signal readiness to its parent")
+		_ = cmd.Flags().MarkHidden("detached-notify-fd")
 		cmd.Flags().BoolVar(&readyServer, "ready-server", false, "Start an HTTP server on 0.0.0.0:8123 that returns 200 OK when all services are healthy")
 		cmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip the setup commands defined in the YAML recipe")
 		cmd.Flags().StringArrayVar(&prefundedAccounts, "prefunded-accounts", []string{}, "Fund this account in addition to static prefunded accounts")
@@ -709,6 +712,14 @@ func runIt(recipe playground.Recipe) error {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
 	logging.ConfigureSlog(logLevelFlag)
+
+	// Detached parent mode: re-exec ourselves as an attached child,
+	// wait until all services are healthy, then exit while leaving the
+	// child running in the background.
+	if detached && detachedNotifyFd == 0 {
+		return runDetachedParent()
+	}
+
 	sessionID := utils.GeneratePetName()
 
 	out, err := playground.NewOutput(sessionID, outputFlag)
@@ -910,8 +921,13 @@ func runIt(recipe playground.Recipe) error {
 		}
 	}
 
-	if detached {
-		return nil
+	// If we were re-exec'd as the detached child, signal readiness to the
+	// parent and redirect stdio to a log file so the parent can exit cleanly
+	// without the child continuing to write to the shared terminal.
+	if detachedNotifyFd > 0 {
+		if err := notifyDetachedReady(detachedNotifyFd, out.Dst()); err != nil {
+			return fmt.Errorf("failed to detach: %w", err)
+		}
 	}
 
 	watchdogErr := make(chan error, 1)
@@ -953,4 +969,34 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	return exitErr
+}
+
+// runDetachedParent re-execs the current binary as an attached child and waits
+// for it to signal that all services are healthy. Once the child signals
+// readiness, the parent detaches from it and exits; the child keeps running in
+// the background.
+func runDetachedParent() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to locate self executable: %w", err)
+	}
+
+	child, err := utils.DetachFork(utils.DetachForkOptions{
+		Executable: exe,
+		Args:       utils.StripFlag(os.Args[1:], "--detached", false),
+	})
+	if err != nil {
+		return err
+	}
+
+	slog.Info("Playground detached and running in background", "pid", child.PID)
+	return nil
+}
+
+// notifyDetachedReady is called by the re-exec'd child once all services are
+// healthy. It writes the ready marker to the parent's pipe and redirects the
+// child's stdio so the parent can exit without leaving the child writing to
+// the shared terminal.
+func notifyDetachedReady(fd int, sessionDir string) error {
+	return utils.NotifyDetachReady(fd, filepath.Join(sessionDir, "playground.log"))
 }
