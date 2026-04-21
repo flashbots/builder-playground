@@ -210,17 +210,25 @@ func shutDownCmdFunc(cmdName string) func(cmd *cobra.Command, args []string) err
 				return err
 			}
 		}
-		if cmdName == "clean" {
-			sessionsDir, err := utils.GetSessionsDir()
+		if cmdName != "clean" {
+			return nil
+		}
+		sessionsDir, err := utils.GetSessionsDir()
+		if err != nil {
+			return err
+		}
+		if isAll {
+			err = os.RemoveAll(sessionsDir)
 			if err != nil {
-				return err
+				slog.Warn("failed to remove sessions directory", "error", err)
 			}
-			if isAll {
-				_ = os.RemoveAll(sessionsDir)
-			} else {
-				for _, session := range sessions {
-					_ = os.RemoveAll(filepath.Join(sessionsDir, session))
-				}
+			return nil
+		}
+		for _, session := range sessions {
+			fullSessionDir := filepath.Join(sessionsDir, session)
+			err = os.RemoveAll(fullSessionDir)
+			if err != nil {
+				slog.Warn("failed to remove session directory", "session", fullSessionDir, "error", err)
 			}
 		}
 		return nil
