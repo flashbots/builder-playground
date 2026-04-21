@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -180,6 +181,8 @@ func runValidation(recipe playground.Recipe) error {
 	return nil
 }
 
+var sessionNameRegex = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
 func shutDownCmdFunc(cmdName string) func(cmd *cobra.Command, args []string) error {
 	var keepResources bool
 	switch cmdName {
@@ -194,6 +197,17 @@ func shutDownCmdFunc(cmdName string) func(cmd *cobra.Command, args []string) err
 	return func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return fmt.Errorf("please specify at least one session name or 'all' to %s all sessions", cmdName)
+		}
+		for _, arg := range args {
+			if arg == "all" {
+				if len(args) != 1 {
+					return fmt.Errorf("'all' cannot be combined with session names")
+				}
+				continue
+			}
+			if !sessionNameRegex.MatchString(arg) {
+				return fmt.Errorf("invalid session name %q: must be lowercase letters/digits separated by hyphens (e.g., happy-dolphin)", arg)
+			}
 		}
 		isAll := len(args) == 1 && args[0] == "all"
 		sessions := args
