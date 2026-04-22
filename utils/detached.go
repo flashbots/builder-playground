@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // ReadyMarker is the line a re-exec'd child writes to its notify fd to tell
@@ -198,14 +200,14 @@ func RedirectStdio(logPath string) error {
 	}
 	defer out.Close()
 
-	if err := syscall.Dup2(int(out.Fd()), int(os.Stdout.Fd())); err != nil {
+	if err := unix.Dup2(int(out.Fd()), int(os.Stdout.Fd())); err != nil {
 		return fmt.Errorf("detach: redirect stdout: %w", err)
 	}
-	if err := syscall.Dup2(int(out.Fd()), int(os.Stderr.Fd())); err != nil {
+	if err := unix.Dup2(int(out.Fd()), int(os.Stderr.Fd())); err != nil {
 		return fmt.Errorf("detach: redirect stderr: %w", err)
 	}
 	if devNull, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0); err == nil {
-		_ = syscall.Dup2(int(devNull.Fd()), int(os.Stdin.Fd()))
+		_ = unix.Dup2(int(devNull.Fd()), int(os.Stdin.Fd()))
 		devNull.Close()
 	}
 	return nil
