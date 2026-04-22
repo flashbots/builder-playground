@@ -1,5 +1,5 @@
 
-# Telemetry
+# Metrics
 
 The Builder Playground includes built-in Prometheus metrics collection. When you run any recipe with the `--with-prometheus` flag, the system automatically deploys a Prometheus server and gathers metrics from all services in your deployment.
 

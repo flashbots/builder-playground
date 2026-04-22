@@ -315,7 +315,7 @@ clean: honest-opossum
 clean: sacred-giraffe
 ```
 
-## Telemetry
+## Metrics
 
 The Builder Playground includes built-in Prometheus metrics collection. When you run any recipe with the `--with-prometheus` flag, the system automatically deploys a Prometheus server and gathers metrics from all services in your deployment.
 
@@ -335,65 +335,6 @@ Enable Prometheus for any recipe:
 $ builder-playground start l1 --with-prometheus
 $ builder-playground start opstack --with-prometheus
 ```
-
-## Internals
-
-### Execution Flow
-
-The playground executes in three main phases:
-
-1. **Artifact Generation**: Creates all necessary files and configurations (genesis files, keys, etc.)
-2. **Manifest Generation**: The recipe creates a manifest describing all services to be deployed, their ports, and configurations
-3. **Deployment**: Uses Docker Compose to deploy the services described in the manifest
-
-When running in dry-run mode (`--dry-run` flag), only the first two phases are executed. This is useful for alternative deployment targets - while the playground uses Docker Compose by default, the manifest could be used to deploy to other platforms like Kubernetes.
-
-### System Architecture
-
-The playground is structured in two main layers:
-
-#### Components
-
-Components are the basic building blocks of the system. Each component implements the `Service` interface:
-
-```go
-type Service interface {
-    Run(service *service)
-}
-```
-
-Components represent individual compute resources like:
-
-- Execution clients (Reth)
-- Consensus clients (Lighthouse)
-- Sidecar applications (MEV-Boost Relay)
-
-Each component, given its input parameters, outputs a Docker container description with its specific configuration.
-
-#### Recipes
-
-Recipes combine components in specific ways to create complete environments. They implement this interface:
-
-```go
-type Recipe interface {
-   Apply(artifacts *Artifacts) *Manifest
-}
-```
-
-The key output of a recipe is a `Manifest`, which represents a complete description of the environment to be deployed. A Manifest contains:
-
-- A list of services to deploy
-- Their interconnections and dependencies
-- Port mappings and configurations
-- Volume mounts and environment variables
-
-While the current recipes (L1 and OpStack) are relatively simple, this architecture allows for more complex setups. For example, you could create recipes for:
-
-- Multiple execution clients with a shared bootnode
-- Testing specific MEV scenarios
-- Interop L2 testing environments
-
-The separation between components and recipes makes it easy to create new environments by reusing and combining existing components in different ways. The Manifest provides an abstraction between the recipe's description of what should be deployed and how it actually gets deployed (Docker Compose, Kubernetes, etc.).
 
 ## Design Philosophy
 
