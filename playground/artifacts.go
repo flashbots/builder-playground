@@ -244,6 +244,10 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	if err != nil {
 		return err
 	}
+	// UnmarshalConfig starts from mainnet defaults which has SlotDurationMilliseconds=12000.
+	// Since SlotDurationMillis() prefers SlotDurationMilliseconds over SecondsPerSlot when > 0,
+	// we must sync it with the desired block time or the configured SecondsPerSlot is ignored.
+	clConfig.SlotDurationMilliseconds = b.l1BlockTimeInSeconds * 1000
 	if err := params.SetActive(clConfig); err != nil {
 		return err
 	}
