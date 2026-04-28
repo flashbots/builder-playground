@@ -16,7 +16,6 @@ func init() {
 	register(&ClProxy{})
 	register(&MevBoostRelay{})
 	register(&MevBoost{})
-	register(&FlowProxy{})
 	register(&RollupBoost{})
 	register(&OpReth{})
 	register(&nullService{})

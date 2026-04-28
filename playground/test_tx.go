@@ -3,11 +3,8 @@ package playground
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
 	"crypto/tls"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"time"
@@ -18,45 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 )
-
-// buildernetSigningTransport is an http.RoundTripper that adds the X-BuilderNet-Signature
-// header to every request. FlowProxy requires this header for orderflow authentication.
-// The signature is: keccak256(body) → format as hex → EIP-191 sign → header.
-// Any valid key pair works — it's an identity tag, not access control.
-type buildernetSigningTransport struct {
-	base       http.RoundTripper
-	privateKey *ecdsa.PrivateKey
-	address    common.Address
-}
-
-func (t *buildernetSigningTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	defer req.Body.Close()
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Sign: keccak256(body) → hex string → EIP-191 hash → ECDSA sign
-	bodyHash := crypto.Keccak256(body)
-	hashHex := "0x" + hex.EncodeToString(bodyHash)
-
-	// EIP-191: "\x19Ethereum Signed Message:\n" + len + message
-	prefix := fmt.Sprintf("\x19Ethereum Signed Message:\n%d", len(hashHex))
-	msgHash := crypto.Keccak256(append([]byte(prefix), []byte(hashHex)...))
-
-	sig, err := crypto.Sign(msgHash, t.privateKey)
-	if err != nil {
-		return nil, fmt.Errorf("buildernet signing failed: %w", err)
-	}
-	sig[64] += 27 // V: 0/1 → 27/28
-
-	req.Header.Set("X-BuilderNet-Signature",
-		fmt.Sprintf("%s:0x%s", t.address.Hex(), hex.EncodeToString(sig)))
-
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	return t.base.RoundTrip(req)
-}
 
 // TestTxConfig holds configuration for the test transaction
 type TestTxConfig struct {
@@ -117,29 +75,21 @@ func SendTestTransaction(ctx context.Context, cfg *TestTxConfig) error {
 		elRPCURL = cfg.RPCURL
 	}
 
-	// Parse private key (used for both tx signing and BuilderNet header)
+	// Parse private key used for transaction signing.
 	privateKey, err := crypto.HexToECDSA(cfg.PrivateKey)
 	if err != nil {
 		return fmt.Errorf("failed to parse private key: %w", err)
 	}
 	fromAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 
-	// dialRPC connects to an RPC endpoint, adding BuilderNet signature header
-	// and optionally skipping TLS verification
+	// dialRPC connects to an RPC endpoint and optionally skips TLS verification.
 	dialRPC := func(url string) (*ethclient.Client, error) {
-		var base http.RoundTripper
-		if cfg.Insecure {
-			base = &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			}
-		} else {
-			base = http.DefaultTransport
+		if !cfg.Insecure {
+			return ethclient.DialContext(ctx, url)
 		}
 		httpClient := &http.Client{
-			Transport: &buildernetSigningTransport{
-				base:       base,
-				privateKey: privateKey,
-				address:    fromAddress,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
 		}
 		rpcClient, err := rpc.DialOptions(ctx, url, rpc.WithHTTPClient(httpClient))

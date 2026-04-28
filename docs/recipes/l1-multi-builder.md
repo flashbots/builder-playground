@@ -22,10 +22,8 @@ graph LR
   mev_boost_relay_1["mev-boost-relay-1<br/>http:5555"]
   mev_boost_relay_2["mev-boost-relay-2<br/>http:5555"]
   mev_boost["mev-boost<br/>http:18550"]
-  rbuilder_1["rbuilder-1<br/>rpc:8645<br/>redacted:6061<br/>full-metrics:6060"]
-  flowproxy_1["flowproxy-1<br/>http:28545<br/>system:29545<br/>metrics:29090"]
-  rbuilder_2["rbuilder-2<br/>rpc:8646<br/>redacted:6062<br/>full-metrics:6061"]
-  flowproxy_2["flowproxy-2<br/>http:28546<br/>system:29546<br/>metrics:29091"]
+  rbuilder_1["rbuilder-1<br/>rpc:8645"]
+  rbuilder_2["rbuilder-2<br/>rpc:8646"]
 
   el_healthmon -->|http| el
   beacon -->|authrpc| el
@@ -36,17 +34,11 @@ graph LR
   mev_boost_relay_2 -->|http| beacon
   mev_boost -->|http| mev_boost_relay_1
   mev_boost -->|http| mev_boost_relay_2
-  flowproxy_1 -->|rpc| rbuilder_1
-  flowproxy_1 -->|redacted| rbuilder_1
-  flowproxy_2 -->|rpc| rbuilder_2
-  flowproxy_2 -->|redacted| rbuilder_2
   mev_boost_relay_1 -.->|depends_on| beacon
   mev_boost_relay_2 -.->|depends_on| beacon
   rbuilder_1 -.->|depends_on| el
   rbuilder_1 -.->|depends_on| beacon
-  flowproxy_1 -.->|depends_on| rbuilder_1
   rbuilder_2 -.->|depends_on| el
   rbuilder_2 -.->|depends_on| beacon
-  flowproxy_2 -.->|depends_on| rbuilder_2
 ```
 

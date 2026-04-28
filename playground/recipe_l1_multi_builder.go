@@ -106,23 +106,14 @@ func (l *L1MultiBuilderRecipe) Apply(ctx *ExContext) *Component {
 	})
 
 	for i := 1; i <= l.normalizedBuilderCount(); i++ {
-		builderService := fmt.Sprintf("rbuilder-%d", i)
 		component.AddComponent(ctx, &Rbuilder{
-			ServiceName:     builderService,
+			ServiceName:     fmt.Sprintf("rbuilder-%d", i),
 			RelayEndpoints:  relayServices,
 			RelaySecretKey:  fmt.Sprintf("0x%064x", i),
 			ExtraData:       fmt.Sprintf("Playground Builder %d", i),
 			JSONRPCPort:     8645 + i - 1,
 			RedactedPort:    6061 + i - 1,
 			FullMetricsPort: 6060 + i - 1,
-		})
-		component.AddComponent(ctx, &FlowProxy{
-			ServiceName:    fmt.Sprintf("flowproxy-%d", i),
-			BuilderService: builderService,
-			BuilderName:    fmt.Sprintf("Playground Builder %d", i),
-			UserPort:       28545 + i - 1,
-			SystemPort:     29545 + i - 1,
-			MetricsPort:    29090 + i - 1,
 		})
 	}
 
