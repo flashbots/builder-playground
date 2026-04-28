@@ -489,7 +489,7 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 			// http config
 			"--http",
 			"--http.addr", "0.0.0.0",
-			"--http.api", "admin,eth,web3,net,rpc,mev,flashbots",
+			"--http.api", "admin,eth,web3,net,txpool,rpc,mev,flashbots",
 			"--http.port", `{{Port "http" 8545}}`,
 			// websocket config
 			"--ws",
@@ -936,6 +936,8 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 		WithArtifact("/data/rbuilder-config.toml", configArtifact).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithPort("rpc", r.jsonRPCPort()).
+		WithPort("redacted", r.redactedPort()).
+		WithPort("full-metrics", r.fullMetricsPort()).
 		WithVolume("shared:el-data", "/data_reth", true).
 		DependsOnHealthy(r.executionNode()).
 		DependsOnHealthy(r.beaconNode()).
@@ -943,6 +945,93 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 			"run", "/data/rbuilder-config.toml",
 		)
 	service.Pid = "service:" + r.executionNode()
+
+	return component
+}
+
+var flowProxyRelease = &release{
+	Name:    "flowproxy",
+	Repo:    "FlowProxy",
+	Org:     "BuilderNet",
+	Version: "v2.1.2",
+	Arch: func(goos, goarch string) string {
+		return ""
+	},
+	Format: "binary",
+}
+
+type FlowProxy struct {
+	ServiceName    string
+	BuilderService string
+	BuilderName    string
+	UserPort       int
+	SystemPort     int
+	MetricsPort    int
+}
+
+func (f *FlowProxy) serviceName() string {
+	if f.ServiceName != "" {
+		return f.ServiceName
+	}
+	return "flowproxy"
+}
+
+func (f *FlowProxy) builderService() string {
+	if f.BuilderService != "" {
+		return f.BuilderService
+	}
+	return "rbuilder"
+}
+
+func (f *FlowProxy) builderName() string {
+	if f.BuilderName != "" {
+		return f.BuilderName
+	}
+	return f.builderService()
+}
+
+func (f *FlowProxy) userPort() int {
+	if f.UserPort != 0 {
+		return f.UserPort
+	}
+	return 28545
+}
+
+func (f *FlowProxy) systemPort() int {
+	if f.SystemPort != 0 {
+		return f.SystemPort
+	}
+	return 29545
+}
+
+func (f *FlowProxy) metricsPort() int {
+	if f.MetricsPort != 0 {
+		return f.MetricsPort
+	}
+	return 29090
+}
+
+func (f *FlowProxy) Apply(ctx *ExContext) *Component {
+	serviceName := f.serviceName()
+	builderService := f.builderService()
+	component := NewComponent(serviceName)
+
+	component.NewService(serviceName).
+		WithRelease(flowProxyRelease).
+		UseHostExecution().
+		WithArgs(
+			"--user-listen-addr", fmt.Sprintf(`0.0.0.0:{{Port "http" %d}}`, f.userPort()),
+			"--system-listen-addr", fmt.Sprintf(`0.0.0.0:{{Port "system" %d}}`, f.systemPort()),
+			"--builder-name", f.builderName(),
+			"--builder-url", Connect(builderService, "rpc"),
+			"--builder-ready-endpoint", Connect(builderService, "redacted"),
+			"--metrics", fmt.Sprintf(`0.0.0.0:{{Port "metrics" %d}}`, f.metricsPort()),
+			"--disable-forwarding",
+		).
+		WithPort("http", f.userPort()).
+		WithPort("system", f.systemPort()).
+		WithPort("metrics", f.metricsPort()).
+		DependsOnRunning(builderService)
 
 	return component
 }

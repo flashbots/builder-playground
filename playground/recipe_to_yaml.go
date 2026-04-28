@@ -139,6 +139,15 @@ func convertServiceToYAML(svc *Service) *YAMLServiceConfig {
 	if svc.HostPath != "" {
 		config.HostPath = svc.HostPath
 	}
+	if svc.release != nil && svc.Labels[useHostExecutionLabel] == "true" {
+		config.Release = &YAMLReleaseConfig{
+			Name:    svc.release.Name,
+			Org:     svc.release.Org,
+			Repo:    svc.release.Repo,
+			Version: svc.release.Version,
+			Format:  svc.release.Format,
+		}
+	}
 	if svc.Pid != "" {
 		config.Pid = svc.Pid
 	}

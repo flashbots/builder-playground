@@ -137,6 +137,34 @@ func TestConvertServiceToYAML(t *testing.T) {
 			},
 		},
 		{
+			name: "service with release",
+			service: &Service{
+				Name: "flowproxy",
+				Labels: map[string]string{
+					useHostExecutionLabel: "true",
+				},
+				release: &release{
+					Name:    "flowproxy",
+					Org:     "BuilderNet",
+					Repo:    "FlowProxy",
+					Version: "v2.1.2",
+					Format:  "binary",
+				},
+			},
+			expected: &YAMLServiceConfig{
+				Labels: map[string]string{
+					useHostExecutionLabel: "true",
+				},
+				Release: &YAMLReleaseConfig{
+					Name:    "flowproxy",
+					Org:     "BuilderNet",
+					Repo:    "FlowProxy",
+					Version: "v2.1.2",
+					Format:  "binary",
+				},
+			},
+		},
+		{
 			name: "service with pid",
 			service: &Service{
 				Name:  "rbuilder",
@@ -186,6 +214,7 @@ func TestConvertServiceToYAML(t *testing.T) {
 			require.Equal(t, tt.expected.Tag, result.Tag)
 			require.Equal(t, tt.expected.Entrypoint, result.Entrypoint)
 			require.Equal(t, tt.expected.HostPath, result.HostPath)
+			require.Equal(t, tt.expected.Release, result.Release)
 			require.Equal(t, tt.expected.Pid, result.Pid)
 			require.Equal(t, tt.expected.ReadyCheck, result.ReadyCheck)
 			require.Equal(t, tt.expected.Labels, result.Labels)
