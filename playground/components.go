@@ -632,14 +632,23 @@ func (c *ClProxy) Apply(ctx *ExContext) *Component {
 }
 
 type MevBoostRelay struct {
+	ServiceName      string
 	BeaconClient     string
 	ValidationServer string
 }
 
-func (m *MevBoostRelay) Apply(ctx *ExContext) *Component {
-	component := NewComponent("mev-boost-relay")
+func (m *MevBoostRelay) serviceName() string {
+	if m.ServiceName != "" {
+		return m.ServiceName
+	}
+	return "mev-boost-relay"
+}
 
-	service := component.NewService("mev-boost-relay").
+func (m *MevBoostRelay) Apply(ctx *ExContext) *Component {
+	serviceName := m.serviceName()
+	component := NewComponent(serviceName)
+
+	service := component.NewService(serviceName).
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag(latestPlaygroundUtilsTag).
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
@@ -718,6 +727,27 @@ type MevBoost struct {
 	RelayEndpoints []string
 }
 
+func localMevBoostRelayURL(endpoint string) (string, bool) {
+	envSkBytes, err := hexutil.Decode(mevboostrelay.DefaultSecretKey)
+	if err != nil {
+		return "", false
+	}
+	secretKey, err := bls.SecretKeyFromBytes(envSkBytes[:])
+	if err != nil {
+		return "", false
+	}
+	blsPublicKey, err := bls.PublicKeyFromSecretKey(secretKey)
+	if err != nil {
+		return "", false
+	}
+	publicKey, err := utils.BlsPublicKeyToPublicKey(blsPublicKey)
+	if err != nil {
+		return "", false
+	}
+
+	return ConnectRaw(endpoint, "http", "http", publicKey.String()), true
+}
+
 func (m *MevBoost) Apply(ctx *ExContext) *Component {
 	component := NewComponent("mev-boost")
 
@@ -727,26 +757,9 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 	}
 
 	for _, endpoint := range m.RelayEndpoints {
-		if endpoint == "mev-boost-relay" {
-			// creating relay url with public key since mev-boost requires it
-			envSkBytes, err := hexutil.Decode(mevboostrelay.DefaultSecretKey)
-			if err != nil {
-				continue
-			}
-			secretKey, err := bls.SecretKeyFromBytes(envSkBytes[:])
-			if err != nil {
-				continue
-			}
-			blsPublicKey, err := bls.PublicKeyFromSecretKey(secretKey)
-			if err != nil {
-				continue
-			}
-			publicKey, err := utils.BlsPublicKeyToPublicKey(blsPublicKey)
-			if err != nil {
-				continue
-			}
-
-			relayURL := ConnectRaw("mev-boost-relay", "http", "http", publicKey.String())
+		if strings.Contains(endpoint, "://") {
+			args = append(args, "--relay", endpoint)
+		} else if relayURL, ok := localMevBoostRelayURL(endpoint); ok {
 			args = append(args, "--relay", relayURL)
 		} else {
 			args = append(args, "--relay", Connect(endpoint, "http"))
@@ -762,28 +775,173 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 	return component
 }
 
-//go:embed utils/rbuilder-config.toml.tmpl
-var rbuilderConfigToml string
+const defaultRbuilderRelaySecretKey = "0x25295f0d1d592a90b333e26e85149708208e9f8e8bc18f6c77bd62f8ad7a6866"
 
-type Rbuilder struct{}
+//go:embed utils/rbuilder-config.toml.tmpl
+var defaultRbuilderConfigToml string
+
+type Rbuilder struct {
+	ServiceName     string
+	BeaconNode      string
+	ExecutionNode   string
+	RelayEndpoints  []string
+	RelaySecretKey  string
+	ConfigArtifact  string
+	ExtraData       string
+	JSONRPCPort     int
+	RedactedPort    int
+	FullMetricsPort int
+}
+
+func (r *Rbuilder) serviceName() string {
+	if r.ServiceName != "" {
+		return r.ServiceName
+	}
+	return "rbuilder"
+}
+
+func (r *Rbuilder) beaconNode() string {
+	if r.BeaconNode != "" {
+		return r.BeaconNode
+	}
+	return "beacon"
+}
+
+func (r *Rbuilder) executionNode() string {
+	if r.ExecutionNode != "" {
+		return r.ExecutionNode
+	}
+	return "el"
+}
+
+func (r *Rbuilder) configArtifact() string {
+	if r.ConfigArtifact != "" {
+		return r.ConfigArtifact
+	}
+	if r.ServiceName != "" {
+		return r.ServiceName + "-config.toml"
+	}
+	return "rbuilder-config.toml"
+}
+
+func (r *Rbuilder) relaySecretKey() string {
+	if r.RelaySecretKey != "" {
+		return r.RelaySecretKey
+	}
+	return defaultRbuilderRelaySecretKey
+}
+
+func (r *Rbuilder) relayEndpoints() []string {
+	if len(r.RelayEndpoints) > 0 {
+		return r.RelayEndpoints
+	}
+	return []string{"mev-boost-relay"}
+}
+
+func (r *Rbuilder) extraData() string {
+	if r.ExtraData != "" {
+		return r.ExtraData
+	}
+	return "Playground Builder"
+}
+
+func (r *Rbuilder) jsonRPCPort() int {
+	if r.JSONRPCPort != 0 {
+		return r.JSONRPCPort
+	}
+	return 8645
+}
+
+func (r *Rbuilder) redactedPort() int {
+	if r.RedactedPort != 0 {
+		return r.RedactedPort
+	}
+	return 6061
+}
+
+func (r *Rbuilder) fullMetricsPort() int {
+	if r.FullMetricsPort != 0 {
+		return r.FullMetricsPort
+	}
+	return 6060
+}
+
+func (r *Rbuilder) configTOML() string {
+	relayEndpoints := r.relayEndpoints()
+	relayNames := make([]string, 0, len(relayEndpoints))
+	for _, relay := range relayEndpoints {
+		relayNames = append(relayNames, strconv.Quote(relay))
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "log_json = false\n")
+	fmt.Fprintf(&b, "log_level = \"info,rbuilder=debug\"\n")
+	fmt.Fprintf(&b, "redacted_telemetry_server_port = %d\n", r.redactedPort())
+	fmt.Fprintf(&b, "redacted_telemetry_server_ip = \"0.0.0.0\"\n")
+	fmt.Fprintf(&b, "full_telemetry_server_port = %d\n", r.fullMetricsPort())
+	fmt.Fprintf(&b, "full_telemetry_server_ip = \"0.0.0.0\"\n\n")
+	fmt.Fprintf(&b, "chain = \"/data/genesis.json\"\n")
+	fmt.Fprintf(&b, "reth_datadir = \"/data_reth\"\n")
+	fmt.Fprintf(&b, "el_node_ipc_path = \"/data_reth/reth.ipc\"\n")
+	fmt.Fprintf(&b, "coinbase_secret_key = \"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80\"\n")
+	fmt.Fprintf(&b, "relay_secret_key = %s\n", strconv.Quote(r.relaySecretKey()))
+	fmt.Fprintf(&b, "cl_node_url = [%s]\n", strconv.Quote(fmt.Sprintf("http://%s:3500", r.beaconNode())))
+	fmt.Fprintf(&b, "jsonrpc_server_port = %d\n", r.jsonRPCPort())
+	fmt.Fprintf(&b, "jsonrpc_server_ip = \"0.0.0.0\"\n")
+	fmt.Fprintf(&b, "extra_data = %s\n\n", strconv.Quote(r.extraData()))
+	fmt.Fprintf(&b, "ignore_cancellable_orders = true\n")
+	fmt.Fprintf(&b, "root_hash_use_sparse_trie = true\n")
+	fmt.Fprintf(&b, "root_hash_compare_sparse_trie = false\n")
+	fmt.Fprintf(&b, "slot_delta_to_start_bidding_ms = -20000\n\n")
+	fmt.Fprintf(&b, "live_builders = [\"mp-ordering\"]\n")
+	fmt.Fprintf(&b, "enabled_relays = [%s]\n\n", strings.Join(relayNames, ", "))
+
+	for i, relay := range relayEndpoints {
+		fmt.Fprintf(&b, "[[relays]]\n")
+		fmt.Fprintf(&b, "name = %s\n", strconv.Quote(relay))
+		fmt.Fprintf(&b, "url = %s\n", strconv.Quote(fmt.Sprintf("http://%s:5555", relay)))
+		fmt.Fprintf(&b, "priority = %d\n", i)
+		fmt.Fprintf(&b, "use_ssz_for_submit = false\n")
+		fmt.Fprintf(&b, "use_gzip_for_submit = false\n")
+		fmt.Fprintf(&b, "mode = \"full\"\n\n")
+	}
+
+	fmt.Fprintf(&b, "[[builders]]\n")
+	fmt.Fprintf(&b, "name = \"mp-ordering\"\n")
+	fmt.Fprintf(&b, "algo = \"ordering-builder\"\n")
+	fmt.Fprintf(&b, "discard_txs = true\n")
+	fmt.Fprintf(&b, "sorting = \"max-profit\"\n")
+	fmt.Fprintf(&b, "failed_order_retries = 1\n")
+	fmt.Fprintf(&b, "drop_failed_orders = true\n")
+
+	return b.String()
+}
 
 func (r *Rbuilder) Apply(ctx *ExContext) *Component {
-	component := NewComponent("rbuilder")
+	serviceName := r.serviceName()
+	configArtifact := r.configArtifact()
+	component := NewComponent(serviceName)
 
 	// TODO: Handle error
-	ctx.Output.WriteFile("rbuilder-config.toml", rbuilderConfigToml)
+	config := defaultRbuilderConfigToml
+	if r.ServiceName != "" || len(r.RelayEndpoints) > 0 || r.BeaconNode != "" || r.ExecutionNode != "" ||
+		r.RelaySecretKey != "" || r.ExtraData != "" || r.JSONRPCPort != 0 || r.RedactedPort != 0 || r.FullMetricsPort != 0 {
+		config = r.configTOML()
+	}
+	ctx.Output.WriteFile(configArtifact, config)
 
-	component.NewService("rbuilder").
+	service := component.NewService(serviceName).
 		WithImage("ghcr.io/flashbots/rbuilder").
 		WithTag("sha-7efdc0b").
-		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
+		WithArtifact("/data/rbuilder-config.toml", configArtifact).
 		WithArtifact("/data/genesis.json", "genesis.json").
 		WithVolume("shared:el-data", "/data_reth", true).
-		DependsOnHealthy("el").
-		DependsOnHealthy("beacon").
+		DependsOnHealthy(r.executionNode()).
+		DependsOnHealthy(r.beaconNode()).
 		WithArgs(
 			"run", "/data/rbuilder-config.toml",
 		)
+	service.Pid = "service:" + r.executionNode()
 
 	return component
 }

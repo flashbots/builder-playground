@@ -31,6 +31,7 @@ type Recipe interface {
 func GetBaseRecipes() []Recipe {
 	return []Recipe{
 		&L1Recipe{},
+		&L1MultiBuilderRecipe{},
 		&OpRecipe{},
 		&BuilderNetRecipe{},
 	}

@@ -139,6 +139,9 @@ func convertServiceToYAML(svc *Service) *YAMLServiceConfig {
 	if svc.HostPath != "" {
 		config.HostPath = svc.HostPath
 	}
+	if svc.Pid != "" {
+		config.Pid = svc.Pid
+	}
 	if len(svc.Labels) > 0 {
 		config.Labels = svc.Labels
 	}
