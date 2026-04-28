@@ -935,6 +935,7 @@ func (r *Rbuilder) Apply(ctx *ExContext) *Component {
 		WithTag("sha-7efdc0b").
 		WithArtifact("/data/rbuilder-config.toml", configArtifact).
 		WithArtifact("/data/genesis.json", "genesis.json").
+		WithPort("rpc", r.jsonRPCPort()).
 		WithVolume("shared:el-data", "/data_reth", true).
 		DependsOnHealthy(r.executionNode()).
 		DependsOnHealthy(r.beaconNode()).

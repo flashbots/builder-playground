@@ -22,8 +22,8 @@ graph LR
   mev_boost_relay_1["mev-boost-relay-1<br/>http:5555"]
   mev_boost_relay_2["mev-boost-relay-2<br/>http:5555"]
   mev_boost["mev-boost<br/>http:18550"]
-  rbuilder_1["rbuilder-1"]
-  rbuilder_2["rbuilder-2"]
+  rbuilder_1["rbuilder-1<br/>rpc:8645"]
+  rbuilder_2["rbuilder-2<br/>rpc:8646"]
 
   el_healthmon -->|http| el
   beacon -->|authrpc| el

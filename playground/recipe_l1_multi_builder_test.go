@@ -37,6 +37,7 @@ func TestL1MultiBuilderRecipeWiresBuildersToRelays(t *testing.T) {
 
 	rbuilder := manifest.MustGetService("rbuilder-2")
 	require.Equal(t, "service:el", rbuilder.Pid)
+	require.Equal(t, 8646, rbuilder.MustGetPort("rpc").Port)
 	require.ElementsMatch(t, []*DependsOn{
 		{Name: "el", Condition: DependsOnConditionHealthy},
 		{Name: "beacon", Condition: DependsOnConditionHealthy},
