@@ -50,9 +50,11 @@ func (l *L1MultiBuilderRecipe) Flags() *flag.FlagSet {
 	return flags
 }
 
-// Validate checks the recipe's CLI flag values. Called by main.go after flag
-// parsing so that explicit zero/negative values fail loudly instead of being
-// silently rewritten to defaults.
+// Validate checks the recipe's flag-backed fields. Called from every entry
+// point that consumes the recipe (cook/start, generate, validate) so that
+// explicit zero/negative values fail loudly instead of being silently
+// rewritten to defaults. GetBaseRecipes registers Flags() once on each
+// instance so the struct zero never reaches Validate in normal usage.
 func (l *L1MultiBuilderRecipe) Validate() error {
 	if l.builderCount < 1 {
 		return fmt.Errorf("--builders must be >= 1, got %d", l.builderCount)
@@ -66,31 +68,10 @@ func (l *L1MultiBuilderRecipe) Validate() error {
 	return nil
 }
 
-func (l *L1MultiBuilderRecipe) builderCountOrDefault() int {
-	if l.builderCount > 0 {
-		return l.builderCount
-	}
-	return defaultL1MultiBuilderCount
-}
-
-func (l *L1MultiBuilderRecipe) relayCountOrDefault() int {
-	if l.relayCount > 0 {
-		return l.relayCount
-	}
-	return defaultL1MultiRelayCount
-}
-
-func (l *L1MultiBuilderRecipe) blockTimeOrDefault() time.Duration {
-	if l.blockTime > 0 {
-		return l.blockTime
-	}
-	return time.Duration(defaultL1BlockTimeSeconds) * time.Second
-}
-
 func (l *L1MultiBuilderRecipe) Artifacts() *ArtifactsBuilder {
 	builder := NewArtifactsBuilder()
 	builder.ApplyLatestL1Fork(l.latestFork)
-	builder.L1BlockTime(max(1, uint64(l.blockTimeOrDefault().Seconds())))
+	builder.L1BlockTime(max(1, uint64(l.blockTime.Seconds())))
 	return builder
 }
 
@@ -119,10 +100,9 @@ func (l *L1MultiBuilderRecipe) Apply(ctx *ExContext) *Component {
 		UseRethForValidation: l.useRethForValidation,
 	})
 
-	relayCount := l.relayCountOrDefault()
-	relayServices := make([]string, 0, relayCount)
-	relaySecrets := make([]string, 0, relayCount)
-	for i := 1; i <= relayCount; i++ {
+	relayServices := make([]string, 0, l.relayCount)
+	relaySecrets := make([]string, 0, l.relayCount)
+	for i := 1; i <= l.relayCount; i++ {
 		relayServices = append(relayServices, fmt.Sprintf("mev-boost-relay-%d", i))
 		relaySecrets = append(relaySecrets, indexedBLSSecret("playground-relay", i))
 	}
@@ -159,7 +139,7 @@ func (l *L1MultiBuilderRecipe) Apply(ctx *ExContext) *Component {
 		RelayEndpoints: mevBoostRelays,
 	})
 
-	for i := 1; i <= l.builderCountOrDefault(); i++ {
+	for i := 1; i <= l.builderCount; i++ {
 		component.AddComponent(ctx, &Rbuilder{
 			ServiceName:    fmt.Sprintf("rbuilder-%d", i),
 			RelayEndpoints: relayServices,

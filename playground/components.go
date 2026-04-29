@@ -22,6 +22,15 @@ var (
 // (e.g. rbuilder TOML). Components must keep their `{{Port "name" default}}`
 // declarations in sync with these constants so URLs in artifact files resolve
 // to the correct in-container port.
+//
+// Caveat: artifact files are written by Go before the manifest's port
+// allocator runs and don't pass through the `{{Port}}`/`{{Service}}`
+// substitution that args/env get in local_runner.go. A user `--override` that
+// changes a service's host-side port still works (the allocator only touches
+// the host side), but an override that rebinds the in-container port — or a
+// future change to a default here — leaves the rbuilder TOML pointing at the
+// stale value. Long-term fix: thread artifact files through the same template
+// substitution so `Connect("beacon", "http")` can be embedded directly.
 const (
 	lighthouseBeaconHTTPPort = 3500
 	mevBoostRelayHTTPPort    = 5555
@@ -746,9 +755,9 @@ func (o *OpReth) Apply(ctx *ExContext) *Component {
 
 // MevBoostRelayEndpoint identifies a relay reachable by mev-boost.
 //
-// Exactly one form should be set:
+// Exactly one of URL or Service must be set:
 //   - URL: a fully-formed `scheme://pubkey@host:port` URL (used for external
-//     relays).
+//     relays). SecretKey is ignored.
 //   - Service: the docker-compose service name of a local relay; SecretKey is
 //     the BLS secret used to derive the pubkey embedded in the URL (defaults
 //     to mevboostrelay.DefaultSecretKey).
@@ -756,6 +765,18 @@ type MevBoostRelayEndpoint struct {
 	URL       string
 	Service   string
 	SecretKey string
+}
+
+func (e MevBoostRelayEndpoint) validate() error {
+	switch {
+	case e.URL == "" && e.Service == "":
+		return fmt.Errorf("relay endpoint requires URL or Service")
+	case e.URL != "" && e.Service != "":
+		return fmt.Errorf("relay endpoint sets both URL (%q) and Service (%q); pick one", e.URL, e.Service)
+	case e.URL != "" && e.SecretKey != "":
+		return fmt.Errorf("relay endpoint URL %q is precomputed; SecretKey must be empty", e.URL)
+	}
+	return nil
 }
 
 type MevBoost struct {
@@ -790,15 +811,15 @@ func blsPublicKeyHex(secretKeyHex string) (string, error) {
 // localMevBoostRelayURL returns the playground relay URL for endpoint, embedding
 // the BLS pubkey derived from the relay's secret. Empty secretKeyHex falls back
 // to the playground-wide default key.
-func localMevBoostRelayURL(endpoint, secretKeyHex string) (string, bool) {
+func localMevBoostRelayURL(endpoint, secretKeyHex string) (string, error) {
 	if secretKeyHex == "" {
 		secretKeyHex = mevboostrelay.DefaultSecretKey
 	}
 	pubkey, err := blsPublicKeyHex(secretKeyHex)
 	if err != nil {
-		return "", false
+		return "", err
 	}
-	return ConnectRaw(endpoint, "http", "http", pubkey), true
+	return ConnectRaw(endpoint, "http", "http", pubkey), nil
 }
 
 func (m *MevBoost) Apply(ctx *ExContext) *Component {
@@ -810,15 +831,18 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 	}
 
 	for _, endpoint := range m.RelayEndpoints {
+		if err := endpoint.validate(); err != nil {
+			panic(fmt.Errorf("mev-boost: %w", err))
+		}
 		if endpoint.URL != "" {
 			args = append(args, "--relay", endpoint.URL)
 			continue
 		}
-		if relayURL, ok := localMevBoostRelayURL(endpoint.Service, endpoint.SecretKey); ok {
-			args = append(args, "--relay", relayURL)
-			continue
+		relayURL, err := localMevBoostRelayURL(endpoint.Service, endpoint.SecretKey)
+		if err != nil {
+			panic(fmt.Errorf("mev-boost: derive relay URL for service %q: %w", endpoint.Service, err))
 		}
-		args = append(args, "--relay", Connect(endpoint.Service, "http"))
+		args = append(args, "--relay", relayURL)
 	}
 
 	component.NewService("mev-boost").
@@ -924,27 +948,27 @@ type rbuilderBuilderConfig struct {
 
 // rbuilderConfig is the typed shape of the TOML config rbuilder consumes.
 type rbuilderConfig struct {
-	LogJSON                   bool     `toml:"log_json"`
-	LogLevel                  string   `toml:"log_level"`
-	RedactedTelemetryServerIP string   `toml:"redacted_telemetry_server_ip"`
-	RedactedTelemetryServerPt int      `toml:"redacted_telemetry_server_port"`
-	FullTelemetryServerIP     string   `toml:"full_telemetry_server_ip"`
-	FullTelemetryServerPort   int      `toml:"full_telemetry_server_port"`
-	Chain                     string   `toml:"chain"`
-	RethDatadir               string   `toml:"reth_datadir"`
-	ELNodeIPCPath             string   `toml:"el_node_ipc_path"`
-	CoinbaseSecretKey         string   `toml:"coinbase_secret_key"`
-	RelaySecretKey            string   `toml:"relay_secret_key"`
-	CLNodeURL                 []string `toml:"cl_node_url"`
-	JSONRPCServerIP           string   `toml:"jsonrpc_server_ip"`
-	JSONRPCServerPort         int      `toml:"jsonrpc_server_port"`
-	ExtraData                 string   `toml:"extra_data"`
-	IgnoreCancellableOrders   bool     `toml:"ignore_cancellable_orders"`
-	RootHashUseSparseTrie     bool     `toml:"root_hash_use_sparse_trie"`
-	RootHashCompareSparseTrie bool     `toml:"root_hash_compare_sparse_trie"`
-	SlotDeltaToStartBiddingMS int      `toml:"slot_delta_to_start_bidding_ms"`
-	LiveBuilders              []string `toml:"live_builders"`
-	EnabledRelays             []string `toml:"enabled_relays"`
+	LogJSON                     bool     `toml:"log_json"`
+	LogLevel                    string   `toml:"log_level"`
+	RedactedTelemetryServerIP   string   `toml:"redacted_telemetry_server_ip"`
+	RedactedTelemetryServerPort int      `toml:"redacted_telemetry_server_port"`
+	FullTelemetryServerIP       string   `toml:"full_telemetry_server_ip"`
+	FullTelemetryServerPort     int      `toml:"full_telemetry_server_port"`
+	Chain                       string   `toml:"chain"`
+	RethDatadir                 string   `toml:"reth_datadir"`
+	ELNodeIPCPath               string   `toml:"el_node_ipc_path"`
+	CoinbaseSecretKey           string   `toml:"coinbase_secret_key"`
+	RelaySecretKey              string   `toml:"relay_secret_key"`
+	CLNodeURL                   []string `toml:"cl_node_url"`
+	JSONRPCServerIP             string   `toml:"jsonrpc_server_ip"`
+	JSONRPCServerPort           int      `toml:"jsonrpc_server_port"`
+	ExtraData                   string   `toml:"extra_data"`
+	IgnoreCancellableOrders     bool     `toml:"ignore_cancellable_orders"`
+	RootHashUseSparseTrie       bool     `toml:"root_hash_use_sparse_trie"`
+	RootHashCompareSparseTrie   bool     `toml:"root_hash_compare_sparse_trie"`
+	SlotDeltaToStartBiddingMS   int      `toml:"slot_delta_to_start_bidding_ms"`
+	LiveBuilders                []string `toml:"live_builders"`
+	EnabledRelays               []string `toml:"enabled_relays"`
 
 	Relays   []rbuilderRelayConfig   `toml:"relays"`
 	Builders []rbuilderBuilderConfig `toml:"builders"`
@@ -962,28 +986,28 @@ func (r *Rbuilder) configTOML() (string, error) {
 	}
 
 	cfg := rbuilderConfig{
-		LogJSON:                   false,
-		LogLevel:                  "info,rbuilder=debug",
-		RedactedTelemetryServerIP: "0.0.0.0",
-		RedactedTelemetryServerPt: rbuilderRedactedPort,
-		FullTelemetryServerIP:     "0.0.0.0",
-		FullTelemetryServerPort:   rbuilderFullMetricsPort,
-		Chain:                     "/data/genesis.json",
-		RethDatadir:               "/data_reth",
-		ELNodeIPCPath:             "/data_reth/reth.ipc",
-		CoinbaseSecretKey:         builderCoinbaseSecretKey,
-		RelaySecretKey:            r.relaySecretKey(),
-		CLNodeURL:                 []string{fmt.Sprintf("http://%s:%d", r.beaconNode(), lighthouseBeaconHTTPPort)},
-		JSONRPCServerIP:           "0.0.0.0",
-		JSONRPCServerPort:         rbuilderJSONRPCPort,
-		ExtraData:                 r.extraData(),
-		IgnoreCancellableOrders:   true,
-		RootHashUseSparseTrie:     true,
-		RootHashCompareSparseTrie: false,
-		SlotDeltaToStartBiddingMS: -20000,
-		LiveBuilders:              []string{"mp-ordering"},
-		EnabledRelays:             relayEndpoints,
-		Relays:                    relays,
+		LogJSON:                     false,
+		LogLevel:                    "info,rbuilder=debug",
+		RedactedTelemetryServerIP:   "0.0.0.0",
+		RedactedTelemetryServerPort: rbuilderRedactedPort,
+		FullTelemetryServerIP:       "0.0.0.0",
+		FullTelemetryServerPort:     rbuilderFullMetricsPort,
+		Chain:                       "/data/genesis.json",
+		RethDatadir:                 "/data_reth",
+		ELNodeIPCPath:               "/data_reth/reth.ipc",
+		CoinbaseSecretKey:           builderCoinbaseSecretKey,
+		RelaySecretKey:              r.relaySecretKey(),
+		CLNodeURL:                   []string{fmt.Sprintf("http://%s:%d", r.beaconNode(), lighthouseBeaconHTTPPort)},
+		JSONRPCServerIP:             "0.0.0.0",
+		JSONRPCServerPort:           rbuilderJSONRPCPort,
+		ExtraData:                   r.extraData(),
+		IgnoreCancellableOrders:     true,
+		RootHashUseSparseTrie:       true,
+		RootHashCompareSparseTrie:   false,
+		SlotDeltaToStartBiddingMS:   -20000,
+		LiveBuilders:                []string{"mp-ordering"},
+		EnabledRelays:               relayEndpoints,
+		Relays:                      relays,
 		Builders: []rbuilderBuilderConfig{{
 			Name:               "mp-ordering",
 			Algo:               "ordering-builder",

@@ -94,3 +94,17 @@ func TestL1MultiBuilderRecipeValidateAcceptsDefaults(t *testing.T) {
 	}
 	require.NoError(t, recipe.Validate())
 }
+
+// TestRecipeToYAMLRunsValidate guards the `playground generate` path: a recipe
+// configured with an explicitly invalid flag value must fail there too, not
+// just on `playground cook`.
+func TestRecipeToYAMLRunsValidate(t *testing.T) {
+	recipe := &L1MultiBuilderRecipe{
+		blockTime:    12 * time.Second,
+		builderCount: -1,
+		relayCount:   defaultL1MultiRelayCount,
+	}
+	_, err := RecipeToYAML(recipe)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--builders must be >= 1")
+}
