@@ -221,6 +221,8 @@ type ExContext struct {
 	Bootnode *BootnodeRef
 
 	Contender *ContenderContext
+
+	GenesisTimestamp uint64
 }
 
 type BootnodeRef struct {

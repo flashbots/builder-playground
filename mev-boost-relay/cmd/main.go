@@ -11,6 +11,7 @@ import (
 var (
 	apiListenAddr        string
 	apiListenPort        uint64
+	apiSecretKey         string
 	beaconClientAddr     string
 	validationServerAddr string
 )
@@ -27,6 +28,7 @@ var rootCmd = &cobra.Command{
 func main() {
 	rootCmd.Flags().StringVar(&apiListenAddr, "api-listen-addr", "127.0.0.1", "")
 	rootCmd.Flags().Uint64Var(&apiListenPort, "api-listen-port", 5555, "")
+	rootCmd.Flags().StringVar(&apiSecretKey, "api-secret-key", "", "BLS secret key (hex) used to sign relay bids; defaults to the playground-wide default")
 	rootCmd.Flags().StringVar(&beaconClientAddr, "beacon-client-addr", "http://localhost:3500", "")
 	rootCmd.Flags().StringVar(&validationServerAddr, "validation-server-addr", "", "")
 
@@ -42,6 +44,9 @@ func runMevBoostRelay() error {
 	cfg.ApiListenPort = apiListenPort
 	cfg.BeaconClientAddr = beaconClientAddr
 	cfg.ValidationServerAddr = validationServerAddr
+	if apiSecretKey != "" {
+		cfg.ApiSecretKey = apiSecretKey
+	}
 
 	relay, err := mevboostrelay.New(cfg)
 	if err != nil {

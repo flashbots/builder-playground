@@ -5,9 +5,9 @@ Deploy a full L1 stack with multiple builders and relays.
 ## Flags
 
 - `block-time` (duration): Block time to use for the L1. Default to '12s'.
-- `builders` (int): number of rbuilder instances to run. Default to '2'.
+- `builders` (int): number of rbuilder instances to run; must be >= 1. Default to '2'.
 - `latest-fork` (bool): use the latest fork. Default to 'false'.
-- `relays` (int): number of mev-boost-relay instances to run. Default to '2'.
+- `relays` (int): number of mev-boost-relay instances to run; must be >= 1. Default to '2'.
 - `use-reth-for-validation` (bool): use reth for validation. Default to 'false'.
 
 ## Architecture Diagram
@@ -23,7 +23,7 @@ graph LR
   mev_boost_relay_2["mev-boost-relay-2<br/>http:5555"]
   mev_boost["mev-boost<br/>http:18550"]
   rbuilder_1["rbuilder-1<br/>rpc:8645"]
-  rbuilder_2["rbuilder-2<br/>rpc:8646"]
+  rbuilder_2["rbuilder-2<br/>rpc:8645"]
 
   el_healthmon -->|http| el
   beacon -->|authrpc| el
