@@ -15,7 +15,7 @@ import (
 
 var (
 	defaultJWTToken          = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
-	latestPlaygroundUtilsTag = "cc6f172493d7ef6b88a5b7895f4b8619806c99f9"
+	latestPlaygroundUtilsTag = "07ec800c3651b05ef1946c38b8d04745946818c7"
 )
 
 type RollupBoost struct {
