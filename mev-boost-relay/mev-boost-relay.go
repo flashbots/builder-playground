@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -109,7 +110,7 @@ func New(config *Config) (*MevBoostRelay, error) {
 	}
 
 	// create the mockDB
-	pqDB := newInmemoryDB()
+	pqDB := newInmemoryDB(log)
 
 	// datastore
 	ds, err := datastore.NewDatastore(redis, nil, pqDB)
@@ -169,6 +170,7 @@ func New(config *Config) (*MevBoostRelay, error) {
 		ProposerAPI:     true,
 		BlockBuilderAPI: true,
 		DataAPI:         true,
+		InternalAPI:     true,
 	}
 	apiSrv, err := api.NewRelayAPI(apiOpts)
 	if err != nil {
@@ -283,6 +285,8 @@ func startMockBlockValidationServiceServer() (string, error) {
 type inmemoryDB struct {
 	*database.MockDB
 
+	log *logrus.Entry
+
 	validatorRegistryEntriesLock sync.Mutex
 	validatorRegistryEntries     map[string]*database.ValidatorRegistrationEntry
 
@@ -290,11 +294,14 @@ type inmemoryDB struct {
 	deliveredPayloads     []*database.DeliveredPayloadEntry
 }
 
-func newInmemoryDB() *inmemoryDB {
+func newInmemoryDB(log *logrus.Entry) *inmemoryDB {
 	return &inmemoryDB{
-		MockDB:                   &database.MockDB{},
+		MockDB: &database.MockDB{
+			Builders: make(map[string]*database.BlockBuilderEntry),
+		},
 		validatorRegistryEntries: make(map[string]*database.ValidatorRegistrationEntry),
 		deliveredPayloads:        make([]*database.DeliveredPayloadEntry, 0),
+		log:                      log,
 	}
 }
 
@@ -353,6 +360,16 @@ func (i *inmemoryDB) GetValidatorRegistrationsForPubkeys(pubkeys []string) ([]*d
 func (i *inmemoryDB) SaveDeliveredPayload(bidTrace *common.BidTraceV2WithBlobFields, signedBlindedBeaconBlock *common.VersionedSignedBlindedBeaconBlock, signedAt time.Time, publishMs uint64) error {
 	i.deliveredPayloadsLock.Lock()
 	defer i.deliveredPayloadsLock.Unlock()
+
+	builderPubKey := bidTrace.BuilderPubkey.String()
+	if _, ok := i.MockDB.Builders[builderPubKey]; !ok {
+		i.MockDB.Builders[builderPubKey] = &database.BlockBuilderEntry{
+			BuilderPubkey: builderPubKey,
+			Collateral:    big.NewInt(0).Set(bidTrace.Value.ToBig()).String() + "000",
+			IsOptimistic:  true,
+		}
+		i.log.WithField("pubkey", builderPubKey).Info("saved builder")
+	}
 
 	_signedBlindedBeaconBlock, err := json.Marshal(signedBlindedBeaconBlock)
 	if err != nil {
