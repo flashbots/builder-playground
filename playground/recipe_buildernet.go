@@ -45,7 +45,8 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
 	// We need these for letting the builder connect to the beacon node.
 	// Basically, the beacon node can never be healthy until the builder
 	// connects.
-	if beacon := component.FindService("beacon"); beacon != nil {
+	beacon := component.FindService("beacon")
+	if beacon != nil {
 		beacon.ReplaceArgs(map[string]string{
 			"--target-peers": "1",
 		})
@@ -56,6 +57,19 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
 	}
 	// Remove beacon healthmon - doesn't work with --target-peers=1 which is required for builder VM
 	component.RemoveService("beacon_healthmon")
+	if beacon != nil {
+		delete(beacon.Labels, healthCheckSidecarLabel)
+	}
+
+	// Beacon never reaches healthy state until a builder connects (target-peers=1),
+	// so any builder added by the L1 recipe must wait on beacon running, not healthy.
+	if rbuilder := component.FindService("rbuilder"); rbuilder != nil {
+		for _, dep := range rbuilder.DependsOn {
+			if dep.Name == "beacon" && dep.Condition == DependsOnConditionHealthy {
+				dep.Condition = DependsOnConditionRunning
+			}
+		}
+	}
 
 	component.RunContenderIfEnabled(ctx)
 
