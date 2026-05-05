@@ -44,9 +44,9 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
 	// Apply beacon service overrides for buildernet.
 	// We need these for letting the builder connect to the beacon node.
 	// Basically, the beacon node can never be healthy until the builder
-	// connects.
-	beacon := component.FindService("beacon")
-	if beacon != nil {
+	// connects, so we also drop its healthmon and downgrade any consumer's
+	// dependency on beacon from healthy to running.
+	if beacon := component.FindService("beacon"); beacon != nil {
 		beacon.ReplaceArgs(map[string]string{
 			"--target-peers": "1",
 		})
@@ -55,23 +55,15 @@ func (b *BuilderNetRecipe) Apply(ctx *ExContext) *Component {
 	if mevBoostRelay := component.FindService("mev-boost-relay"); mevBoostRelay != nil {
 		mevBoostRelay.DependsOnNone()
 	}
-	// Remove beacon healthmon - doesn't work with --target-peers=1 which is required for builder VM
 	component.RemoveService("beacon_healthmon")
-	if beacon != nil {
-		delete(beacon.Labels, healthCheckSidecarLabel)
-	}
+	// Beacon never reaches healthy in buildernet, so any consumer that asked
+	// for healthy must accept running instead.
+	component.WalkServices(func(svc *Service) {
+		svc.ReplaceDependency("beacon", DependsOnConditionRunning)
+	})
 
-	// Beacon never reaches healthy state until a builder connects (target-peers=1),
-	// so any builder added by the L1 recipe must wait on beacon running, not healthy.
-	if rbuilder := component.FindService("rbuilder"); rbuilder != nil {
-		for _, dep := range rbuilder.DependsOn {
-			if dep.Name == "beacon" && dep.Condition == DependsOnConditionHealthy {
-				dep.Condition = DependsOnConditionRunning
-			}
-		}
-	}
-
-	component.RunContenderIfEnabled(ctx)
+	// Note: contender is already added by L1Recipe.Apply, so we do not call
+	// RunContenderIfEnabled here.
 
 	return component
 }

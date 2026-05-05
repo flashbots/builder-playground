@@ -87,6 +87,16 @@ func (p *Component) AddService(ctx *ExContext, srv ComponentGen) {
 	p.Inner = append(p.Inner, srv.Apply(ctx))
 }
 
+// WalkServices invokes fn for every service in the component tree.
+func (p *Component) WalkServices(fn func(*Service)) {
+	for _, svc := range p.Services {
+		fn(svc)
+	}
+	for _, inner := range p.Inner {
+		inner.WalkServices(fn)
+	}
+}
+
 // FindService finds a service by name in the component tree
 func (p *Component) FindService(name string) *Service {
 	for _, svc := range p.Services {
@@ -102,16 +112,37 @@ func (p *Component) FindService(name string) *Service {
 	return nil
 }
 
-// RemoveService removes a service by name from the component tree
+// RemoveService removes a service by name from the component tree.
+// It also clears any health-check-sidecar labels that reference the removed
+// service so manifest validation does not fail on a dangling sidecar pointer.
 func (p *Component) RemoveService(name string) {
+	p.removeServiceRecursive(name)
+	p.clearSidecarLabel(name)
+}
+
+func (p *Component) removeServiceRecursive(name string) bool {
 	for i, svc := range p.Services {
 		if svc.Name == name {
 			p.Services = append(p.Services[:i], p.Services[i+1:]...)
-			return
+			return true
 		}
 	}
 	for _, inner := range p.Inner {
-		inner.RemoveService(name)
+		if inner.removeServiceRecursive(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Component) clearSidecarLabel(sidecarName string) {
+	for _, svc := range p.Services {
+		if svc.Labels[healthCheckSidecarLabel] == sidecarName {
+			delete(svc.Labels, healthCheckSidecarLabel)
+		}
+	}
+	for _, inner := range p.Inner {
+		inner.clearSidecarLabel(sidecarName)
 	}
 }
 
@@ -660,6 +691,20 @@ func (s *Service) DependsOnHealthy(name string) *Service {
 
 func (s *Service) DependsOnRunning(name string) *Service {
 	s.DependsOn = append(s.DependsOn, &DependsOn{Name: name, Condition: DependsOnConditionRunning})
+	return s
+}
+
+// ReplaceDependency updates the condition of an existing depends-on edge to
+// the named service. It is a no-op if no such edge exists. Useful when a
+// downstream recipe knows that a target service can never reach the strict
+// condition declared by an upstream component (e.g. a beacon that only goes
+// healthy after its consumer connects).
+func (s *Service) ReplaceDependency(name string, condition DependsOnCondition) *Service {
+	for _, dep := range s.DependsOn {
+		if dep.Name == name {
+			dep.Condition = condition
+		}
+	}
 	return s
 }
 
