@@ -11,9 +11,9 @@ require (
 	github.com/dustinkirkland/golang-petname v0.0.0-20240428194347-eebcea082ee0
 	github.com/ethereum/go-ethereum v1.16.8
 	github.com/fatih/color v1.18.0
-	github.com/flashbots/go-boost-utils v1.9.1-0.20250819134059-e5294cb450c9
+	github.com/flashbots/go-boost-utils v1.10.0
 	github.com/flashbots/go-template v1.0.0
-	github.com/flashbots/mev-boost-relay v0.32.0-rc2
+	github.com/flashbots/mev-boost-relay v0.33.3-0.20260508001820-67812b1b8ff9
 	github.com/go-chi/httplog/v2 v2.1.1
 	github.com/goccy/go-yaml v1.17.1
 	github.com/hashicorp/go-uuid v1.0.3

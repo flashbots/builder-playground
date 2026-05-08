@@ -792,8 +792,9 @@ func runIt(recipe playground.Recipe) error {
 	}
 
 	exCtx := &playground.ExContext{
-		Output:   out,
-		LogLevel: logLevel,
+		Output:      out,
+		LogLevel:    logLevel,
+		GenesisTime: builder.GenesisTime(),
 		// if contender.tps is set, assume contender is enabled
 		Contender: &playground.ContenderContext{
 			Enabled:     contenderEnabled,

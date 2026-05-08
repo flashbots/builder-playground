@@ -15,7 +15,7 @@ import (
 
 var (
 	defaultJWTToken          = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
-	latestPlaygroundUtilsTag = "07ec800c3651b05ef1946c38b8d04745946818c7"
+	latestPlaygroundUtilsTag = "latest"
 )
 
 type RollupBoost struct {
@@ -643,6 +643,8 @@ func (m *MevBoostRelay) Apply(ctx *ExContext) *Component {
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag(latestPlaygroundUtilsTag).
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
+		WithEnv("GETHEADER_RESPONSE_DELAY_TARGET_MS", "800").
+		WithEnv("GETHEADER_DELAY_USERAGENTS", "mev-boost,Lighthouse").
 		WithEntrypoint("mev-boost-relay").
 		DependsOnHealthy(m.BeaconClient).
 		WithArgs(
@@ -757,7 +759,8 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 		WithImage("flashbots/mev-boost").
 		WithTag("latest").
 		WithArgs(args...).
-		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
+		WithEnv("GENESIS_FORK_VERSION", "0x20000089").
+		WithEnv("GENESIS_TIMESTAMP", strconv.FormatInt(ctx.GenesisTime.Unix(), 10))
 
 	return component
 }

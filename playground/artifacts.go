@@ -125,6 +125,14 @@ type ArtifactsBuilder struct {
 	// Extra files to copy to artifacts (artifactName -> sourcePath)
 	extraFiles     map[string]string
 	predeploysFile string
+
+	// genesisTime is set by Build and exposed via GenesisTime.
+	genesisTime time.Time
+}
+
+// GenesisTime returns the L1 genesis time set during Build.
+func (b *ArtifactsBuilder) GenesisTime() time.Time {
+	return b.genesisTime
 }
 
 func NewArtifactsBuilder() *ArtifactsBuilder {
@@ -249,6 +257,7 @@ func (b *ArtifactsBuilder) Build(out *output) error {
 	}
 
 	genesisTime := time.Now().Add(time.Duration(b.genesisDelay) * time.Second)
+	b.genesisTime = genesisTime
 	config := params.BeaconConfig()
 	config.ElectraForkEpoch = 0
 
