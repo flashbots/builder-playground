@@ -1,0 +1,45 @@
+log_json = false
+log_level = "info,rbuilder=debug"
+redacted_telemetry_server_port = 6061
+redacted_telemetry_server_ip = "0.0.0.0"
+full_telemetry_server_port = 6060
+full_telemetry_server_ip = "0.0.0.0"
+
+chain = "/data/genesis.json"
+reth_datadir = "/data_reth"
+el_node_ipc_path = "/data_reth/reth.ipc"
+
+coinbase_secret_key = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+relay_secret_key = "0x25295f0d1d592a90b333e26e85149708208e9f8e8bc18f6c77bd62f8ad7a6866"
+
+cl_node_url = ["http://beacon:3500"]
+jsonrpc_server_port = 8645
+jsonrpc_server_ip = "0.0.0.0"
+extra_data = "rbuilder-alpha"
+
+ignore_cancellable_orders = true
+root_hash_use_sparse_trie = true
+root_hash_compare_sparse_trie = false
+slot_delta_to_start_bidding_ms = -20000
+
+live_builders = ["alpha-max-profit"]
+enabled_relays = ["playground"]
+
+[bidding_gateway]
+url = "http://bidding-gateway:6072"
+
+[[relays]]
+name = "playground"
+url = "http://mev-boost-relay:5555"
+priority = 0
+use_ssz_for_submit = false
+use_gzip_for_submit = false
+mode = "full"
+
+[[builders]]
+name = "alpha-max-profit"
+algo = "ordering-builder"
+discard_txs = true
+sorting = "max-profit"
+failed_order_retries = 1
+drop_failed_orders = true

@@ -1,0 +1,673 @@
+base: l1
+description: L1 relay bidding scenario with three rbuilders, one bidding gateway, flowproxy, contender load, and 50ms relay latency for non-gateway builders
+
+base_args:
+  - --block-time
+  - 3s
+
+setup:
+  - docker build -t builder-playground/relay-delay-proxy:local -f Dockerfile.relay-delay-proxy .
+  - docker build -t builder-playground/rbuilder-wrapper:local -f Dockerfile.rbuilder-wrapper ../../../../rbuilder-prism
+  - docker build -t builder-playground/flowproxy-build:local -f ../../../../flowproxy-private/Dockerfile.reproducible ../../../../flowproxy-private
+  - docker build -t builder-playground/flowproxy:local -f Dockerfile.flowproxy-wrapper .
+
+recipe:
+  relay-delay:
+    services:
+      relay-delay-1:
+        image: builder-playground/relay-delay-proxy
+        tag: local
+        env:
+          UPSTREAM: http://mev-boost-relay:5555
+          LATENCY_MS: "50"
+          LISTEN_PORT: "5555"
+        ports:
+          http: 5555
+        ready_check: http://localhost:5555/health
+        depends_on:
+          - mev-boost-relay:running
+      relay-delay-2:
+        image: builder-playground/relay-delay-proxy
+        tag: local
+        env:
+          UPSTREAM: http://mev-boost-relay:5555
+          LATENCY_MS: "50"
+          LISTEN_PORT: "5555"
+        ports:
+          http: 5555
+        ready_check: http://localhost:5555/health
+        depends_on:
+          - mev-boost-relay:running
+      relay-delay-3:
+        image: builder-playground/relay-delay-proxy
+        tag: local
+        env:
+          UPSTREAM: http://mev-boost-relay:5555
+          LATENCY_MS: "50"
+          LISTEN_PORT: "5555"
+        ports:
+          http: 5555
+        ready_check: http://localhost:5555/health
+        depends_on:
+          - mev-boost-relay:running
+
+  builder-execution:
+    services:
+      el-builder-1:
+        image: ghcr.io/paradigmxyz/reth
+        tag: v1.9.3
+        entrypoint: /usr/local/bin/reth
+        args:
+          - node
+          - --chain
+          - /data/genesis.json
+          - --datadir
+          - /data_reth
+          - --color
+          - never
+          - --addr
+          - 0.0.0.0
+          - --port
+          - '{{Port "rpc" 30303}}'
+          - --ipcpath
+          - /data_reth/reth.ipc
+          - --http
+          - --http.addr
+          - 0.0.0.0
+          - --http.api
+          - admin,eth,web3,net,rpc,mev,flashbots
+          - --http.port
+          - '{{Port "http" 8545}}'
+          - --ws
+          - --ws.addr
+          - 0.0.0.0
+          - --ws.port
+          - '{{Port "ws" 8546}}'
+          - --ws.api
+          - eth,web3,net,txpool,debug,trace
+          - --ws.origins
+          - '*'
+          - --authrpc.port
+          - '{{Port "authrpc" 8551}}'
+          - --authrpc.addr
+          - 0.0.0.0
+          - --authrpc.jwtsecret
+          - /data/jwtsecret
+          - --metrics
+          - 0.0.0.0:{{Port "metrics" 9090}}
+          - --engine.persistence-threshold
+          - "0"
+          - --engine.memory-block-buffer-target
+          - "0"
+          - -vvv
+          - --disable-discovery
+        ports:
+          authrpc: 8551
+          http: 8545
+          metrics: 9090
+          rpc: 30303
+          ws: 8546
+        files:
+          /data/genesis.json: artifact:genesis.json
+          /data/jwtsecret: artifact:jwtsecret
+        volumes:
+          /data_reth:
+            name: data
+            is_local: true
+      el-builder-2:
+        image: ghcr.io/paradigmxyz/reth
+        tag: v1.9.3
+        entrypoint: /usr/local/bin/reth
+        args:
+          - node
+          - --chain
+          - /data/genesis.json
+          - --datadir
+          - /data_reth
+          - --color
+          - never
+          - --addr
+          - 0.0.0.0
+          - --port
+          - '{{Port "rpc" 30303}}'
+          - --ipcpath
+          - /data_reth/reth.ipc
+          - --http
+          - --http.addr
+          - 0.0.0.0
+          - --http.api
+          - admin,eth,web3,net,rpc,mev,flashbots
+          - --http.port
+          - '{{Port "http" 8545}}'
+          - --ws
+          - --ws.addr
+          - 0.0.0.0
+          - --ws.port
+          - '{{Port "ws" 8546}}'
+          - --ws.api
+          - eth,web3,net,txpool,debug,trace
+          - --ws.origins
+          - '*'
+          - --authrpc.port
+          - '{{Port "authrpc" 8551}}'
+          - --authrpc.addr
+          - 0.0.0.0
+          - --authrpc.jwtsecret
+          - /data/jwtsecret
+          - --metrics
+          - 0.0.0.0:{{Port "metrics" 9090}}
+          - --engine.persistence-threshold
+          - "0"
+          - --engine.memory-block-buffer-target
+          - "0"
+          - -vvv
+          - --disable-discovery
+        ports:
+          authrpc: 8551
+          http: 8545
+          metrics: 9090
+          rpc: 30303
+          ws: 8546
+        files:
+          /data/genesis.json: artifact:genesis.json
+          /data/jwtsecret: artifact:jwtsecret
+        volumes:
+          /data_reth:
+            name: data
+            is_local: true
+      el-builder-3:
+        image: ghcr.io/paradigmxyz/reth
+        tag: v1.9.3
+        entrypoint: /usr/local/bin/reth
+        args:
+          - node
+          - --chain
+          - /data/genesis.json
+          - --datadir
+          - /data_reth
+          - --color
+          - never
+          - --addr
+          - 0.0.0.0
+          - --port
+          - '{{Port "rpc" 30303}}'
+          - --ipcpath
+          - /data_reth/reth.ipc
+          - --http
+          - --http.addr
+          - 0.0.0.0
+          - --http.api
+          - admin,eth,web3,net,rpc,mev,flashbots
+          - --http.port
+          - '{{Port "http" 8545}}'
+          - --ws
+          - --ws.addr
+          - 0.0.0.0
+          - --ws.port
+          - '{{Port "ws" 8546}}'
+          - --ws.api
+          - eth,web3,net,txpool,debug,trace
+          - --ws.origins
+          - '*'
+          - --authrpc.port
+          - '{{Port "authrpc" 8551}}'
+          - --authrpc.addr
+          - 0.0.0.0
+          - --authrpc.jwtsecret
+          - /data/jwtsecret
+          - --metrics
+          - 0.0.0.0:{{Port "metrics" 9090}}
+          - --engine.persistence-threshold
+          - "0"
+          - --engine.memory-block-buffer-target
+          - "0"
+          - -vvv
+          - --disable-discovery
+        ports:
+          authrpc: 8551
+          http: 8545
+          metrics: 9090
+          rpc: 30303
+          ws: 8546
+        files:
+          /data/genesis.json: artifact:genesis.json
+          /data/jwtsecret: artifact:jwtsecret
+        volumes:
+          /data_reth:
+            name: data
+            is_local: true
+  builder-beacon:
+    services:
+      beacon-builder-1:
+        image: sigp/lighthouse
+        tag: v8.1.0
+        entrypoint: lighthouse
+        args:
+          - bn
+          - --datadir
+          - /data_beacon
+          - --testnet-dir
+          - /data/testnet-dir
+          - --enable-private-discovery
+          - --disable-peer-scoring
+          - --staking
+          - --enr-address
+          - 127.0.0.1
+          - --enr-udp-port
+          - '{{PortUDP "p2p" 9000}}'
+          - --enr-tcp-port
+          - '{{Port "p2p" 9000}}'
+          - --enr-quic-port
+          - '{{Port "quic-p2p" 9100}}'
+          - --port
+          - '{{Port "p2p" 9000}}'
+          - --quic-port
+          - '{{Port "quic-p2p" 9100}}'
+          - --http
+          - --http-port
+          - '{{Port "http" 3500}}'
+          - --http-address
+          - 0.0.0.0
+          - --http-allow-origin
+          - '*'
+          - --disable-packet-filter
+          - --target-peers
+          - "1"
+          - --libp2p-addresses
+          - /dns4/beacon/tcp/9000
+          - --checkpoint-sync-url
+          - http://beacon:3500
+          - --execution-endpoint
+          - '{{Service "el-builder-1" "authrpc" "http" ""}}'
+          - --execution-jwt
+          - /data/jwtsecret
+          - --always-prepare-payload
+          - --prepare-payload-lookahead
+          - "8000"
+          - --suggested-fee-recipient
+          - 0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990
+          - --builder
+          - '{{Service "mev-boost-relay" "http" "http" ""}}'
+          - --builder-fallback-epochs-since-finalization
+          - "0"
+          - --builder-fallback-disable-checks
+        ports:
+          http: 3500
+          p2p: 9000
+          quic-p2p: 9100
+        files:
+          /data/jwtsecret: artifact:jwtsecret
+          /data/testnet-dir: artifact:testnet
+        volumes:
+          /data_beacon:
+            name: data
+            is_local: false
+        depends_on:
+          - el-builder-1:running
+          - beacon:healthy
+      beacon-builder-2:
+        image: sigp/lighthouse
+        tag: v8.1.0
+        entrypoint: lighthouse
+        args:
+          - bn
+          - --datadir
+          - /data_beacon
+          - --testnet-dir
+          - /data/testnet-dir
+          - --enable-private-discovery
+          - --disable-peer-scoring
+          - --staking
+          - --enr-address
+          - 127.0.0.1
+          - --enr-udp-port
+          - '{{PortUDP "p2p" 9000}}'
+          - --enr-tcp-port
+          - '{{Port "p2p" 9000}}'
+          - --enr-quic-port
+          - '{{Port "quic-p2p" 9100}}'
+          - --port
+          - '{{Port "p2p" 9000}}'
+          - --quic-port
+          - '{{Port "quic-p2p" 9100}}'
+          - --http
+          - --http-port
+          - '{{Port "http" 3500}}'
+          - --http-address
+          - 0.0.0.0
+          - --http-allow-origin
+          - '*'
+          - --disable-packet-filter
+          - --target-peers
+          - "1"
+          - --libp2p-addresses
+          - /dns4/beacon/tcp/9000
+          - --checkpoint-sync-url
+          - http://beacon:3500
+          - --execution-endpoint
+          - '{{Service "el-builder-2" "authrpc" "http" ""}}'
+          - --execution-jwt
+          - /data/jwtsecret
+          - --always-prepare-payload
+          - --prepare-payload-lookahead
+          - "8000"
+          - --suggested-fee-recipient
+          - 0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990
+          - --builder
+          - '{{Service "mev-boost-relay" "http" "http" ""}}'
+          - --builder-fallback-epochs-since-finalization
+          - "0"
+          - --builder-fallback-disable-checks
+        ports:
+          http: 3500
+          p2p: 9000
+          quic-p2p: 9100
+        files:
+          /data/jwtsecret: artifact:jwtsecret
+          /data/testnet-dir: artifact:testnet
+        volumes:
+          /data_beacon:
+            name: data
+            is_local: false
+        depends_on:
+          - el-builder-2:running
+          - beacon:healthy
+      beacon-builder-3:
+        image: sigp/lighthouse
+        tag: v8.1.0
+        entrypoint: lighthouse
+        args:
+          - bn
+          - --datadir
+          - /data_beacon
+          - --testnet-dir
+          - /data/testnet-dir
+          - --enable-private-discovery
+          - --disable-peer-scoring
+          - --staking
+          - --enr-address
+          - 127.0.0.1
+          - --enr-udp-port
+          - '{{PortUDP "p2p" 9000}}'
+          - --enr-tcp-port
+          - '{{Port "p2p" 9000}}'
+          - --enr-quic-port
+          - '{{Port "quic-p2p" 9100}}'
+          - --port
+          - '{{Port "p2p" 9000}}'
+          - --quic-port
+          - '{{Port "quic-p2p" 9100}}'
+          - --http
+          - --http-port
+          - '{{Port "http" 3500}}'
+          - --http-address
+          - 0.0.0.0
+          - --http-allow-origin
+          - '*'
+          - --disable-packet-filter
+          - --target-peers
+          - "1"
+          - --libp2p-addresses
+          - /dns4/beacon/tcp/9000
+          - --checkpoint-sync-url
+          - http://beacon:3500
+          - --execution-endpoint
+          - '{{Service "el-builder-3" "authrpc" "http" ""}}'
+          - --execution-jwt
+          - /data/jwtsecret
+          - --always-prepare-payload
+          - --prepare-payload-lookahead
+          - "8000"
+          - --suggested-fee-recipient
+          - 0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990
+          - --builder
+          - '{{Service "mev-boost-relay" "http" "http" ""}}'
+          - --builder-fallback-epochs-since-finalization
+          - "0"
+          - --builder-fallback-disable-checks
+        ports:
+          http: 3500
+          p2p: 9000
+          quic-p2p: 9100
+        files:
+          /data/jwtsecret: artifact:jwtsecret
+          /data/testnet-dir: artifact:testnet
+        volumes:
+          /data_beacon:
+            name: data
+            is_local: false
+        depends_on:
+          - el-builder-3:running
+          - beacon:healthy
+  builders:
+    services:
+      bidding-gateway:
+        image: builder-playground/rbuilder-wrapper
+        tag: local
+        entrypoint: /app/bidding-gateway
+        args:
+          - /data/rbuilder-gateway.toml
+          - --listen-address
+          - 0.0.0.0:6072
+        files:
+          /data/rbuilder-gateway.toml: rbuilder-gateway.toml
+        ports:
+          http: 6072
+        depends_on:
+          - mev-boost-relay:running
+      rbuilder-1:
+        image: builder-playground/rbuilder-wrapper
+        tag: local
+        entrypoint: /bin/busybox
+        pid: "service:el"
+        args:
+          - sh
+          - -c
+          - /bin/busybox sleep 20 && exec /app/rbuilder run /data/rbuilder.toml
+        files:
+          /data/rbuilder.toml: rbuilder-1.toml
+          /data/genesis.json: artifact:genesis.json
+        volumes:
+          /data_reth:
+            name: "shared:el-data"
+            is_local: true
+        depends_on:
+          - el:running
+          - beacon:healthy
+          - bidding-gateway:running
+      rbuilder-2:
+        image: builder-playground/rbuilder-wrapper
+        tag: local
+        entrypoint: /bin/busybox
+        pid: "service:el"
+        args:
+          - sh
+          - -c
+          - /bin/busybox sleep 20 && exec /app/rbuilder run /data/rbuilder.toml
+        files:
+          /data/rbuilder.toml: rbuilder-2.toml
+          /data/genesis.json: artifact:genesis.json
+        volumes:
+          /data_reth:
+            name: "shared:el-data"
+            is_local: true
+        depends_on:
+          - el:running
+          - beacon:healthy
+          - relay-delay-2:running
+      rbuilder-3:
+        image: builder-playground/rbuilder-wrapper
+        tag: local
+        entrypoint: /bin/busybox
+        pid: "service:el"
+        args:
+          - sh
+          - -c
+          - /bin/busybox sleep 20 && exec /app/rbuilder run /data/rbuilder.toml
+        files:
+          /data/rbuilder.toml: rbuilder-3.toml
+          /data/genesis.json: artifact:genesis.json
+        volumes:
+          /data_reth:
+            name: "shared:el-data"
+            is_local: true
+        depends_on:
+          - el:running
+          - beacon:healthy
+          - relay-delay-3:running
+
+  flowproxy:
+    services:
+      flowproxy-1:
+        image: builder-playground/flowproxy
+        tag: local
+        args:
+          - --user-listen-addr
+          - 0.0.0.0:9754
+          - --system-listen-addr
+          - 0.0.0.0:9755
+          - --builder-listen-addr
+          - 0.0.0.0:9756
+          - --builder-url
+          - http://rbuilder-1:8645
+          - --builder-name
+          - rbuilder-1
+          - --builder-region
+          - us
+          - --metrics
+          - 0.0.0.0:9760
+          - --disable-forwarding
+          - --http.enable-gzip
+        ports:
+          http: 9754
+          system: 9755
+          builder: 9756
+          metrics: 9760
+        ready_check: http://localhost:9754/health
+        depends_on:
+          - rbuilder-1:running
+      flowproxy-2:
+        image: builder-playground/flowproxy
+        tag: local
+        args:
+          - --user-listen-addr
+          - 0.0.0.0:9754
+          - --system-listen-addr
+          - 0.0.0.0:9755
+          - --builder-listen-addr
+          - 0.0.0.0:9756
+          - --builder-url
+          - http://rbuilder-2:8645
+          - --builder-name
+          - rbuilder-2
+          - --builder-region
+          - us
+          - --metrics
+          - 0.0.0.0:9760
+          - --disable-forwarding
+          - --http.enable-gzip
+        ports:
+          http: 9754
+          system: 9755
+          builder: 9756
+          metrics: 9760
+        ready_check: http://localhost:9754/health
+        depends_on:
+          - rbuilder-2:running
+      flowproxy-3:
+        image: builder-playground/flowproxy
+        tag: local
+        args:
+          - --user-listen-addr
+          - 0.0.0.0:9754
+          - --system-listen-addr
+          - 0.0.0.0:9755
+          - --builder-listen-addr
+          - 0.0.0.0:9756
+          - --builder-url
+          - http://rbuilder-3:8645
+          - --builder-name
+          - rbuilder-3
+          - --builder-region
+          - us
+          - --metrics
+          - 0.0.0.0:9760
+          - --disable-forwarding
+          - --http.enable-gzip
+        ports:
+          http: 9754
+          system: 9755
+          builder: 9756
+          metrics: 9760
+        ready_check: http://localhost:9754/health
+        depends_on:
+          - rbuilder-3:running
+
+  contender:
+    services:
+      contender-1:
+        image: flashbots/contender
+        tag: 0.7.2
+        args:
+          - spam
+          - --optimistic-nonces
+          - --ignore-receipts
+          - --duration
+          - "86400"
+          - --override-senders
+          - --priv-key
+          - "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+          - --min-balance
+          - 100 ether
+          - -r
+          - '{{Service "el" "http" "http" ""}}'
+          - transfers
+          - --tps
+          - "20"
+        depends_on:
+          - beacon:healthy
+          - el:running
+      contender-2:
+        image: flashbots/contender
+        tag: 0.7.2
+        args:
+          - spam
+          - --optimistic-nonces
+          - --ignore-receipts
+          - --duration
+          - "86400"
+          - --override-senders
+          - --priv-key
+          - "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+          - --min-balance
+          - 100 ether
+          - -r
+          - '{{Service "el" "http" "http" ""}}'
+          - transfers
+          - --tps
+          - "20"
+        depends_on:
+          - beacon:healthy
+          - el:running
+      contender-3:
+        image: flashbots/contender
+        tag: 0.7.2
+        args:
+          - spam
+          - --optimistic-nonces
+          - --ignore-receipts
+          - --duration
+          - "86400"
+          - --override-senders
+          - --priv-key
+          - "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+          - --min-balance
+          - 100 ether
+          - -r
+          - '{{Service "el" "http" "http" ""}}'
+          - transfers
+          - --tps
+          - "20"
+        depends_on:
+          - beacon:healthy
+          - el:running

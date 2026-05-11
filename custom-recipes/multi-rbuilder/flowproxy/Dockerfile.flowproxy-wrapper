@@ -1,0 +1,11 @@
+FROM builder-playground/flowproxy-build:local AS flowproxy
+
+FROM debian:trixie-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates libssl3t64 libzstd1 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=flowproxy /flowproxy /flowproxy
+
+ENTRYPOINT ["/flowproxy"]

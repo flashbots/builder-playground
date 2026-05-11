@@ -1,0 +1,34 @@
+FROM rust:1.85-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    clang \
+    cmake \
+    libclang-dev \
+    libprotobuf-dev \
+    libssl-dev \
+    pkg-config \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . .
+
+ENV BINDGEN_EXTRA_CLANG_ARGS="-I/usr/lib/gcc/x86_64-linux-gnu/12/include -I/usr/lib/gcc/x86_64-linux-gnu/13/include"
+RUN cargo build -p rbuilder --bin rbuilder --bin bidding-gateway
+
+FROM busybox:1.37.0-musl AS busybox
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libstdc++6 \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=busybox /bin/busybox /bin/busybox
+COPY --from=builder /src/target/debug/rbuilder /app/rbuilder
+COPY --from=builder /src/target/debug/bidding-gateway /app/bidding-gateway
+
+ENTRYPOINT ["/app/rbuilder"]

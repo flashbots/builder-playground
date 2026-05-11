@@ -1,0 +1,7 @@
+FROM python:3.12-alpine
+
+WORKDIR /app
+COPY relay_delay_proxy.py /app/relay_delay_proxy.py
+
+EXPOSE 5555
+ENTRYPOINT ["python", "/app/relay_delay_proxy.py"]
