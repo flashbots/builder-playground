@@ -1,0 +1,30 @@
+ipc_path = "/tmp/playground-bidding.sock"
+log_json = false
+log_level = "info"
+log_color = true
+
+[bidding_cfg]
+coinbase_payment_threshold_eth = "0.0001"
+slot_delta_to_start_bids_ms = -20000
+
+[bidding_cfg.seal_instruction_manager_v2_cfg]
+min_reward_share = 0.105
+max_reward_share = 0.2025
+aggressive_reward_share = 0.01
+max_tbv_portion_to_use_against_friends = 0.9
+non_friend_reward_share = 0.5
+max_tbv_to_use_friend_cap_eth = "1"
+max_subsidy_window_val_eth = "1"
+max_subsidy_window_size_minutes = 120
+
+[bidding_cfg.seal_instruction_manager_v2_cfg.default_sealing_cfg]
+top_bid_buffer_eth = "0.000888"
+block_subsidy_eth = "0.001337"
+slot_delta_aggressive_bid_slot_delta_ms = -1000
+
+[best_competition_bid_selector_cfg]
+excluded_relays_filters = []
+our_builder_pubkeys = []
+our_fee_recipients = []
+our_extra_datas = []
+friend_builder_pubkeys = []

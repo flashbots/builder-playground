@@ -1,0 +1,32 @@
+base: l1
+description: rbuilder-operator (FlashbotsConfig) + tbv-bidding-service, direct relay submission
+
+recipe:
+  reth:
+    services:
+      el:
+        release:
+          name: "reth"
+          org: "paradigmxyz"
+          version: "v1.9.3"
+
+  builder:
+    services:
+      tbv-bidding-service:
+        host_path: "/home/e/rbuilder-prism/target/release/tbv-bidding-service"
+        args:
+          - "tbv.toml"
+        files:
+          "tbv.toml": "tbv.toml"
+      rbuilder-operator:
+        host_path: "/home/e/rbuilder-prism/target/release/rbuilder-operator"
+        args:
+          - "run"
+          - "rbuilder-operator.toml"
+        files:
+          "rbuilder-operator.toml": "rbuilder-operator.toml"
+          "relays.json": "relays.json"
+        depends_on:
+          - "el:healthy"
+          - "beacon:healthy"
+          - "tbv-bidding-service:running"

@@ -1,0 +1,6 @@
+ipc_path = "/tmp/playground-bidding.sock"
+log_json = false
+log_level = "info"
+log_color = true
+# start bidding immediately (devnet has no real slot timing pressure)
+slot_delta_to_start_bidding_ms = -20000

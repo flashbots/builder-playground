@@ -1,0 +1,47 @@
+base: l1
+description: rbuilder + bidding-gateway + tbv-bidding-service from local rbuilder-prism release binaries (gateway perf setup)
+
+recipe:
+  reth:
+    services:
+      el:
+        # pinned to rbuilder-prism's reth dependency (v1.9.3) — rbuilder reads
+        # the reth db directly, so the versions must match
+        release:
+          name: "reth"
+          org: "paradigmxyz"
+          version: "v1.9.3"
+
+  builder:
+    services:
+      rbuilder:
+        host_path: "/home/e/rbuilder-prism/target/release/rbuilder"
+        args:
+          - "run"
+          - "rbuilder.toml"
+        files:
+          "rbuilder.toml": "rbuilder.toml"
+        depends_on:
+          - "el:healthy"
+          - "beacon:healthy"
+          - "bidding-gateway:running"
+
+  gateway:
+    services:
+      tbv-bidding-service:
+        host_path: "/home/e/rbuilder-prism/target/release/tbv-bidding-service"
+        args:
+          - "tbv.toml"
+        files:
+          "tbv.toml": "tbv.toml"
+      bidding-gateway:
+        host_path: "/tmp/ab/bidding-gateway-idxserial"
+        args:
+          - "--config"
+          - "gateway.toml"
+        files:
+          "gateway.toml": "gateway.toml"
+        depends_on:
+          - "tbv-bidding-service:running"
+          - "mev-boost-relay:running"
+          - "el:healthy"
