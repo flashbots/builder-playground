@@ -575,11 +575,7 @@ func applyServiceOverrides(svc *Service, config *YAMLServiceConfig, root *Compon
 		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
-		if filepath.IsAbs(config.HostPath) {
-			svc.HostPath = config.HostPath
-		} else {
-			svc.HostPath, _ = filepath.Abs(filepath.Join(recipeDir, config.HostPath))
-		}
+		svc.HostPath = resolveHostPath(config.HostPath, recipeDir)
 		svc.UseHostExecution()
 	}
 	if config.Release != nil {
@@ -636,6 +632,20 @@ func applyReplacePair(flag, newValue string, args []string) []string {
 
 	slog.Warn("replace_args flag not found in service args", "flag", flag)
 	return args
+}
+
+func resolveHostPath(hostPath, recipeDir string) string {
+	if strings.HasPrefix(hostPath, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, hostPath[2:])
+		}
+	}
+	if filepath.IsAbs(hostPath) {
+		return hostPath
+	}
+	abs, _ := filepath.Abs(filepath.Join(recipeDir, hostPath))
+	return abs
 }
 
 // yamlReleaseToRelease converts a YAMLReleaseConfig to a release struct
@@ -772,11 +782,7 @@ func createServiceFromConfig(name string, config *YAMLServiceConfig, root *Compo
 		applyDependsOn(svc, config.DependsOn, root)
 	}
 	if config.HostPath != "" {
-		if filepath.IsAbs(config.HostPath) {
-			svc.HostPath = config.HostPath
-		} else {
-			svc.HostPath, _ = filepath.Abs(filepath.Join(recipeDir, config.HostPath))
-		}
+		svc.HostPath = resolveHostPath(config.HostPath, recipeDir)
 		svc.UseHostExecution()
 	}
 	if config.Release != nil {
