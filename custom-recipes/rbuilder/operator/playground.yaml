@@ -13,13 +13,13 @@ recipe:
   builder:
     services:
       tbv-bidding-service:
-        host_path: "/home/e/rbuilder-prism/target/release/tbv-bidding-service"
+        host_path: "~/rbuilder-prism/target/release/tbv-bidding-service"
         args:
           - "tbv.toml"
         files:
           "tbv.toml": "tbv.toml"
       rbuilder-operator:
-        host_path: "/home/e/rbuilder-prism/target/release/rbuilder-operator"
+        host_path: "~/rbuilder-prism/target/release/rbuilder-operator"
         args:
           - "run"
           - "rbuilder-operator.toml"

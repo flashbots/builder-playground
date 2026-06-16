@@ -15,7 +15,7 @@ recipe:
   builder:
     services:
       rbuilder:
-        host_path: "/home/e/rbuilder-prism/target/release/rbuilder"
+        host_path: "~/rbuilder-prism/target/release/rbuilder"
         args:
           - "run"
           - "rbuilder.toml"
@@ -29,13 +29,13 @@ recipe:
   gateway:
     services:
       tbv-bidding-service:
-        host_path: "/home/e/rbuilder-prism/target/release/tbv-bidding-service"
+        host_path: "~/rbuilder-prism/target/release/tbv-bidding-service"
         args:
           - "tbv.toml"
         files:
           "tbv.toml": "tbv.toml"
       bidding-gateway:
-        host_path: "/tmp/ab/bidding-gateway-idxserial"
+        host_path: "~/rbuilder-prism/target/release/bidding-gateway"
         args:
           - "--config"
           - "gateway.toml"
