@@ -3,6 +3,9 @@
 [![Goreport status](https://goreportcard.com/badge/github.com/flashbots/builder-playground)](https://goreportcard.com/report/github.com/flashbots/builder-playground)
 [![Test status](https://github.com/flashbots/builder-playground/actions/workflows/checks.yaml/badge.svg?branch=main)](https://github.com/flashbots/builder-playground/actions?query=workflow%3A%22Checks%22)
 
+> [!WARNING]
+> **Builder Playground is no longer actively maintained.** While it remains stable and works as-is, it will not receive new features. For more advanced features and agentic development support, please use [decker](https://github.com/flashbots/decker) instead.
+
 Builder Playground is a CLI tool for spinning up self-contained Ethereum development networks for end-to-end block building. With a single command, it deploys complete L1 and L2 stacks—including EL and CL nodes, mev-boost, relays, and builder infrastructure. Designed for speed, determinism, and ease of use, it serves as the foundation for testing block-builder software, BuilderNet VM images, and integration tests across chains.
 
 Recipes (e.g. `l1`, `opstack`) assemble opinionated components and pre-baked configs to bring a full blockchain stack online within seconds. This makes it ideal for:
