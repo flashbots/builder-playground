@@ -137,6 +137,18 @@ func TestConvertServiceToYAML(t *testing.T) {
 			},
 		},
 		{
+			name: "service with pid",
+			service: &Service{
+				Name:  "rbuilder",
+				Image: "ghcr.io/flashbots/rbuilder",
+				Pid:   "service:el",
+			},
+			expected: &YAMLServiceConfig{
+				Image: "ghcr.io/flashbots/rbuilder",
+				Pid:   "service:el",
+			},
+		},
+		{
 			name: "service with ready_check",
 			service: &Service{
 				Name:       "health-service",
@@ -174,6 +186,7 @@ func TestConvertServiceToYAML(t *testing.T) {
 			require.Equal(t, tt.expected.Tag, result.Tag)
 			require.Equal(t, tt.expected.Entrypoint, result.Entrypoint)
 			require.Equal(t, tt.expected.HostPath, result.HostPath)
+			require.Equal(t, tt.expected.Pid, result.Pid)
 			require.Equal(t, tt.expected.ReadyCheck, result.ReadyCheck)
 			require.Equal(t, tt.expected.Labels, result.Labels)
 			require.Len(t, result.Args, len(tt.expected.Args))

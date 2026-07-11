@@ -1,12 +1,12 @@
 package playground
 
 import (
-	_ "embed"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	mevboostrelay "github.com/flashbots/builder-playground/mev-boost-relay"
 	"github.com/flashbots/go-boost-utils/bls"
@@ -16,6 +16,27 @@ import (
 var (
 	defaultJWTToken          = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 	latestPlaygroundUtilsTag = "07ec800c3651b05ef1946c38b8d04745946818c7"
+)
+
+// In-container default ports shared between component args and artifact files
+// (e.g. rbuilder TOML). Components must keep their `{{Port "name" default}}`
+// declarations in sync with these constants so URLs in artifact files resolve
+// to the correct in-container port.
+//
+// Caveat: artifact files are written by Go before the manifest's port
+// allocator runs and don't pass through the `{{Port}}`/`{{Service}}`
+// substitution that args/env get in local_runner.go. A user `--override` that
+// changes a service's host-side port still works (the allocator only touches
+// the host side), but an override that rebinds the in-container port — or a
+// future change to a default here — leaves the rbuilder TOML pointing at the
+// stale value. Long-term fix: thread artifact files through the same template
+// substitution so `Connect("beacon", "http")` can be embedded directly.
+const (
+	lighthouseBeaconHTTPPort = 3500
+	mevBoostRelayHTTPPort    = 5555
+	rbuilderJSONRPCPort      = 8645
+	rbuilderRedactedPort     = 6061
+	rbuilderFullMetricsPort  = 6060
 )
 
 type RollupBoost struct {
@@ -489,7 +510,7 @@ func (r *RethEL) Apply(ctx *ExContext) *Component {
 			// http config
 			"--http",
 			"--http.addr", "0.0.0.0",
-			"--http.api", "admin,eth,web3,net,rpc,mev,flashbots",
+			"--http.api", "admin,eth,web3,net,txpool,rpc,mev,flashbots",
 			"--http.port", `{{Port "http" 8545}}`,
 			// websocket config
 			"--ws",
@@ -552,7 +573,7 @@ func (l *LighthouseBeaconNode) Apply(ctx *ExContext) *Component {
 			"--port", `{{Port "p2p" 9000}}`,
 			"--quic-port", `{{Port "quic-p2p" 9100}}`,
 			"--http",
-			"--http-port", `{{Port "http" 3500}}`,
+			"--http-port", fmt.Sprintf(`{{Port "http" %d}}`, lighthouseBeaconHTTPPort),
 			"--http-address", "0.0.0.0",
 			"--http-allow-origin", "*",
 			"--disable-packet-filter",
@@ -632,14 +653,28 @@ func (c *ClProxy) Apply(ctx *ExContext) *Component {
 }
 
 type MevBoostRelay struct {
+	ServiceName      string
 	BeaconClient     string
 	ValidationServer string
+
+	// SecretKey is the BLS secret key (hex, 0x-prefixed or raw) the relay uses to
+	// sign bids. Empty = use mevboostrelay.DefaultSecretKey (single-relay setups).
+	// Multi-relay setups should set distinct keys so mev-boost sees distinct pubkeys.
+	SecretKey string
+}
+
+func (m *MevBoostRelay) serviceName() string {
+	if m.ServiceName != "" {
+		return m.ServiceName
+	}
+	return "mev-boost-relay"
 }
 
 func (m *MevBoostRelay) Apply(ctx *ExContext) *Component {
-	component := NewComponent("mev-boost-relay")
+	serviceName := m.serviceName()
+	component := NewComponent(serviceName)
 
-	service := component.NewService("mev-boost-relay").
+	service := component.NewService(serviceName).
 		WithImage("docker.io/flashbots/playground-utils").
 		WithTag(latestPlaygroundUtilsTag).
 		WithEnv("ALLOW_SYNCING_BEACON_NODE", "1").
@@ -647,9 +682,13 @@ func (m *MevBoostRelay) Apply(ctx *ExContext) *Component {
 		DependsOnHealthy(m.BeaconClient).
 		WithArgs(
 			"--api-listen-addr", "0.0.0.0",
-			"--api-listen-port", `{{Port "http" 5555}}`,
+			"--api-listen-port", fmt.Sprintf(`{{Port "http" %d}}`, mevBoostRelayHTTPPort),
 			"--beacon-client-addr", Connect(m.BeaconClient, "http"),
 		)
+
+	if m.SecretKey != "" {
+		service.WithArgs("--api-secret-key", m.SecretKey)
+	}
 
 	if m.ValidationServer != "" {
 		service.WithArgs("--validation-server-addr", Connect(m.ValidationServer, "http"))
@@ -714,8 +753,73 @@ func (o *OpReth) Apply(ctx *ExContext) *Component {
 	return component
 }
 
+// MevBoostRelayEndpoint identifies a relay reachable by mev-boost.
+//
+// Exactly one of URL or Service must be set:
+//   - URL: a fully-formed `scheme://pubkey@host:port` URL (used for external
+//     relays). SecretKey is ignored.
+//   - Service: the docker-compose service name of a local relay; SecretKey is
+//     the BLS secret used to derive the pubkey embedded in the URL (defaults
+//     to mevboostrelay.DefaultSecretKey).
+type MevBoostRelayEndpoint struct {
+	URL       string
+	Service   string
+	SecretKey string
+}
+
+func (e MevBoostRelayEndpoint) validate() error {
+	switch {
+	case e.URL == "" && e.Service == "":
+		return fmt.Errorf("relay endpoint requires URL or Service")
+	case e.URL != "" && e.Service != "":
+		return fmt.Errorf("relay endpoint sets both URL (%q) and Service (%q); pick one", e.URL, e.Service)
+	case e.URL != "" && e.SecretKey != "":
+		return fmt.Errorf("relay endpoint URL %q is precomputed; SecretKey must be empty", e.URL)
+	}
+	return nil
+}
+
 type MevBoost struct {
-	RelayEndpoints []string
+	RelayEndpoints []MevBoostRelayEndpoint
+}
+
+// blsPublicKeyHex derives the BLS public key (0x-prefixed hex) for the given
+// secret key. secretKeyHex may be 0x-prefixed or raw.
+func blsPublicKeyHex(secretKeyHex string) (string, error) {
+	if !strings.HasPrefix(secretKeyHex, "0x") && !strings.HasPrefix(secretKeyHex, "0X") {
+		secretKeyHex = "0x" + secretKeyHex
+	}
+	skBytes, err := hexutil.Decode(secretKeyHex)
+	if err != nil {
+		return "", fmt.Errorf("decode secret key: %w", err)
+	}
+	secretKey, err := bls.SecretKeyFromBytes(skBytes[:])
+	if err != nil {
+		return "", fmt.Errorf("parse secret key: %w", err)
+	}
+	blsPub, err := bls.PublicKeyFromSecretKey(secretKey)
+	if err != nil {
+		return "", fmt.Errorf("derive public key: %w", err)
+	}
+	pub, err := utils.BlsPublicKeyToPublicKey(blsPub)
+	if err != nil {
+		return "", fmt.Errorf("convert public key: %w", err)
+	}
+	return pub.String(), nil
+}
+
+// localMevBoostRelayURL returns the playground relay URL for endpoint, embedding
+// the BLS pubkey derived from the relay's secret. Empty secretKeyHex falls back
+// to the playground-wide default key.
+func localMevBoostRelayURL(endpoint, secretKeyHex string) (string, error) {
+	if secretKeyHex == "" {
+		secretKeyHex = mevboostrelay.DefaultSecretKey
+	}
+	pubkey, err := blsPublicKeyHex(secretKeyHex)
+	if err != nil {
+		return "", err
+	}
+	return ConnectRaw(endpoint, "http", "http", pubkey), nil
 }
 
 func (m *MevBoost) Apply(ctx *ExContext) *Component {
@@ -727,63 +831,226 @@ func (m *MevBoost) Apply(ctx *ExContext) *Component {
 	}
 
 	for _, endpoint := range m.RelayEndpoints {
-		if endpoint == "mev-boost-relay" {
-			// creating relay url with public key since mev-boost requires it
-			envSkBytes, err := hexutil.Decode(mevboostrelay.DefaultSecretKey)
-			if err != nil {
-				continue
-			}
-			secretKey, err := bls.SecretKeyFromBytes(envSkBytes[:])
-			if err != nil {
-				continue
-			}
-			blsPublicKey, err := bls.PublicKeyFromSecretKey(secretKey)
-			if err != nil {
-				continue
-			}
-			publicKey, err := utils.BlsPublicKeyToPublicKey(blsPublicKey)
-			if err != nil {
-				continue
-			}
-
-			relayURL := ConnectRaw("mev-boost-relay", "http", "http", publicKey.String())
-			args = append(args, "--relay", relayURL)
-		} else {
-			args = append(args, "--relay", Connect(endpoint, "http"))
+		if err := endpoint.validate(); err != nil {
+			panic(fmt.Errorf("mev-boost: %w", err))
 		}
+		if endpoint.URL != "" {
+			args = append(args, "--relay", endpoint.URL)
+			continue
+		}
+		relayURL, err := localMevBoostRelayURL(endpoint.Service, endpoint.SecretKey)
+		if err != nil {
+			panic(fmt.Errorf("mev-boost: derive relay URL for service %q: %w", endpoint.Service, err))
+		}
+		args = append(args, "--relay", relayURL)
 	}
 
 	component.NewService("mev-boost").
 		WithImage("flashbots/mev-boost").
 		WithTag("latest").
 		WithArgs(args...).
-		WithEnv("GENESIS_FORK_VERSION", "0x20000089")
+		WithEnv("GENESIS_FORK_VERSION", "0x20000089").
+		WithEnv("GENESIS_TIMESTAMP", strconv.FormatUint(ctx.GenesisTimestamp, 10))
 
 	return component
 }
 
-//go:embed utils/rbuilder-config.toml.tmpl
-var rbuilderConfigToml string
+// defaultRbuilderRelaySecretKey is the BLS secret rbuilder uses to sign bids
+// when no override is given. Single-builder L1 setups use this; multi-builder
+// recipes derive distinct keys per builder.
+const defaultRbuilderRelaySecretKey = "0x25295f0d1d592a90b333e26e85149708208e9f8e8bc18f6c77bd62f8ad7a6866"
 
-type Rbuilder struct{}
+// builderCoinbaseSecretKey is the EOA secret used as the rbuilder coinbase. It
+// matches staticPrefundedAccounts[0] so the builder has funds to pay the
+// proposer in playground genesis.
+const builderCoinbaseSecretKey = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+
+type Rbuilder struct {
+	ServiceName    string
+	BeaconNode     string
+	ExecutionNode  string
+	RelayEndpoints []string
+	RelaySecretKey string
+	ConfigArtifact string
+	ExtraData      string
+}
+
+func (r *Rbuilder) serviceName() string {
+	if r.ServiceName != "" {
+		return r.ServiceName
+	}
+	return "rbuilder"
+}
+
+func (r *Rbuilder) beaconNode() string {
+	if r.BeaconNode != "" {
+		return r.BeaconNode
+	}
+	return "beacon"
+}
+
+func (r *Rbuilder) executionNode() string {
+	if r.ExecutionNode != "" {
+		return r.ExecutionNode
+	}
+	return "el"
+}
+
+func (r *Rbuilder) configArtifact() string {
+	if r.ConfigArtifact != "" {
+		return r.ConfigArtifact
+	}
+	if r.ServiceName != "" {
+		return r.ServiceName + "-config.toml"
+	}
+	return "rbuilder-config.toml"
+}
+
+func (r *Rbuilder) relaySecretKey() string {
+	if r.RelaySecretKey != "" {
+		return r.RelaySecretKey
+	}
+	return defaultRbuilderRelaySecretKey
+}
+
+func (r *Rbuilder) relayEndpoints() []string {
+	if len(r.RelayEndpoints) > 0 {
+		return r.RelayEndpoints
+	}
+	return []string{"mev-boost-relay"}
+}
+
+func (r *Rbuilder) extraData() string {
+	if r.ExtraData != "" {
+		return r.ExtraData
+	}
+	return "Playground Builder"
+}
+
+// rbuilderRelayConfig matches the [[relays]] table rbuilder reads.
+type rbuilderRelayConfig struct {
+	Name             string `toml:"name"`
+	URL              string `toml:"url"`
+	UseSSZForSubmit  bool   `toml:"use_ssz_for_submit"`
+	UseGzipForSubmit bool   `toml:"use_gzip_for_submit"`
+	Mode             string `toml:"mode"`
+}
+
+// rbuilderBuilderConfig matches the [[builders]] table rbuilder reads.
+type rbuilderBuilderConfig struct {
+	Name               string `toml:"name"`
+	Algo               string `toml:"algo"`
+	DiscardTxs         bool   `toml:"discard_txs"`
+	Sorting            string `toml:"sorting"`
+	FailedOrderRetries int    `toml:"failed_order_retries"`
+	DropFailedOrders   bool   `toml:"drop_failed_orders"`
+}
+
+// rbuilderConfig is the typed shape of the TOML config rbuilder consumes.
+type rbuilderConfig struct {
+	LogJSON                     bool     `toml:"log_json"`
+	LogLevel                    string   `toml:"log_level"`
+	RedactedTelemetryServerIP   string   `toml:"redacted_telemetry_server_ip"`
+	RedactedTelemetryServerPort int      `toml:"redacted_telemetry_server_port"`
+	FullTelemetryServerIP       string   `toml:"full_telemetry_server_ip"`
+	FullTelemetryServerPort     int      `toml:"full_telemetry_server_port"`
+	Chain                       string   `toml:"chain"`
+	RethDatadir                 string   `toml:"reth_datadir"`
+	ELNodeIPCPath               string   `toml:"el_node_ipc_path"`
+	CoinbaseSecretKey           string   `toml:"coinbase_secret_key"`
+	RelaySecretKey              string   `toml:"relay_secret_key"`
+	CLNodeURL                   []string `toml:"cl_node_url"`
+	JSONRPCServerIP             string   `toml:"jsonrpc_server_ip"`
+	JSONRPCServerPort           int      `toml:"jsonrpc_server_port"`
+	ExtraData                   string   `toml:"extra_data"`
+	IgnoreCancellableOrders     bool     `toml:"ignore_cancellable_orders"`
+	RootHashUseSparseTrie       bool     `toml:"root_hash_use_sparse_trie"`
+	RootHashCompareSparseTrie   bool     `toml:"root_hash_compare_sparse_trie"`
+	SlotDeltaToStartBiddingMS   int      `toml:"slot_delta_to_start_bidding_ms"`
+	LiveBuilders                []string `toml:"live_builders"`
+	EnabledRelays               []string `toml:"enabled_relays"`
+
+	Relays   []rbuilderRelayConfig   `toml:"relays"`
+	Builders []rbuilderBuilderConfig `toml:"builders"`
+}
+
+func (r *Rbuilder) configTOML() (string, error) {
+	relayEndpoints := r.relayEndpoints()
+	relays := make([]rbuilderRelayConfig, 0, len(relayEndpoints))
+	for _, relay := range relayEndpoints {
+		relays = append(relays, rbuilderRelayConfig{
+			Name: relay,
+			URL:  fmt.Sprintf("http://%s:%d", relay, mevBoostRelayHTTPPort),
+			Mode: "full",
+		})
+	}
+
+	cfg := rbuilderConfig{
+		LogJSON:                     false,
+		LogLevel:                    "info,rbuilder=debug",
+		RedactedTelemetryServerIP:   "0.0.0.0",
+		RedactedTelemetryServerPort: rbuilderRedactedPort,
+		FullTelemetryServerIP:       "0.0.0.0",
+		FullTelemetryServerPort:     rbuilderFullMetricsPort,
+		Chain:                       "/data/genesis.json",
+		RethDatadir:                 "/data_reth",
+		ELNodeIPCPath:               "/data_reth/reth.ipc",
+		CoinbaseSecretKey:           builderCoinbaseSecretKey,
+		RelaySecretKey:              r.relaySecretKey(),
+		CLNodeURL:                   []string{fmt.Sprintf("http://%s:%d", r.beaconNode(), lighthouseBeaconHTTPPort)},
+		JSONRPCServerIP:             "0.0.0.0",
+		JSONRPCServerPort:           rbuilderJSONRPCPort,
+		ExtraData:                   r.extraData(),
+		IgnoreCancellableOrders:     true,
+		RootHashUseSparseTrie:       true,
+		RootHashCompareSparseTrie:   false,
+		SlotDeltaToStartBiddingMS:   -20000,
+		LiveBuilders:                []string{"mp-ordering"},
+		EnabledRelays:               relayEndpoints,
+		Relays:                      relays,
+		Builders: []rbuilderBuilderConfig{{
+			Name:               "mp-ordering",
+			Algo:               "ordering-builder",
+			DiscardTxs:         true,
+			Sorting:            "max-profit",
+			FailedOrderRetries: 1,
+			DropFailedOrders:   true,
+		}},
+	}
+
+	var b strings.Builder
+	if err := toml.NewEncoder(&b).Encode(cfg); err != nil {
+		return "", fmt.Errorf("encode rbuilder config: %w", err)
+	}
+	return b.String(), nil
+}
 
 func (r *Rbuilder) Apply(ctx *ExContext) *Component {
-	component := NewComponent("rbuilder")
+	serviceName := r.serviceName()
+	configArtifact := r.configArtifact()
+	component := NewComponent(serviceName)
 
-	// TODO: Handle error
-	ctx.Output.WriteFile("rbuilder-config.toml", rbuilderConfigToml)
+	config, err := r.configTOML()
+	if err != nil {
+		panic(fmt.Errorf("rbuilder %s: %w", serviceName, err))
+	}
+	if err := ctx.Output.WriteFile(configArtifact, config); err != nil {
+		panic(fmt.Errorf("rbuilder %s: write config: %w", serviceName, err))
+	}
 
-	component.NewService("rbuilder").
+	service := component.NewService(serviceName).
 		WithImage("ghcr.io/flashbots/rbuilder").
 		WithTag("sha-7efdc0b").
-		WithArtifact("/data/rbuilder-config.toml", "rbuilder-config.toml").
+		WithArtifact("/data/rbuilder-config.toml", configArtifact).
 		WithArtifact("/data/genesis.json", "genesis.json").
+		WithPort("rpc", rbuilderJSONRPCPort).
 		WithVolume("shared:el-data", "/data_reth", true).
-		DependsOnHealthy("el").
-		DependsOnHealthy("beacon").
+		DependsOnHealthy(r.executionNode()).
+		DependsOnHealthy(r.beaconNode()).
 		WithArgs(
 			"run", "/data/rbuilder-config.toml",
 		)
+	service.Pid = "service:" + r.executionNode()
 
 	return component
 }

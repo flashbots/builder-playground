@@ -123,7 +123,9 @@ func (l *L1Recipe) Apply(ctx *ExContext) *Component {
 		})
 
 		component.AddComponent(ctx, &MevBoost{
-			RelayEndpoints: []string{"mev-boost-relay"},
+			RelayEndpoints: []MevBoostRelayEndpoint{
+				{Service: "mev-boost-relay"},
+			},
 		})
 	} else {
 		// single-service setup

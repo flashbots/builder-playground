@@ -783,6 +783,12 @@ func runIt(recipe playground.Recipe) error {
 		overrides[parts[0]] = parts[1]
 	}
 
+	if v, ok := recipe.(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return err
+		}
+	}
+
 	slog.Debug("Building artifacts...")
 	builder := recipe.Artifacts()
 	builder.GenesisDelay(genesisDelayFlag)
@@ -800,6 +806,7 @@ func runIt(recipe playground.Recipe) error {
 			ExtraArgs:   contenderArgs,
 			TargetChain: contenderTarget,
 		},
+		GenesisTimestamp: uint64(builder.GenesisTime().Unix()),
 	}
 
 	components := recipe.Apply(exCtx)

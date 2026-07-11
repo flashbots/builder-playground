@@ -27,13 +27,22 @@ type Recipe interface {
 	Output(manifest *Manifest) map[string]interface{}
 }
 
-// GetBaseRecipes returns all available base recipes
+// GetBaseRecipes returns all available base recipes. Calling Flags() once on
+// each instance has the side effect of populating the recipe's flag-backed
+// fields with their CLI defaults (pflag's *Var helpers write defaults at
+// registration), so callers that don't run a flag parse — e.g. ValidateRecipe,
+// programmatic uses — still see sane values rather than the struct zero.
 func GetBaseRecipes() []Recipe {
-	return []Recipe{
+	recipes := []Recipe{
 		&L1Recipe{},
+		&L1MultiBuilderRecipe{},
 		&OpRecipe{},
 		&BuilderNetRecipe{},
 	}
+	for _, r := range recipes {
+		r.Flags()
+	}
+	return recipes
 }
 
 // Manifest describes a list of services and their dependencies
@@ -220,6 +229,8 @@ type ExContext struct {
 	Bootnode *BootnodeRef
 
 	Contender *ContenderContext
+
+	GenesisTimestamp uint64
 }
 
 type BootnodeRef struct {

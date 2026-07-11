@@ -8,8 +8,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// RecipeToYAML converts a recipe to a playground.yaml format
+// RecipeToYAML converts a recipe to a playground.yaml format. If the recipe
+// implements `Validate() error`, it runs first so explicit invalid flag values
+// fail loudly rather than getting silently rewritten by per-recipe defaults.
 func RecipeToYAML(recipe Recipe) (string, error) {
+	if v, ok := recipe.(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return "", err
+		}
+	}
 	// Create a minimal output for the context (needed by some components)
 	out := &output{
 		sessionDir:   "/tmp/playground-generate",
@@ -138,6 +145,9 @@ func convertServiceToYAML(svc *Service) *YAMLServiceConfig {
 	}
 	if svc.HostPath != "" {
 		config.HostPath = svc.HostPath
+	}
+	if svc.Pid != "" {
+		config.Pid = svc.Pid
 	}
 	if len(svc.Labels) > 0 {
 		config.Labels = svc.Labels

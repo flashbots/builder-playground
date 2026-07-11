@@ -52,6 +52,14 @@ func ValidateRecipe(recipe Recipe, baseRecipes []Recipe) *ValidationResult {
 		return result
 	}
 
+	// Run recipe-level validation before Apply (e.g. flag-value checks).
+	if v, ok := recipe.(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			result.AddError("recipe validation failed: %v", err)
+			return result
+		}
+	}
+
 	// Build a minimal manifest to validate structure
 	exCtx := &ExContext{
 		LogLevel: LevelInfo,
