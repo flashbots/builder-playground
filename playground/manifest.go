@@ -220,6 +220,9 @@ type ExContext struct {
 	Bootnode *BootnodeRef
 
 	Contender *ContenderContext
+
+	// GenesisTime is the L1 genesis time produced during artifact generation.
+	GenesisTime time.Time
 }
 
 type BootnodeRef struct {
