@@ -64,7 +64,7 @@ func testLogger() *httplog.Logger {
 }
 
 func waitToTrigger(t *testing.T, m *monitorState) {
-	// this functions waits for wathever block time is specified in the monitor state
+	// this function waits for whatever block time is specified in the monitor state
 	select {
 	case <-m.blockTimer.C:
 	case <-time.After(time.Duration(m.blockTimeSeconds+1) * time.Second):

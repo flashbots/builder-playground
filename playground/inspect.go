@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/client"
 )
 
-// Inspect incldues the logic for the inspect command
+// Inspect includes the logic for the inspect command.
 func Inspect(ctx context.Context, serviceName, portName string) error {
 	client, err := newDockerClient()
 	if err != nil {
